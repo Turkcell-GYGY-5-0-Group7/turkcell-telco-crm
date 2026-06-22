@@ -1,0 +1,48 @@
+{
+  "type": "record",
+  "name": "PaymentCompletedV1",
+  "namespace": "com.telco.platform.events.payment",
+  "doc": "Emitted when a payment succeeds (payment.completed.v1). Producer: payment-service.",
+  "fields": [
+    {
+      "name": "paymentId",
+      "type": "string",
+      "doc": "Unique payment identifier (UUID)."
+    },
+    {
+      "name": "orderId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Order this payment settles, when the payment originates from an order. Nullable for invoice-driven payments."
+    },
+    {
+      "name": "invoiceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Invoice this payment settles, when the payment originates from an invoice. Nullable for order-driven payments."
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Paid amount as an exact decimal (precision 19, scale 4). Always paired with currency."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code for amount, for example TRY."
+    },
+    {
+      "name": "completedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the payment completed, in epoch milliseconds (UTC)."
+    }
+  ]
+}

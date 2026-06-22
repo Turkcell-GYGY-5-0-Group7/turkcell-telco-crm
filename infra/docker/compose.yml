@@ -1,0 +1,314 @@
+# ---------------------------------------------------------------------------
+# Telco CRM - local infrastructure
+#
+# Profiles:
+#   (none)        core data + event backbone: postgres, redis, kafka,
+#                 schema-registry, kafka-connect (Debezium)
+#   tools         kafka-ui
+#   observability prometheus, grafana, loki, tempo, otel-collector
+#   auth          keycloak
+#
+# Usage (run from infra/docker, after `cp .env.example .env`):
+#   docker compose up -d                          # core only
+#   docker compose --profile observability up -d  # core + observability
+#   docker compose --profile tools --profile auth up -d
+# ---------------------------------------------------------------------------
+
+name: ${COMPOSE_PROJECT_NAME:-telco-crm}
+
+x-restart: &restart unless-stopped
+
+networks:
+  telco:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  kafka-data:
+  grafana-data:
+  prometheus-data:
+
+services:
+
+  # ---------------------------------------------------------------- PostgreSQL
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-17}
+    container_name: telco-postgres
+    restart: *restart
+    # wal_level=logical is required for Debezium change data capture (ADR-005).
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-telco}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-telco}
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-telco}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [telco]
+
+  # --------------------------------------------------------------------- Redis
+  redis:
+    image: redis:${REDIS_VERSION:-8}
+    container_name: telco-redis
+    restart: *restart
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-telco}", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-telco}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [telco]
+
+  # --------------------------------------------------------------------- Kafka
+  # Apache Kafka 4.x in KRaft mode (no ZooKeeper), single combined node (ADR-003).
+  kafka:
+    image: apache/kafka:${KAFKA_VERSION:-4.0.0}
+    container_name: telco-kafka
+    restart: *restart
+    ports:
+      - "${KAFKA_HOST_PORT:-29092}:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:${KAFKA_HOST_PORT:-29092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks: [telco]
+
+  # ----------------------------------------------------------- Schema Registry
+  schema-registry:
+    image: confluentinc/cp-schema-registry:${SCHEMA_REGISTRY_VERSION:-7.9.0}
+    container_name: telco-schema-registry
+    restart: *restart
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${SCHEMA_REGISTRY_PORT:-8081}:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/subjects >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks: [telco]
+
+  # ------------------------------------------------- Kafka Connect (Debezium)
+  kafka-connect:
+    image: quay.io/debezium/connect:${DEBEZIUM_CONNECT_VERSION:-3.1.0.Final}
+    container_name: telco-kafka-connect
+    restart: *restart
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_CONNECT_PORT:-8083}:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: telco-connect
+      CONFIG_STORAGE_TOPIC: _connect_configs
+      OFFSET_STORAGE_TOPIC: _connect_offsets
+      STATUS_STORAGE_TOPIC: _connect_statuses
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+    networks: [telco]
+
+  # --------------------------------------------------------- Kafka UI (tools)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:${KAFKA_UI_VERSION:-latest}
+    container_name: telco-kafka-ui
+    restart: *restart
+    profiles: [tools]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "${KAFKA_UI_PORT:-8088}:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: telco-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: telco-connect
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: http://kafka-connect:8083
+    networks: [telco]
+
+  # ---------------------------------------------------------- Keycloak (auth)
+  keycloak:
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.1}
+    container_name: telco-keycloak
+    restart: *restart
+    profiles: [auth]
+    command: 
+      - start-dev
+      - --import-realm
+    ports:
+      - "${KEYCLOAK_PORT:-8085}:8080"
+      - "${KEYCLOAK_MANAGEMENT_PORT:-8086}:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-telco}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-telco}
+    volumes:
+      - ./keycloak/realm:/opt/keycloak/data/import:ro
+    networks: [telco]
+
+  # ----------------------------------------------- Keycloak post-start config (auth)
+  # Sets the master realm to sslRequired=NONE so the admin console is reachable over plain
+  # HTTP during local dev. This cannot be done via realm import (master always pre-exists,
+  # and overwriting it would wipe the admin user), so it is applied with kcadm after Keycloak
+  # is up. Idempotent; re-applies on every `up`, so it survives `make destroy` / a new machine.
+  keycloak-config:
+    image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.1.4}
+    container_name: telco-keycloak-config
+    profiles: [auth]
+    restart: "no"
+    depends_on:
+      keycloak:
+        condition: service_started
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        until /opt/keycloak/bin/kcadm.sh config credentials --server http://keycloak:8080 \
+              --realm master --user "$$KC_ADMIN" --password "$$KC_ADMIN_PASSWORD" >/dev/null 2>&1; do
+          echo "waiting for keycloak to be ready..."; sleep 3;
+        done
+        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+        echo "master realm sslRequired set to NONE"
+    environment:
+      KC_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+    networks: [telco]
+
+  # -------------------------------------------------- Prometheus (observability)
+  prometheus:
+    image: prom/prometheus:${PROMETHEUS_VERSION:-v3.0.1}
+    container_name: telco-prometheus
+    restart: *restart
+    profiles: [observability]
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [telco]
+
+  # ------------------------------------------------------ Loki (observability)
+  loki:
+    image: grafana/loki:${LOKI_VERSION:-3.3.1}
+    container_name: telco-loki
+    restart: *restart
+    profiles: [observability]
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+    networks: [telco]
+
+  # ----------------------------------------------------- Tempo (observability)
+  tempo:
+    image: grafana/tempo:${TEMPO_VERSION:-2.6.1}
+    container_name: telco-tempo
+    restart: *restart
+    profiles: [observability]
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "${TEMPO_PORT:-3200}:3200"
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    networks: [telco]
+
+  # -------------------------------------------- OTel Collector (observability)
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:${OTEL_COLLECTOR_VERSION:-0.119.0}
+    container_name: telco-otel-collector
+    restart: *restart
+    profiles: [observability]
+    command: ["--config=/etc/otel/otel-collector-config.yaml"]
+    depends_on:
+      - tempo
+      - prometheus
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317"
+      - "${OTEL_HTTP_PORT:-4318}:4318"
+    volumes:
+      - ./observability/otel-collector/otel-collector-config.yaml:/etc/otel/otel-collector-config.yaml:ro
+    networks: [telco]
+
+  # --------------------------------------------------- Grafana (observability)
+  grafana:
+    image: grafana/grafana:${GRAFANA_VERSION:-11.4.0}
+    container_name: telco-grafana
+    restart: *restart
+    profiles: [observability]
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    networks: [telco]

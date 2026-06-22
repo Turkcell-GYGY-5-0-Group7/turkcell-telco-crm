@@ -1,0 +1,46 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- Spring Boot parent provides the spring-boot-maven-plugin and sensible build defaults. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.0</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.telco</groupId>
+    <artifactId>microservices</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>microservices</name>
+    <description>Telco CRM business microservices. Each service depends only on platform starters (ADR-018, ADR-020).</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <platform.version>1.0.0-SNAPSHOT</platform.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
+
+    <modules>
+        <module>service-template</module>
+        <module>reference-service</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Platform BOM is the single source of platform module + aligned library versions. -->
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-bom</artifactId>
+                <version>${platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+</project>

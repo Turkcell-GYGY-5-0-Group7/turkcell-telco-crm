@@ -1,0 +1,41 @@
+{
+  "type": "record",
+  "name": "OrderCreatedV1",
+  "namespace": "com.telco.platform.events.order",
+  "doc": "Emitted when an order is placed and the new-line saga begins (order.created.v1). Producer: order-service.",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Unique order identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who placed the order."
+    },
+    {
+      "name": "totalAmount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Order total as an exact decimal (precision 19, scale 4). Always paired with currency."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code for totalAmount, for example TRY."
+    },
+    {
+      "name": "createdAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the order was created, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "EventEnvelope",
+  "namespace": "com.telco.platform.events",
+  "doc": "Shared transport envelope wrapping every domain event (ADR-009, ADR-019). The concrete domain event is Avro-encoded into the binary payload; eventType identifies the contract using the domain.event.v1 naming convention.",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Globally unique event identifier (UUID) used for inbox idempotency and deduplication."
+    },
+    {
+      "name": "eventType",
+      "type": "string",
+      "doc": "Logical event type following the domain.event.v1 naming convention (for example customer.registered.v1)."
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the event fact occurred, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "traceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Distributed trace identifier propagated for observability (nullable for backward compatibility)."
+    },
+    {
+      "name": "correlationId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Business correlation identifier linking related operations across services (nullable for backward compatibility)."
+    },
+    {
+      "name": "payload",
+      "type": "bytes",
+      "doc": "Avro-encoded binary payload of the concrete domain event identified by eventType."
+    }
+  ]
+}

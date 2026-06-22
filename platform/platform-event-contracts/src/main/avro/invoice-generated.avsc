@@ -1,0 +1,63 @@
+{
+  "type": "record",
+  "name": "InvoiceGeneratedV1",
+  "namespace": "com.telco.platform.events.invoice",
+  "doc": "Emitted when an invoice is created for a billing period (invoice.generated.v1). Producer: billing-service.",
+  "fields": [
+    {
+      "name": "invoiceId",
+      "type": "string",
+      "doc": "Unique invoice identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the billed customer."
+    },
+    {
+      "name": "subscriptionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Subscription this invoice covers, when invoice is per-subscription. Nullable for account-level invoices."
+    },
+    {
+      "name": "periodStart",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Inclusive start of the billing period, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "periodEnd",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Exclusive end of the billing period, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "grandTotal",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Invoice grand total as an exact decimal (precision 19, scale 4). Always paired with currency."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code for grandTotal, for example TRY."
+    },
+    {
+      "name": "issuedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the invoice was issued, in epoch milliseconds (UTC)."
+    }
+  ]
+}

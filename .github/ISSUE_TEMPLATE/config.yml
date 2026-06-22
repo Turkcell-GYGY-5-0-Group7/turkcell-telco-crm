@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/omerekmen/turkcell-gygy-java/security/advisories/new
+    about: Report security vulnerabilities privately. Do not open a public issue.
+  - name: Question or discussion
+    url: https://github.com/omerekmen/turkcell-gygy-java/discussions
+    about: Ask questions and discuss ideas in GitHub Discussions.
+  - name: Architecture decisions (ADR)
+    url: https://github.com/omerekmen/turkcell-gygy-java/tree/master/telco-crm/architecture/adr
+    about: Review the Architecture Decision Records before proposing technical changes.

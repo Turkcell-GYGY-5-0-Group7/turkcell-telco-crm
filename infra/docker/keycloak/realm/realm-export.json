@@ -1,0 +1,87 @@
+{
+  "realm": "telco-crm",
+  "enabled": true,
+  "displayName": "Telco CRM",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+
+  "roles": {
+    "realm": [
+      { "name": "SUBSCRIBER" },
+      { "name": "CALL_CENTER_AGENT" },
+      { "name": "DEALER" },
+      { "name": "MARKETING_MANAGER" },
+      { "name": "BILLING_OPERATOR" },
+      { "name": "ADMIN" },
+      { "name": "SERVICE" }
+    ]
+  },
+
+  "clientScopes": [
+    {
+      "name": "telco-roles",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "roles-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "config": {
+            "multivalued": "true",
+            "claim.name": "roles",
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "telco-web",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "redirectUris": ["http://localhost:3000/*"],
+      "webOrigins": ["+"],
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "telco-roles"
+      ]
+    },
+    {
+      "clientId": "telco-gateway",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "local-dev-secret",
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": true,
+      "redirectUris": ["http://localhost:8080/*"],
+      "webOrigins": ["+"],
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "roles",
+        "web-origins",
+        "telco-roles"
+      ]
+    }
+  ]
+}

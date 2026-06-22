@@ -1,0 +1,155 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.telco.platform</groupId>
+    <artifactId>platform-bom</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>platform-bom</name>
+    <description>Centralized dependency and version management for the Telco CRM platform (ADR-020)</description>
+
+    <properties>
+        <platform.version>1.0.0-SNAPSHOT</platform.version>
+
+        <!-- Externally managed library versions (not covered by the Spring Boot BOM). -->
+        <spring-cloud.version>2025.1.1</spring-cloud.version>
+        <jjwt.version>0.12.6</jjwt.version>
+        <avro.version>1.12.0</avro.version>
+        <resilience4j.version>2.3.0</resilience4j.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <!-- Spring Boot platform alignment. -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>4.1.0</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Cloud (gateway, config, discovery, openfeign). -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Resilience4j (circuit breaker, retry, bulkhead) per ADR-005. -->
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-bom</artifactId>
+                <version>${resilience4j.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- JWT support (opt-in security starter) per ADR-011. -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+
+            <!-- Avro for event contracts per ADR-019. -->
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
+            </dependency>
+
+            <!-- Internal platform modules. -->
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-common</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-cqrs</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-mediator</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-outbox</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-inbox</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-event-contracts</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-autoconfigure</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+
+            <!-- Platform starters. -->
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-api</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-mediator</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-security</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-outbox</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-inbox</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-observability</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-log-persistence</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+</project>

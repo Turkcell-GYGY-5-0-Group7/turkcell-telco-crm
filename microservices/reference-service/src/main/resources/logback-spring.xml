@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Reference-service logging (ADR-012) with the ADR-021 PII backstop (Layer B).
+
+  The %mask converter masks Turkish PII (TCKN, MSISDN, IBAN, email, PAN) in the log message and
+  %maskEx does the same for rendered stack traces, so exception messages carrying identifiers do not
+  leak to the log pipeline. This is defense-in-depth on top of the @Sensitive masking ObjectMapper
+  (Layer A); it never touches event payloads or API responses.
+
+  The class attribute (not the deprecated converterClass) is required by logback 1.5.x.
+-->
+<configuration>
+
+    <conversionRule conversionWord="mask"
+                    class="com.telco.platform.starter.observability.logging.PiiMaskingConverter"/>
+    <conversionRule conversionWord="maskEx"
+                    class="com.telco.platform.starter.observability.logging.PiiMaskingThrowableConverter"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{correlationId:-}] %logger{36} - %mask%n%maskEx</pattern>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+
+</configuration>

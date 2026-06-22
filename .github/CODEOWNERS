@@ -1,0 +1,17 @@
+# Default owner for everything in the repository.
+* @omerekmen
+
+# Architecture Decision Records require architecture/tech-lead review.
+/architecture/ @omerekmen
+
+# Platform foundation (core, BOM, starters).
+/platform/ @omerekmen
+
+# Product and architecture documentation.
+/docs/ @omerekmen
+
+# Platform operating context and execution roadmap.
+/.claude/ @omerekmen
+
+# CI/CD and repository automation.
+/.github/ @omerekmen

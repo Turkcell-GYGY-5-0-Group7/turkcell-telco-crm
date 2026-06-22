@@ -1,0 +1,119 @@
+name: CI
+
+# Implements the per-service CI pipeline defined in ADR-014:
+# Build -> Test -> Package -> Static Analysis -> Security Scan.
+# The Maven reactor root is platform/pom.xml (no root pom exists yet).
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  MAVEN_ARGS: "-B -ntp"
+
+jobs:
+  build-test:
+    name: Build, Test, Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Verify Maven reactor exists
+        id: reactor
+        run: |
+          if [ -f platform/pom.xml ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "platform/pom.xml not found; skipping Maven build."
+          fi
+
+      - name: Build and verify (unit + integration tests)
+        if: steps.reactor.outputs.found == 'true'
+        working-directory: platform
+        # Static analysis runs in its own job; skip it here to keep this stage focused on tests.
+        run: mvn ${MAVEN_ARGS} verify -Dcheckstyle.skip=true -Dspotbugs.skip=true
+
+      - name: Upload test reports
+        if: always() && steps.reactor.outputs.found == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: |
+            platform/**/target/surefire-reports/**
+            platform/**/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+  static-analysis:
+    name: Static Analysis (Checkstyle, SpotBugs)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Checkstyle + SpotBugs are bound to the verify phase in platform/pom.xml (ADR-014).
+      # Skipping tests keeps this stage focused on static analysis; it fails on any violation.
+      - name: Run static analysis
+        if: hashFiles('platform/pom.xml') != ''
+        working-directory: platform
+        run: mvn ${MAVEN_ARGS} -DskipTests verify
+
+  codeql:
+    name: Security Scan (CodeQL)
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: java-kotlin
+          build-mode: manual
+
+      - name: Build for analysis
+        if: hashFiles('platform/pom.xml') != ''
+        working-directory: platform
+        run: mvn ${MAVEN_ARGS} -DskipTests package
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:java-kotlin"

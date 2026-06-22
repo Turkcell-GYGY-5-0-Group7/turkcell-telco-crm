@@ -1,0 +1,2 @@
+com.telco.platform.autoconfigure.PlatformJacksonAutoConfiguration
+com.telco.platform.autoconfigure.masking.MaskingAutoConfiguration

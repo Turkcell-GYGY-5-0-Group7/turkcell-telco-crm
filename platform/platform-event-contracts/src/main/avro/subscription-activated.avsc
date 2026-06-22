@@ -1,0 +1,36 @@
+{
+  "type": "record",
+  "name": "SubscriptionActivatedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when a subscription is activated (subscription.activated.v1). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer."
+    },
+    {
+      "name": "msisdn",
+      "type": "string",
+      "doc": "Allocated mobile number (MSISDN) for the subscription."
+    },
+    {
+      "name": "tariffCode",
+      "type": "string",
+      "doc": "Code of the tariff the subscription is activated on."
+    },
+    {
+      "name": "activatedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the subscription was activated, in epoch milliseconds (UTC)."
+    }
+  ]
+}

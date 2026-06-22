@@ -1,0 +1,94 @@
+name: Bug Report
+description: Report a defect in the Telco CRM Platform
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please provide enough detail to reproduce it.
+        Do not include secrets, tokens, real customer PII (TCKN, card numbers), or production data.
+  - type: dropdown
+    id: service
+    attributes:
+      label: Affected service
+      description: Which service or module is affected?
+      options:
+        - api-gateway
+        - discovery-server
+        - config-server
+        - identity-service
+        - customer-service
+        - product-catalog-service
+        - order-service
+        - subscription-service
+        - usage-service
+        - billing-service
+        - payment-service
+        - notification-service
+        - ticket-service
+        - platform-core
+        - platform-starters
+        - other / unknown
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the behavior.
+      placeholder: |
+        1. Call POST /api/v1/...
+        2. With payload ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: correlation-id
+    attributes:
+      label: Correlation ID / Trace ID
+      description: If available, the correlationId or traceId from the response or logs.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Structured log excerpts. Redact any sensitive data.
+      render: text
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        - Branch / commit:
+        - Java version:
+        - Run mode: docker-compose / kubernetes / local
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I removed all secrets and real customer PII from this report.
+          required: true

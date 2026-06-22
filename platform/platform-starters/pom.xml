@@ -1,0 +1,29 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco.platform</groupId>
+        <artifactId>platform</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>platform-starters</artifactId>
+    <packaging>pom</packaging>
+    <name>platform-starters</name>
+    <description>Spring Boot starters that expose platform capabilities to microservices (ADR-018).</description>
+
+    <modules>
+        <module>starter-api</module>
+        <module>starter-mediator</module>
+        <module>starter-security</module>
+        <module>starter-outbox</module>
+        <module>starter-inbox</module>
+        <module>starter-observability</module>
+        <module>starter-log-persistence</module>
+    </modules>
+
+</project>

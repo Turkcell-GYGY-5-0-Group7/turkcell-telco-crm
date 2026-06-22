@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs exclusion filter for the Telco CRM platform (ADR-014).
+  Suppresses well-understood, low-value findings so the gate stays meaningful.
+-->
+<FindBugsFilter>
+
+    <!-- Records/DTOs intentionally carry references to caller-supplied values (e.g. Set, Map).
+         These are immutable value types by convention; defensive copies are made where it matters. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP"/>
+    </Match>
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Platform exceptions intentionally omit serialVersionUID; they are not serialized across JVMs. -->
+    <Match>
+        <Bug pattern="SE_NO_SERIALVERSIONID"/>
+    </Match>
+
+</FindBugsFilter>

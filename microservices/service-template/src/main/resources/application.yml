@@ -1,0 +1,24 @@
+# Service template configuration. Copy this module and rename: artifactId, base package,
+# spring.application.name, server.port, and the Docker image name.
+spring:
+  application:
+    name: service-template
+
+server:
+  port: ${SERVER_PORT:8101}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    # This minimal template has no persistence, so security validation is left off here.
+    # Real services enable it and add spring-boot-starter-security (see ADR-011 / reference-service).
+    security:
+      enabled: false
+    observability:
+      correlation:
+        enabled: true
