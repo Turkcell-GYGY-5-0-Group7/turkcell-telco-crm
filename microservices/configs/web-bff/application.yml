@@ -1,0 +1,17 @@
+# web-bff base config (port 9020, BFF for SvelteKit channel, post-MVP ADR-022).
+# Per-env overrides in web-bff-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9020
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+telco:
+  keycloak:
+    realm: telco-crm
+    client-id: telco-web
+    token-endpoint: ${KEYCLOAK_TOKEN_ENDPOINT:http://localhost:8080/realms/telco-crm/protocol/openid-connect/token}

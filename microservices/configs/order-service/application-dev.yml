@@ -1,0 +1,6 @@
+# order-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/order_db
+    username: order
+    password: order

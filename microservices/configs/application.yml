@@ -1,0 +1,36 @@
+# Shared defaults applied to ALL services across ALL environments.
+# Service-specific files (e.g. identity-service.yml) override these.
+# Per-env files (e.g. application-dev.yml) further override after this.
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    export:
+      otlp:
+        enabled: true
+
+logging:
+  pattern:
+    console: '{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%p","service":"${spring.application.name}","traceId":"%X{traceId}","spanId":"%X{spanId}","correlationId":"%X{correlationId}","message":"%m"}%n'
+
+spring:
+  cloud:
+    discovery:
+      enabled: true
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:eureka}:${EUREKA_PASSWORD:eureka}@${EUREKA_HOST:localhost}:${EUREKA_PORT:8761}/eureka
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 10
+    lease-expiration-duration-in-seconds: 30

@@ -1,0 +1,23 @@
+# usage-service base config (port 9006, CQRS+Mediator, PostgreSQL+Redis).
+# Per-env overrides in usage-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9006
+
+spring:
+  datasource:
+    url: ${USAGE_DB_URL:jdbc:postgresql://localhost:5432/usage_db}
+    username: ${USAGE_DB_USER:usage}
+    password: ${USAGE_DB_PASSWORD:usage}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

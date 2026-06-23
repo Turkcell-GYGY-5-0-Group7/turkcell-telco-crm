@@ -8,7 +8,7 @@
 | Version | 1.0 |
 | Status | Draft for review |
 | Parent | [BRD.md](./BRD.md) |
-| Technical authority | ADR-001 through ADR-020 |
+| Technical authority | ADR-001 through ADR-022 |
 | Last updated | 2026-06-19 |
 
 This document refines the [BRD](./BRD.md) into testable requirements. Each functional
@@ -155,7 +155,7 @@ These are mandated by `CLAUDE.md` and the ADRs and apply to every service.
 | ARC-03 | All domain operations in CQRS/Orchestration services MUST go through the Mediator. | ADR-008 |
 | ARC-04 | Services MAY depend only on platform starters, never on platform-core directly. | ADR-018 |
 | ARC-05 | DB write plus event publish MUST be atomic via the transactional outbox; consumers MUST be idempotent (inbox). | ADR-005, ADR-009 |
-| ARC-06 | Internal service-to-service calls SHOULD use gRPC; external clients use REST via the gateway. | ADR-005 |
+| ARC-06 | Synchronous internal service-to-service calls use REST over HTTP (OpenFeign) wrapped in Resilience4j circuit breakers; external clients use REST via the gateway. gRPC is deferred to post-MVP. | ADR-005 |
 | ARC-07 | Each service MUST use Flyway for schema migrations. | ADR-016 |
 | ARC-08 | Each service MUST expose its own OpenAPI/Swagger UI. | ADR-015 |
 | ARC-09 | No emojis in code, comments, commits, or documentation. | CLAUDE.md |

@@ -1,0 +1,19 @@
+# order-service base config (port 9004, Domain Orchestration, PostgreSQL).
+# Per-env overrides in order-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9004
+
+spring:
+  datasource:
+    url: ${ORDER_DB_URL:jdbc:postgresql://localhost:5432/order_db}
+    username: ${ORDER_DB_USER:order}
+    password: ${ORDER_DB_PASSWORD:order}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

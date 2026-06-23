@@ -1,0 +1,19 @@
+# subscription-service base config (port 9005, CQRS+Mediator, PostgreSQL).
+# Per-env overrides in subscription-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9005
+
+spring:
+  datasource:
+    url: ${SUBSCRIPTION_DB_URL:jdbc:postgresql://localhost:5432/subscription_db}
+    username: ${SUBSCRIPTION_DB_USER:subscription}
+    password: ${SUBSCRIPTION_DB_PASSWORD:subscription}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

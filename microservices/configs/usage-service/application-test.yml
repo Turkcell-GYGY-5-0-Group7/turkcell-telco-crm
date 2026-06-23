@@ -1,0 +1,10 @@
+# usage-service test overrides. Testcontainers wires URLs at runtime.
+spring:
+  datasource:
+    url: ${TEST_USAGE_DB_URL:jdbc:postgresql://localhost:5432/usage_test_db}
+    username: ${TEST_USAGE_DB_USER:usage_test}
+    password: ${TEST_USAGE_DB_PASSWORD:usage_test}
+  data:
+    redis:
+      host: ${TEST_REDIS_HOST:localhost}
+      port: ${TEST_REDIS_PORT:6379}

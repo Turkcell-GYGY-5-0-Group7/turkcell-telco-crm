@@ -118,3 +118,68 @@ Rejected due to production scalability concerns.
 
 * ADR-003 Technology Stack
 * ADR-005 Service Communication Strategy
+
+---
+
+## Amendment — 2026-06-23
+
+### Config Server backend and file layout
+
+The Spring Cloud Config Server uses the **native filesystem backend** with config files
+located at:
+
+```
+microservices/configs/
+```
+
+This directory sits at the `microservices/` root for direct IDE and editor access during
+development. It is NOT packaged inside the config-server jar; the server reads it via
+`file:` search-locations relative to its working directory.
+
+Directory layout:
+
+```
+microservices/configs/
+  application.yml              # shared defaults for all services
+  application-{env}.yml        # shared per-env overrides (dev/test/staging/prod)
+  <service-name>/
+    application.yml            # service-specific base config
+    application-{env}.yml      # service-specific per-env overrides
+```
+
+The `{application}` placeholder in `search-locations` is resolved by Spring to the
+client's `spring.application.name`, routing each service to its own subdirectory.
+
+**Running locally**: `mvn -pl config-server spring-boot:run` from `microservices/` sets
+the working directory to `microservices/config-server/`, so `../configs` resolves
+correctly by default.
+
+**Docker**: Mount `microservices/configs/` into the container and set
+`CONFIG_DIR=/path/to/configs` to override the default relative path.
+
+### Bootstrap pattern for all domain services
+
+Every domain service application.yml MUST contain only:
+
+```yaml
+spring:
+  application:
+    name: <service-name>
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URI:http://localhost:8888}
+```
+
+The `optional:` prefix ensures the service starts without config-server in test contexts
+where Testcontainers or local overrides apply directly.
+
+### Infrastructure server exemption
+
+config-server, discovery-server, and api-gateway bootstrap themselves and are exempt from
+the `spring.config.import` requirement. They carry their own self-contained application.yml.
+
+### Environment switching
+
+Set `SPRING_PROFILES_ACTIVE` to one of: `dev`, `test`, `staging`, `prod`.
+Services MUST NOT hard-code environment-specific values; use `${ENV_VAR:default}` placeholders.

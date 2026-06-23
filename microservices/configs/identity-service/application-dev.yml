@@ -1,0 +1,6 @@
+# identity-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/identity_db
+    username: identity
+    password: identity

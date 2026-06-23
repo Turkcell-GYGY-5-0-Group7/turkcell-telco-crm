@@ -1,0 +1,6 @@
+# subscription-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_SUBSCRIPTION_DB_URL:jdbc:postgresql://localhost:5432/subscription_test_db}
+    username: ${TEST_SUBSCRIPTION_DB_USER:subscription_test}
+    password: ${TEST_SUBSCRIPTION_DB_PASSWORD:subscription_test}

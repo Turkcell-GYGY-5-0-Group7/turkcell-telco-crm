@@ -1,0 +1,6 @@
+# order-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_ORDER_DB_URL:jdbc:postgresql://localhost:5432/order_test_db}
+    username: ${TEST_ORDER_DB_USER:order_test}
+    password: ${TEST_ORDER_DB_PASSWORD:order_test}

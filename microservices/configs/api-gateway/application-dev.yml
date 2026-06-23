@@ -1,0 +1,7 @@
+# api-gateway dev overrides.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs

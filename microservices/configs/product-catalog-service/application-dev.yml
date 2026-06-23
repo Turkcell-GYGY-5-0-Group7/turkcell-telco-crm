@@ -1,0 +1,10 @@
+# product-catalog-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/catalog_db
+    username: catalog
+    password: catalog
+  data:
+    redis:
+      host: localhost
+      port: 6379

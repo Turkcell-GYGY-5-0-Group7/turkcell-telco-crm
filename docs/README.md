@@ -28,6 +28,8 @@ ADRs are authoritative (`CLAUDE.md` Section 3).
 | [architecture/service-catalog.md](./architecture/service-catalog.md) | Authoritative service list: ports, contexts, aggregates, modes. |
 | [architecture/event-catalog.md](./architecture/event-catalog.md) | Domain event registry, producers/consumers, saga sequences. |
 | [architecture/keycloak-and-auth.md](./architecture/keycloak-and-auth.md) | Authentication integration guide: Keycloak as token issuer, realm, clients, validation (ADR-011). |
+| [architecture/platform-capabilities.md](./architecture/platform-capabilities.md) | Consumer-facing catalog of reusable platform capabilities (reuse-before-build). |
+| [architecture/platform-gap-closing-plan.md](./architecture/platform-gap-closing-plan.md) | Plan for the missing cross-cutting platform modules + tech-lead rulings. |
 | [`/architecture/adr/`](../architecture/adr/) | Architecture Decision Records (ADR-001..022). |
 
 ## API Contracts

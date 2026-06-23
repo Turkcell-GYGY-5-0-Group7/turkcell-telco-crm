@@ -1,0 +1,4 @@
+# web-bff test overrides. Testcontainers Keycloak wires the endpoint at runtime.
+telco:
+  keycloak:
+    token-endpoint: ${TEST_KEYCLOAK_TOKEN_ENDPOINT:http://localhost:8080/realms/telco-crm/protocol/openid-connect/token}

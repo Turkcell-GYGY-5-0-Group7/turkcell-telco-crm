@@ -1,0 +1,6 @@
+# identity-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_IDENTITY_DB_URL:jdbc:postgresql://localhost:5432/identity_test_db}
+    username: ${TEST_IDENTITY_DB_USER:identity_test}
+    password: ${TEST_IDENTITY_DB_PASSWORD:identity_test}

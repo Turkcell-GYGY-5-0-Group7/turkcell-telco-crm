@@ -25,6 +25,9 @@ Advisory and enforcing. You flag and block on violations; you do not redesign.
 ### Platform dependency (ADR-018)
 * Services depend ONLY on platform starters, never on `platform-core` directly (ARC-04).
 * Mandatory starters present: starter-api, starter-security, starter-observability.
+* Reuse over reinvention: flag any re-implementation of a capability in
+  `docs/architecture/platform-capabilities.md` (ApiResult, error types, context, pagination,
+  correlation, masking, outbox/inbox).
 
 ### API (ADR-015)
 * External routes under `/api/v1`, plural resources, all responses wrapped in `ApiResult<T>`.

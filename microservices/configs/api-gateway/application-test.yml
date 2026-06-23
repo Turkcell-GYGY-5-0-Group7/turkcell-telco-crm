@@ -1,0 +1,7 @@
+# api-gateway test overrides. Testcontainers Keycloak wires the URI at runtime.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: ${TEST_KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

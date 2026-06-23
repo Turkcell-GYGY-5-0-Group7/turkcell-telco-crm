@@ -1,0 +1,23 @@
+# payment-service base config (port 9008, Domain Orchestration, PostgreSQL+Redis).
+# Per-env overrides in payment-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9008
+
+spring:
+  datasource:
+    url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5432/payment_db}
+    username: ${PAYMENT_DB_USER:payment}
+    password: ${PAYMENT_DB_PASSWORD:payment}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

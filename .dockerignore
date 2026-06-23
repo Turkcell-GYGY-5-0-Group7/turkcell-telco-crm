@@ -1,0 +1,19 @@
+.git
+.github
+.idea
+.vscode
+*.iml
+*.class
+
+# Maven build artifacts (each service has its own target inside Docker builder)
+**/target/
+
+# Docs and non-build assets not needed in the image
+docs/
+architecture/
+infra/
+frontend/
+
+# Local dev overrides
+.env
+*.local

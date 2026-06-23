@@ -1,0 +1,10 @@
+# product-catalog-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${CATALOG_DB_URL}
+    username: ${CATALOG_DB_USER}
+    password: ${CATALOG_DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}

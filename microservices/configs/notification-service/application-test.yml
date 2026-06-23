@@ -1,0 +1,9 @@
+# notification-service test overrides. Testcontainers wires URLs at runtime.
+spring:
+  data:
+    mongodb:
+      uri: ${TEST_NOTIFICATION_MONGO_URI:mongodb://localhost:27017/notification_test_db}
+  datasource:
+    url: ${TEST_NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_test_db}
+    username: ${TEST_NOTIFICATION_DB_USER:notification_test}
+    password: ${TEST_NOTIFICATION_DB_PASSWORD:notification_test}

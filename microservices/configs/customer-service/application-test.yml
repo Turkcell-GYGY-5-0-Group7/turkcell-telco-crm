@@ -1,0 +1,6 @@
+# customer-service test overrides. Testcontainers wires URLs at runtime.
+spring:
+  datasource:
+    url: ${TEST_CUSTOMER_DB_URL:jdbc:postgresql://localhost:5432/customer_test_db}
+    username: ${TEST_CUSTOMER_DB_USER:customer_test}
+    password: ${TEST_CUSTOMER_DB_PASSWORD:customer_test}

@@ -1,24 +1,15 @@
-# Service template configuration. Copy this module and rename: artifactId, base package,
-# spring.application.name, server.port, and the Docker image name.
+# Minimal bootstrap only (ADR-010). All runtime config lives centrally in config-server
+# (<service-name>.yml + per-env overrides). Do not add runtime config here.
+# When copying this template: rename spring.application.name only.
 spring:
   application:
     name: service-template
-
-server:
-  port: ${SERVER_PORT:8101}
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus
-
-telco:
-  platform:
-    # This minimal template has no persistence, so security validation is left off here.
-    # Real services enable it and add spring-boot-starter-security (see ADR-011 / reference-service).
-    security:
-      enabled: false
-    observability:
-      correlation:
-        enabled: true
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  cloud:
+    config:
+      uri: ${CONFIG_SERVER_URI:http://localhost:8888}
+      username: ${CONFIG_SERVER_USER:config}
+      password: ${CONFIG_SERVER_PASSWORD:config}
+  config:
+    import: optional:configserver:

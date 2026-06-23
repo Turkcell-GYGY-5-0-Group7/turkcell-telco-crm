@@ -1,0 +1,10 @@
+# usage-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/usage_db
+    username: usage
+    password: usage
+  data:
+    redis:
+      host: localhost
+      port: 6379

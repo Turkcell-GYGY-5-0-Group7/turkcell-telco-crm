@@ -1,0 +1,28 @@
+# Config Server bootstrap. It is the source of config and cannot import from itself (ADR-010),
+# so it keeps full local config. Native backend reads from microservices/configs/ (ADR-010 amendment).
+# Override CONFIG_DIR to an absolute path when running from a non-standard working directory.
+server:
+  port: 8888
+
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native
+  security:
+    user:
+      name: ${CONFIG_SERVER_USER:config}
+      password: ${CONFIG_SERVER_PASSWORD:config}
+  cloud:
+    config:
+      server:
+        native:
+          search-locations:
+            - file:${CONFIG_DIR:../configs}/
+            - file:${CONFIG_DIR:../configs}/{application}/
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

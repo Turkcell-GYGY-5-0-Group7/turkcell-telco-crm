@@ -1,0 +1,10 @@
+# payment-service prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+spring:
+  datasource:
+    url: ${PAYMENT_DB_URL}
+    username: ${PAYMENT_DB_USER}
+    password: ${PAYMENT_DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}

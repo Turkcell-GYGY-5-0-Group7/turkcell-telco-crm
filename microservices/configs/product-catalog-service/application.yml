@@ -1,0 +1,23 @@
+# product-catalog-service base config (port 9003, CQRS+Mediator, PostgreSQL+Redis).
+# Per-env overrides in product-catalog-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9003
+
+spring:
+  datasource:
+    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/catalog_db}
+    username: ${CATALOG_DB_USER:catalog}
+    password: ${CATALOG_DB_PASSWORD:catalog}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

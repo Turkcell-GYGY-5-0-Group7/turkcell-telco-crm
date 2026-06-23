@@ -1,0 +1,6 @@
+# subscription-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/subscription_db
+    username: subscription
+    password: subscription

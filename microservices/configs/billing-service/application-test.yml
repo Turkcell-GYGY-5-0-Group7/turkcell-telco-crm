@@ -1,0 +1,6 @@
+# billing-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_BILLING_DB_URL:jdbc:postgresql://localhost:5432/billing_test_db}
+    username: ${TEST_BILLING_DB_USER:billing_test}
+    password: ${TEST_BILLING_DB_PASSWORD:billing_test}

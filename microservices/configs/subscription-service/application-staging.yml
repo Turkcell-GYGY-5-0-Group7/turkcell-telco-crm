@@ -1,0 +1,6 @@
+# subscription-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${SUBSCRIPTION_DB_URL}
+    username: ${SUBSCRIPTION_DB_USER}
+    password: ${SUBSCRIPTION_DB_PASSWORD}

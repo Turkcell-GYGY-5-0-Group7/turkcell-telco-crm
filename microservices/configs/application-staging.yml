@@ -1,0 +1,22 @@
+# Shared staging overrides applied to ALL services when SPRING_PROFILES_ACTIVE=staging.
+
+logging:
+  level:
+    root: WARN
+    com.telco: INFO
+
+management:
+  tracing:
+    sampling:
+      probability: 0.1
+
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URI:http://discovery-server:8761/eureka}

@@ -70,6 +70,10 @@ restate them in code reviews; enforce them.
 - GroupId `com.telco` for services, `com.telco.platform` for platform modules. Service base package
   `com.telco.<service>` (for example `com.telco.customer`).
 - Per-service PostgreSQL schema/database (database-per-service, NFR-15). No cross-service DB access.
+- Each service declares an Infrastructure Profile (primary store / cache / search / object storage) in
+  its README per ADR-006. PostgreSQL is the default primary store; MongoDB only by approved exception
+  (notification-service); MinIO for binary artifacts (KYC documents, invoice PDFs); Redis for cache/
+  idempotency. Profiles are listed in `docs/architecture/service-catalog.md`.
 
 ### 3.2 Architecture (ADR-004, ADR-008)
 - ADR-004 defines three application architecture modes; each service MUST declare exactly one in its

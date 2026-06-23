@@ -1,0 +1,4 @@
+# web-bff prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+telco:
+  keycloak:
+    token-endpoint: ${KEYCLOAK_TOKEN_ENDPOINT}

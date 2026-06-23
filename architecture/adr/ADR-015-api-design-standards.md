@@ -11,7 +11,7 @@ The Telco CRM platform exposes APIs through:
 
 * API Gateway (external clients)
 * BFF layer (frontend aggregation)
-* Internal service APIs (gRPC + REST hybrid)
+* Internal service APIs (REST/OpenFeign; gRPC deferred to post-MVP per ADR-005)
 
 We require a strict API contract standard that ensures:
 
@@ -215,7 +215,7 @@ Every response MUST include:
 These MUST propagate across:
 
 * REST APIs
-* gRPC calls
+* Internal REST/Feign calls
 * Kafka events (when user context exists)
 
 ---
@@ -233,7 +233,7 @@ These MUST propagate across:
 | Type                | Format           |
 | ------------------- | ---------------- |
 | External APIs       | ApiResult + REST |
-| Internal APIs       | gRPC preferred   |
+| Internal APIs       | REST (OpenFeign); gRPC post-MVP |
 | Event communication | Kafka + Avro     |
 
 ---

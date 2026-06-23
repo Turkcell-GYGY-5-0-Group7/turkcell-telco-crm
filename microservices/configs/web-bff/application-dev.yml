@@ -1,0 +1,4 @@
+# web-bff dev overrides.
+telco:
+  keycloak:
+    token-endpoint: http://localhost:8080/realms/telco-crm/protocol/openid-connect/token

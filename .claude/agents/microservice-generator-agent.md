@@ -127,6 +127,8 @@ You MUST always use:
 
 * platform-starters only
 * NEVER platform-core directly
+* the platform capability catalog (`docs/architecture/platform-capabilities.md`) and
+  `microservices/reference-service` as the worked example - reuse, do not reinvent
 
 ---
 

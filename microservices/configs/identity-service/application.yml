@@ -1,0 +1,19 @@
+# identity-service base config (port 9001, CQRS+Mediator, PostgreSQL).
+# Per-env overrides in identity-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9001
+
+spring:
+  datasource:
+    url: ${IDENTITY_DB_URL:jdbc:postgresql://localhost:5432/identity_db}
+    username: ${IDENTITY_DB_USER:identity}
+    password: ${IDENTITY_DB_PASSWORD:identity}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

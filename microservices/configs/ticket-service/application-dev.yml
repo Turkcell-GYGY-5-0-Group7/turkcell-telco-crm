@@ -1,0 +1,6 @@
+# ticket-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ticket_db
+    username: ticket
+    password: ticket

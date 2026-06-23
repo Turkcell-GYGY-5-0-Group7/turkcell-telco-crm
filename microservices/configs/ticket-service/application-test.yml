@@ -1,0 +1,6 @@
+# ticket-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_TICKET_DB_URL:jdbc:postgresql://localhost:5432/ticket_test_db}
+    username: ${TEST_TICKET_DB_USER:ticket_test}
+    password: ${TEST_TICKET_DB_PASSWORD:ticket_test}

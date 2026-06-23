@@ -1,0 +1,19 @@
+# ticket-service base config (port 9010, CQRS+Mediator, PostgreSQL).
+# Per-env overrides in ticket-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9010
+
+spring:
+  datasource:
+    url: ${TICKET_DB_URL:jdbc:postgresql://localhost:5432/ticket_db}
+    username: ${TICKET_DB_USER:ticket}
+    password: ${TICKET_DB_PASSWORD:ticket}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

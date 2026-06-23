@@ -1,0 +1,10 @@
+# product-catalog-service prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+spring:
+  datasource:
+    url: ${CATALOG_DB_URL}
+    username: ${CATALOG_DB_USER}
+    password: ${CATALOG_DB_PASSWORD}
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}

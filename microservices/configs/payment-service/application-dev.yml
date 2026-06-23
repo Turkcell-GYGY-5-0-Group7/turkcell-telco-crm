@@ -1,0 +1,10 @@
+# payment-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/payment_db
+    username: payment
+    password: payment
+  data:
+    redis:
+      host: localhost
+      port: 6379

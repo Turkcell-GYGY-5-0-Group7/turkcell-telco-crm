@@ -1,0 +1,11 @@
+# api-gateway prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: ${KEYCLOAK_JWKS_URI}
+
+telco:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://telco-crm.com}

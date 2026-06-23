@@ -1,0 +1,29 @@
+# api-gateway base config (port 8080, Spring Cloud Gateway).
+# Per-env overrides in api-gateway-{dev,test,staging,prod}.yml.
+# Routes defined here; services register dynamically via Eureka.
+
+server:
+  port: 8080
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+            allowedMethods: GET,POST,PUT,DELETE,OPTIONS
+            allowedHeaders: '*'
+            allowCredentials: true
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}

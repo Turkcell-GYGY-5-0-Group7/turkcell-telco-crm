@@ -1,0 +1,21 @@
+# Shared test overrides applied to ALL services when SPRING_PROFILES_ACTIVE=test.
+
+logging:
+  level:
+    root: WARN
+    com.telco: INFO
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+eureka:
+  client:
+    enabled: false

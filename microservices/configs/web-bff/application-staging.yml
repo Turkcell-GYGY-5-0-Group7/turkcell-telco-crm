@@ -1,0 +1,4 @@
+# web-bff staging overrides. Credentials injected via Kubernetes Secrets.
+telco:
+  keycloak:
+    token-endpoint: ${KEYCLOAK_TOKEN_ENDPOINT}

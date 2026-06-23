@@ -1,0 +1,6 @@
+# ticket-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${TICKET_DB_URL}
+    username: ${TICKET_DB_USER}
+    password: ${TICKET_DB_PASSWORD}

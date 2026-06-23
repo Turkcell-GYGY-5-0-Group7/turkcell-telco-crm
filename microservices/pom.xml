@@ -22,12 +22,32 @@
     <properties>
         <java.version>21</java.version>
         <platform.version>1.0.0-SNAPSHOT</platform.version>
+        <!-- Spring Cloud release train. MUST align with Spring Boot 4.1.0; verify on first build. -->
+        <spring-cloud.version>2025.1.0</spring-cloud.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <modules>
+        <!-- Templates and reference -->
         <module>service-template</module>
         <module>reference-service</module>
+        <!-- Infrastructure servers -->
+        <module>config-server</module>
+        <module>discovery-server</module>
+        <module>api-gateway</module>
+        <!-- Domain services -->
+        <module>identity-service</module>
+        <module>customer-service</module>
+        <module>product-catalog-service</module>
+        <module>order-service</module>
+        <module>subscription-service</module>
+        <module>usage-service</module>
+        <module>billing-service</module>
+        <module>payment-service</module>
+        <module>notification-service</module>
+        <module>ticket-service</module>
+        <!-- Channel (post-MVP, ADR-022) -->
+        <module>web-bff</module>
     </modules>
 
     <dependencyManagement>
@@ -37,6 +57,14 @@
                 <groupId>com.telco.platform</groupId>
                 <artifactId>platform-bom</artifactId>
                 <version>${platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!-- Spring Cloud BOM: config client, Eureka discovery, gateway. -->
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

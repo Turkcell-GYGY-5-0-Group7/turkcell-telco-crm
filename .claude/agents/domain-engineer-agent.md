@@ -118,6 +118,9 @@ You MUST use:
 * platform-starters only
 * NO direct infrastructure access
 * NO bypassing mediator (in CQRS mode)
+* Reuse-before-build: consult `docs/architecture/platform-capabilities.md` before writing any common
+  infrastructure; never re-implement a listed capability (ApiResult, exceptions, context, pagination,
+  correlation, masking, outbox/inbox). Use `microservices/reference-service` as the worked example.
 
 ---
 

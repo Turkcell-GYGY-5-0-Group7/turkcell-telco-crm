@@ -1,0 +1,25 @@
+# Shared prod overrides applied to ALL services when SPRING_PROFILES_ACTIVE=prod.
+# Secrets MUST be injected via Kubernetes Secrets / Vault; no plaintext credentials here.
+
+logging:
+  level:
+    root: WARN
+    com.telco: INFO
+
+management:
+  tracing:
+    sampling:
+      probability: 0.01
+  endpoint:
+    health:
+      show-details: never
+
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+eureka:
+  client:
+    enabled: false

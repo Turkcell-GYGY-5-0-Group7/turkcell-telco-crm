@@ -12,6 +12,7 @@ states only the rules that have no better home. Do not restate detailed rules he
 | Architecture decisions | `architecture/adr/ADR-*.md` (21 ADRs) |
 | Global build/code conventions | `docs/tasks/README.md` Section 3 |
 | Platform rules and layering | `.claude/context/*.md`, `platform/PLATFORM-SPEC.md` |
+| Platform capabilities (reuse-before-build) | `docs/architecture/platform-capabilities.md` |
 | Service catalog, modes, ports | `docs/architecture/service-catalog.md` |
 | Event catalog | `docs/architecture/event-catalog.md` |
 | API contracts | `docs/api-contracts/` |
@@ -25,6 +26,9 @@ If two sources conflict: ADRs win over prose; a tech-lead decision wins over eve
 ## Non-Negotiable Rules (the short list)
 
 * Services depend ONLY on platform starters, never on `platform-core` directly (ADR-018).
+* Reuse before build: consult `docs/architecture/platform-capabilities.md` before writing common
+  infrastructure. Never re-implement `ApiResult`, error types, context, pagination, correlation, or
+  masking - they are platform-provided.
 * No business logic in controllers; domain operations flow through the mediator (ADR-008).
 * Each service declares exactly one architecture mode (ADR-004); no mixed modes without tech-lead.
 * External APIs under `/api/v1`; all responses wrapped in `ApiResult<T>` (ADR-015).

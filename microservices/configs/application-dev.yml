@@ -1,0 +1,21 @@
+# Shared dev overrides applied to ALL services when SPRING_PROFILES_ACTIVE=dev.
+
+logging:
+  level:
+    root: INFO
+    com.telco: DEBUG
+
+management:
+  tracing:
+    sampling:
+      probability: 1.0
+
+spring:
+  jpa:
+    show-sql: false
+    hibernate:
+      ddl-auto: validate
+
+eureka:
+  instance:
+    hostname: localhost

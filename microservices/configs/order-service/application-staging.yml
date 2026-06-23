@@ -1,0 +1,6 @@
+# order-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${ORDER_DB_URL}
+    username: ${ORDER_DB_USER}
+    password: ${ORDER_DB_PASSWORD}

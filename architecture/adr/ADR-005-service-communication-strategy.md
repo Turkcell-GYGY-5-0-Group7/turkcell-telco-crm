@@ -2,6 +2,7 @@
 
 Status: Accepted
 Date: 2026-06-19
+Amended: 2026-06-23 (internal synchronous calls use REST/OpenFeign for the MVP; gRPC deferred to post-MVP - Tech Lead ruling)
 
 ## Context
 
@@ -27,8 +28,12 @@ The platform will use a hybrid communication model:
 
 ### 2. Internal Synchronous Communication (Service → Service)
 
-* gRPC for internal service-to-service calls
-* REST only for external or debugging purposes
+* REST over HTTP (OpenFeign) for internal service-to-service calls in the MVP, wrapped in Resilience4j
+  circuit breakers
+* gRPC is deferred to post-MVP and will be reconsidered when latency-sensitive, high-throughput
+  internal paths emerge
+* Synchronous internal calls are the minority; Kafka async (Section 3) is the primary inter-service
+  channel
 
 ### 3. Internal Asynchronous Communication
 

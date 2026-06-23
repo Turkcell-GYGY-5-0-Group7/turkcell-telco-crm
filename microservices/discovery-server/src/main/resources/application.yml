@@ -1,0 +1,26 @@
+# Discovery server bootstrap. Must come up independently of config-server so services can register
+# (ADR-010), so it keeps full local config rather than importing from config-server.
+server:
+  port: 8761
+
+spring:
+  application:
+    name: discovery-server
+  security:
+    user:
+      name: ${EUREKA_USERNAME:eureka}
+      password: ${EUREKA_PASSWORD:eureka}
+
+eureka:
+  client:
+    # A standalone registry neither registers with nor fetches from a peer.
+    register-with-eureka: false
+    fetch-registry: false
+  server:
+    enable-self-preservation: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

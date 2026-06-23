@@ -1,0 +1,11 @@
+# api-gateway staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: ${KEYCLOAK_JWKS_URI}
+
+telco:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:https://staging.telco-crm.internal}
