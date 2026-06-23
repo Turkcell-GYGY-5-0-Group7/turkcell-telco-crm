@@ -1,5 +1,11 @@
 # Sprint 07 - Product Catalog Domain
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/5 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build product-catalog-service (9003): hierarchical management of tariffs, addons, and VAS products
@@ -15,13 +21,13 @@ Covers FR-05, FR-06, FR-07, FR-08.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 7.1 | Scaffold and Schema | [7.1-scaffold-and-schema.md](7.1-scaffold-and-schema.md) |
-| 7.2 | Domain and Persistence | [7.2-domain-and-persistence.md](7.2-domain-and-persistence.md) |
-| 7.3 | Caching | [7.3-caching.md](7.3-caching.md) |
-| 7.4 | Application (Commands, Queries, Endpoints) | [7.4-application-commands-queries-endpoints.md](7.4-application-commands-queries-endpoints.md) |
-| 7.5 | Tests | [7.5-tests.md](7.5-tests.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 7.1 | Scaffold and Schema | TODO | [7.1-scaffold-and-schema.md](7.1-scaffold-and-schema.md) |
+| 7.2 | Domain and Persistence | TODO | [7.2-domain-and-persistence.md](7.2-domain-and-persistence.md) |
+| 7.3 | Caching | TODO | [7.3-caching.md](7.3-caching.md) |
+| 7.4 | Application (Commands, Queries, Endpoints) | TODO | [7.4-application-commands-queries-endpoints.md](7.4-application-commands-queries-endpoints.md) |
+| 7.5 | Tests | TODO | [7.5-tests.md](7.5-tests.md) |
 
 ## Sprint Deliverables
 

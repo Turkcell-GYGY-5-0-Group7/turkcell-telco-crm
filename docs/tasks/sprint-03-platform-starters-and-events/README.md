@@ -1,5 +1,11 @@
 # Sprint 03 - Platform Starters and Event Contracts
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| IN PROGRESS | 3/4 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Expose `platform-core` as Spring Boot starters (the only thing services depend on, ADR-018), define
@@ -19,12 +25,12 @@ is a copy-and-fill exercise.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 3.1 | Shared Autoconfigure | [3.1-shared-autoconfigure.md](3.1-shared-autoconfigure.md) |
-| 3.2 | Starters | [3.2-starters.md](3.2-starters.md) |
-| 3.3 | Event Contracts (Avro) | [3.3-event-contracts-avro.md](3.3-event-contracts-avro.md) |
-| 3.4 | Service Template and Reference Service | [3.4-service-template-and-reference-service.md](3.4-service-template-and-reference-service.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 3.1 | Shared Autoconfigure | DONE | [3.1-shared-autoconfigure.md](3.1-shared-autoconfigure.md) |
+| 3.2 | Starters | DONE | [3.2-starters.md](3.2-starters.md) |
+| 3.3 | Event Contracts (Avro) | IN PROGRESS | [3.3-event-contracts-avro.md](3.3-event-contracts-avro.md) |
+| 3.4 | Service Template and Reference Service | DONE | [3.4-service-template-and-reference-service.md](3.4-service-template-and-reference-service.md) |
 
 ## Sprint Deliverables
 

@@ -1,5 +1,11 @@
 # Sprint 09 - Subscription and Onboarding Saga
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/5 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build subscription-service (9005) with its lifecycle state machine and MSISDN allocation, then wire
@@ -15,13 +21,13 @@ FR-10/FR-12.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 9.1 | Subscription Service - Scaffold and Schema | [9.1-subscription-service-scaffold-and-schema.md](9.1-subscription-service-scaffold-and-schema.md) |
-| 9.2 | Subscription Service - Domain | [9.2-subscription-service-domain.md](9.2-subscription-service-domain.md) |
-| 9.3 | Subscription Service - Application and Lifecycle Endpoints | [9.3-subscription-service-application-and-lifecycle-endpoints.md](9.3-subscription-service-application-and-lifecycle-endpoints.md) |
-| 9.4 | Onboarding Saga Wiring | [9.4-onboarding-saga-wiring.md](9.4-onboarding-saga-wiring.md) |
-| 9.5 | AC-01 End-to-End | [9.5-ac-01-end-to-end.md](9.5-ac-01-end-to-end.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 9.1 | Subscription Service - Scaffold and Schema | TODO | [9.1-subscription-service-scaffold-and-schema.md](9.1-subscription-service-scaffold-and-schema.md) |
+| 9.2 | Subscription Service - Domain | TODO | [9.2-subscription-service-domain.md](9.2-subscription-service-domain.md) |
+| 9.3 | Subscription Service - Application and Lifecycle Endpoints | TODO | [9.3-subscription-service-application-and-lifecycle-endpoints.md](9.3-subscription-service-application-and-lifecycle-endpoints.md) |
+| 9.4 | Onboarding Saga Wiring | TODO | [9.4-onboarding-saga-wiring.md](9.4-onboarding-saga-wiring.md) |
+| 9.5 | AC-01 End-to-End | TODO | [9.5-ac-01-end-to-end.md](9.5-ac-01-end-to-end.md) |
 
 ## Sprint Deliverables
 

@@ -1,12 +1,6 @@
 <h1 align="center">
-  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=28&duration=3000&pause=1000&color=B8D8B0&center=true&vCenter=true&random=false&width=500&lines=%C3%96mer+Ekmen;Software+Engineer;Mathematics+Graduate" alt="Typing SVG" />
+  <img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=28&duration=3000&pause=1000&color=B8D8B0&center=true&vCenter=true&random=false&width=750&lines=Turkcell+-+Telco+CRM;Java+Spring+Boot+Microservices+Project" alt="Typing SVG" />
 </h1>
-
-<p align="center">
-  <a href="https://www.omerekmen.com"><img src="https://img.shields.io/badge/Portfolio-omerekmen.com-B8D8B0?style=for-the-badge&logo=safari&logoColor=white" alt="Portfolio" /></a>
-  <a href="https://linkedin.com/in/omerekmenn"><img src="https://img.shields.io/badge/LinkedIn-omerekmenn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn" /></a>
-  <a href="mailto:omerekmenn@gmail.com"><img src="https://img.shields.io/badge/Email-omerekmenn-EA4335?style=for-the-badge&logo=gmail&logoColor=white" alt="Email" /></a>
-</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white" />
@@ -189,19 +183,24 @@ as services are added. See the roadmap for delivery sequencing.
 | Topic | Document |
 | --- | --- |
 | Documentation index | [docs/README.md](docs/README.md) |
+| MVP analysis and design brief | [docs/product/TELCO-CRM-MVP.md](docs/product/TELCO-CRM-MVP.md) |
+| Enterprise evolution (post-MVP) | [docs/product/TELCO-CRM-ADVANCED.md](docs/product/TELCO-CRM-ADVANCED.md) |
 | Business requirements | [docs/product/BRD.md](docs/product/BRD.md) |
 | Functional and non-functional requirements | [docs/product/requirements.md](docs/product/requirements.md) |
 | Product roadmap | [docs/product/roadmap.md](docs/product/roadmap.md) |
 | Service catalog | [docs/architecture/service-catalog.md](docs/architecture/service-catalog.md) |
 | Event catalog | [docs/architecture/event-catalog.md](docs/architecture/event-catalog.md) |
+| API contracts | [docs/api-contracts/](docs/api-contracts/) |
 | Architecture decisions | [architecture/adr/](architecture/adr/) |
+| Implementation backlog | [docs/tasks/](docs/tasks/) |
+| Delivery status dashboard | [docs/tasks/STATUS.md](docs/tasks/STATUS.md) |
 
 ## Roadmap
 
 Delivery is phased: P0 platform foundation, P1 identity and master data, P2 onboarding saga,
 P3 revenue cycle, P4 engagement and support, P5 hardening and release. See
-[docs/product/roadmap.md](docs/product/roadmap.md) and the execution detail in
-[.claude/roadmap/](.claude/roadmap/).
+[docs/product/roadmap.md](docs/product/roadmap.md) and the live execution status in
+[docs/tasks/STATUS.md](docs/tasks/STATUS.md).
 
 ## Contributing
 

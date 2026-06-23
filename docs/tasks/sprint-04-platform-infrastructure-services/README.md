@@ -1,5 +1,11 @@
 # Sprint 04 - Platform Infrastructure Services
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/3 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Stand up the three edge/platform services from the analysis document: config-server (8888),
@@ -13,11 +19,11 @@ rate limiting, correlationId injection). They are configuration-only services wi
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 4.1 | Config Server | [4.1-config-server.md](4.1-config-server.md) |
-| 4.2 | Discovery Server | [4.2-discovery-server.md](4.2-discovery-server.md) |
-| 4.3 | API Gateway | [4.3-api-gateway.md](4.3-api-gateway.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 4.1 | Config Server | TODO | [4.1-config-server.md](4.1-config-server.md) |
+| 4.2 | Discovery Server | TODO | [4.2-discovery-server.md](4.2-discovery-server.md) |
+| 4.3 | API Gateway | TODO | [4.3-api-gateway.md](4.3-api-gateway.md) |
 
 ## Sprint Deliverables
 

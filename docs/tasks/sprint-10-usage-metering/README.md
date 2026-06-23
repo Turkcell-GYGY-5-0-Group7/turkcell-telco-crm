@@ -1,5 +1,11 @@
 # Sprint 10 - Usage Metering
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/7 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build usage-service (9006): consume CDR events from Kafka, decrement quota balances, expose
@@ -14,15 +20,15 @@ Covers FR-17, FR-18, FR-19, FR-20.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 10.1 | Scaffold and Schema | [10.1-scaffold-and-schema.md](10.1-scaffold-and-schema.md) |
-| 10.2 | Quota Provisioning | [10.2-quota-provisioning.md](10.2-quota-provisioning.md) |
-| 10.3 | CDR Ingestion and Metering | [10.3-cdr-ingestion-and-metering.md](10.3-cdr-ingestion-and-metering.md) |
-| 10.4 | Thresholds and Overage | [10.4-thresholds-and-overage.md](10.4-thresholds-and-overage.md) |
-| 10.5 | Read API | [10.5-read-api.md](10.5-read-api.md) |
-| 10.6 | CDR Simulator | [10.6-cdr-simulator.md](10.6-cdr-simulator.md) |
-| 10.7 | Tests | [10.7-tests.md](10.7-tests.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 10.1 | Scaffold and Schema | TODO | [10.1-scaffold-and-schema.md](10.1-scaffold-and-schema.md) |
+| 10.2 | Quota Provisioning | TODO | [10.2-quota-provisioning.md](10.2-quota-provisioning.md) |
+| 10.3 | CDR Ingestion and Metering | TODO | [10.3-cdr-ingestion-and-metering.md](10.3-cdr-ingestion-and-metering.md) |
+| 10.4 | Thresholds and Overage | TODO | [10.4-thresholds-and-overage.md](10.4-thresholds-and-overage.md) |
+| 10.5 | Read API | TODO | [10.5-read-api.md](10.5-read-api.md) |
+| 10.6 | CDR Simulator | TODO | [10.6-cdr-simulator.md](10.6-cdr-simulator.md) |
+| 10.7 | Tests | TODO | [10.7-tests.md](10.7-tests.md) |
 
 ## Sprint Deliverables
 

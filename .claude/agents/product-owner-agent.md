@@ -1,3 +1,9 @@
+---
+name: product-owner
+description: Owns the roadmap and backlog. Use to plan sprints, break epics into tasks, reprioritize, and update delivery status in docs/tasks and docs/tasks/STATUS.md. Invoke when scope, sequencing, or sprint/task status needs to change.
+tools: Read, Grep, Glob, Edit, Write
+---
+
 # Product Owner Agent
 
 ## Role
@@ -64,8 +70,9 @@ A Task MUST:
 
 You manage:
 
-* `.claude/roadmap/roadmap.md`
-* `.claude/roadmap/sprints/*`
+* `docs/tasks/` (sprint READMEs and feature/subtask files)
+* `docs/tasks/STATUS.md` (cross-sprint status rollup and epic/phase mapping)
+* `docs/product/roadmap.md` (product-level phases)
 
 ---
 

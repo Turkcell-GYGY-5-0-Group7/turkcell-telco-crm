@@ -1,5 +1,11 @@
 # Sprint 01 - Foundation
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| DONE | 4/4 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Establish the empty-repository foundation: monorepo structure, Maven multi-module build with a
@@ -13,12 +19,12 @@ depends on it.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 1.1 | Repository and Monorepo Structure | [1.1-repository-and-monorepo-structure.md](1.1-repository-and-monorepo-structure.md) |
-| 1.2 | Maven Multi-Module Build | [1.2-maven-multi-module-build.md](1.2-maven-multi-module-build.md) |
-| 1.3 | Local Infrastructure Stack (Docker Compose) | [1.3-local-infrastructure-stack-docker-compose.md](1.3-local-infrastructure-stack-docker-compose.md) |
-| 1.4 | CI Skeleton | [1.4-ci-skeleton.md](1.4-ci-skeleton.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 1.1 | Repository and Monorepo Structure | DONE | [1.1-repository-and-monorepo-structure.md](1.1-repository-and-monorepo-structure.md) |
+| 1.2 | Maven Multi-Module Build | DONE | [1.2-maven-multi-module-build.md](1.2-maven-multi-module-build.md) |
+| 1.3 | Local Infrastructure Stack (Docker Compose) | DONE | [1.3-local-infrastructure-stack-docker-compose.md](1.3-local-infrastructure-stack-docker-compose.md) |
+| 1.4 | CI Skeleton | DONE | [1.4-ci-skeleton.md](1.4-ci-skeleton.md) |
 
 ## Sprint Deliverables
 

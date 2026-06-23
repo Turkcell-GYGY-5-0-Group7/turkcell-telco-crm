@@ -1,5 +1,11 @@
 # Sprint 14 - Testing and Hardening
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/3 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Raise the platform to production quality: full acceptance-criteria validation, contract testing of
@@ -14,11 +20,11 @@ Covers NFR-01, NFR-02, NFR-06, NFR-12, NFR-16, NFR-17 and final validation of AC
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 14.1 | Acceptance and End-to-End Testing | [14.1-acceptance-and-end-to-end-testing.md](14.1-acceptance-and-end-to-end-testing.md) |
-| 14.2 | Security Hardening | [14.2-security-hardening.md](14.2-security-hardening.md) |
-| 14.3 | Performance Validation | [14.3-performance-validation.md](14.3-performance-validation.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 14.1 | Acceptance and End-to-End Testing | TODO | [14.1-acceptance-and-end-to-end-testing.md](14.1-acceptance-and-end-to-end-testing.md) |
+| 14.2 | Security Hardening | TODO | [14.2-security-hardening.md](14.2-security-hardening.md) |
+| 14.3 | Performance Validation | TODO | [14.3-performance-validation.md](14.3-performance-validation.md) |
 
 ## Sprint Deliverables
 

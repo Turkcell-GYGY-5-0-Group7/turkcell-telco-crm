@@ -21,7 +21,7 @@ Related to #
 - Affected service(s):
 - Architecture mode (ADR-004): N/A / Simple / CQRS+Mediator / Domain Orchestration
 - Requirement linkage (FR/NFR in `docs/product/requirements.md`):
-- Roadmap linkage (phase/epic/sprint in `.claude/roadmap/`):
+- Roadmap linkage (phase/epic/sprint in `docs/tasks/STATUS.md`):
 
 ## Architectural compliance checklist
 

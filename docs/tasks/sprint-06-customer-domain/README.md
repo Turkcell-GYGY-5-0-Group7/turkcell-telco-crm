@@ -1,5 +1,11 @@
 # Sprint 06 - Customer Domain
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/4 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build customer-service (9002): individual customer registration with TCKN validation, KYC workflow
@@ -15,12 +21,12 @@ Covers FR-01, FR-02, FR-03, FR-04.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 6.1 | Scaffold and Schema | [6.1-scaffold-and-schema.md](6.1-scaffold-and-schema.md) |
-| 6.2 | Domain and Persistence | [6.2-domain-and-persistence.md](6.2-domain-and-persistence.md) |
-| 6.3 | Application (Commands, Queries, Endpoints) | [6.3-application-commands-queries-endpoints.md](6.3-application-commands-queries-endpoints.md) |
-| 6.4 | Tests | [6.4-tests.md](6.4-tests.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 6.1 | Scaffold and Schema | TODO | [6.1-scaffold-and-schema.md](6.1-scaffold-and-schema.md) |
+| 6.2 | Domain and Persistence | TODO | [6.2-domain-and-persistence.md](6.2-domain-and-persistence.md) |
+| 6.3 | Application (Commands, Queries, Endpoints) | TODO | [6.3-application-commands-queries-endpoints.md](6.3-application-commands-queries-endpoints.md) |
+| 6.4 | Tests | TODO | [6.4-tests.md](6.4-tests.md) |
 
 ## Sprint Deliverables
 

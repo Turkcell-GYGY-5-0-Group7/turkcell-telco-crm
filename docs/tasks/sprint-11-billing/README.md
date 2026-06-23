@@ -1,5 +1,11 @@
 # Sprint 11 - Billing
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| TODO | 0/6 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build billing-service (9007): a monthly bill-run that generates invoices for all active postpaid
@@ -15,14 +21,14 @@ Covers FR-21, FR-22, FR-23, FR-24.
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 11.1 | Scaffold and Schema | [11.1-scaffold-and-schema.md](11.1-scaffold-and-schema.md) |
-| 11.2 | Inputs for Billing | [11.2-inputs-for-billing.md](11.2-inputs-for-billing.md) |
-| 11.3 | Bill-Run and Invoice Generation | [11.3-bill-run-and-invoice-generation.md](11.3-bill-run-and-invoice-generation.md) |
-| 11.4 | Payment Reconciliation | [11.4-payment-reconciliation.md](11.4-payment-reconciliation.md) |
-| 11.5 | Read API | [11.5-read-api.md](11.5-read-api.md) |
-| 11.6 | Tests | [11.6-tests.md](11.6-tests.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 11.1 | Scaffold and Schema | TODO | [11.1-scaffold-and-schema.md](11.1-scaffold-and-schema.md) |
+| 11.2 | Inputs for Billing | TODO | [11.2-inputs-for-billing.md](11.2-inputs-for-billing.md) |
+| 11.3 | Bill-Run and Invoice Generation | TODO | [11.3-bill-run-and-invoice-generation.md](11.3-bill-run-and-invoice-generation.md) |
+| 11.4 | Payment Reconciliation | TODO | [11.4-payment-reconciliation.md](11.4-payment-reconciliation.md) |
+| 11.5 | Read API | TODO | [11.5-read-api.md](11.5-read-api.md) |
+| 11.6 | Tests | TODO | [11.6-tests.md](11.6-tests.md) |
 
 ## Sprint Deliverables
 

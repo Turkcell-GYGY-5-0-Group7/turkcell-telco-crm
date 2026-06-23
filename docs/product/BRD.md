@@ -11,7 +11,7 @@
 | Owner | Product Owner Agent |
 | Technical authority | Tech Lead Agent (see `/architecture/adr/`) |
 | Last updated | 2026-06-19 |
-| Source of business scope | `telco-crm-microservices-mvp` analysis document |
+| Source of business scope | [`TELCO-CRM-MVP.md`](./TELCO-CRM-MVP.md) (MVP analysis and design brief) |
 | Source of technical scope | ADR-001 through ADR-020 |
 
 > Authority rule: This BRD defines **what** the platform must do and **why**. Where this
@@ -407,7 +407,8 @@ Authoritative standard: ADR-015. Key rules:
 
 Authoritative standard: ADR-011. Key rules:
 
-- identity-service issues JWT (access + refresh) via Keycloak-backed OAuth2/OIDC.
+- Keycloak issues JWT (access + refresh) via OAuth2/OIDC (ADR-011); identity-service manages
+  users/roles/permissions via the Keycloak Admin API.
 - The API Gateway validates each request, extracts `userId`/`roles`, and forwards them
   downstream as `X-User-Id` and `X-User-Roles`.
 - Internal traffic uses JWT plus mTLS.
@@ -453,7 +454,7 @@ criteria are in [requirements.md](./requirements.md) Section "Acceptance Criteri
 - Service catalog: [../architecture/service-catalog.md](../architecture/service-catalog.md)
 - Event catalog: [../architecture/event-catalog.md](../architecture/event-catalog.md)
 - Entity-relationship diagrams: [`docs/erd/`](../erd/)
-- Execution roadmap and sprints: [`/.claude/roadmap/`](../../.claude/roadmap/)
+- Execution backlog and status: [`docs/tasks/`](../tasks/), [`docs/tasks/STATUS.md`](../tasks/STATUS.md)
 
 ---
 

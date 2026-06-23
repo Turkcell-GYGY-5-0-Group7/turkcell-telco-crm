@@ -16,7 +16,9 @@ Admin console: http://localhost:8085  (bootstrap admin from `.env`: `admin` / `a
 
 ## Imported realm: `telco-crm`
 
-Defined in `realm/telco-realm.json`. Local development only.
+Defined in `realm/realm-export.json` (roles, client scopes, clients). Demo users are seeded by the
+companion `keycloak-config` container via `kcadm.sh` after startup. Local development only. Full
+auth integration guide: [`docs/architecture/keycloak-and-auth.md`](../../../docs/architecture/keycloak-and-auth.md).
 
 Realm roles: `SUBSCRIBER`, `CALL_CENTER_AGENT`, `DEALER`, `MARKETING_MANAGER`,
 `BILLING_OPERATOR`, `ADMIN`, `SERVICE`. A protocol mapper exposes realm roles as a flat `roles`
@@ -55,6 +57,6 @@ The realm signing public key (for services validating Keycloak tokens via
 
 ## Changing the realm
 
-Edit `realm/telco-realm.json` and recreate the container, or import a fresh export. Because import
+Edit `realm/realm-export.json` and recreate the container, or import a fresh export. Because import
 skips realms that already exist, run `make destroy` (drops the DB volume) or delete the `telco-crm`
 realm in the console before re-importing changes.

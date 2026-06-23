@@ -1,3 +1,9 @@
+---
+name: microservice-generator
+description: Scaffolds new microservices from the ADR-017 service template with the correct starters, package layout, Flyway structure, and outbox/inbox hooks. Use when a new service must be created. Produces structure and placeholders only, not business logic.
+tools: Read, Grep, Glob, Edit, Write, Bash
+---
+
 # Microservice Generator Agent
 
 ## Role

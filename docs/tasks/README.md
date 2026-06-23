@@ -1,7 +1,7 @@
 # Telco CRM Platform - Implementation Backlog
 
 This directory is the implementation-ready development backlog for the Telco CRM Platform MVP.
-It is derived from `telco-crm-microservices-mvp.docx` (analysis and design), reconciled with the
+It is derived from the MVP analysis and design brief ([`docs/product/TELCO-CRM-MVP.md`](../product/TELCO-CRM-MVP.md)), reconciled with the
 product requirements (`docs/product/requirements.md`), the event and service catalogs
 (`docs/architecture/`), and the platform ADRs (`architecture/adr/`).
 
@@ -11,6 +11,11 @@ and exit criteria, and one file per top-level feature (`X.Y-*.md`) holds that fe
 subtask carries its ID, description, business purpose, inputs, outputs, objective and testable
 acceptance criteria, dependencies, and complexity. The original analysis document is not required
 during implementation.
+
+This directory is the authoritative delivery backlog. Live progress is tracked in
+[`STATUS.md`](STATUS.md) (cross-sprint rollup, including the epic/phase mapping) and in each sprint
+`README.md` (status header plus a `Status` column on the Features table). When a feature changes
+state, update the sprint `README.md` and `STATUS.md` together.
 
 ---
 
@@ -45,6 +50,7 @@ during implementation.
 | 13 | [sprint-13-observability-and-resilience/](sprint-13-observability-and-resilience/README.md) | 13 | tracing, metrics, logging, Resilience4j rollout | 14 |
 | 14 | [sprint-14-testing-and-hardening/](sprint-14-testing-and-hardening/README.md) | 14 | integration/contract tests, security, performance, AC validation | 15 |
 | 15 | [sprint-15-deployment/](sprint-15-deployment/README.md) | 15 | Dockerfiles, Kubernetes, HPA, CI/CD, rollback | - |
+| 16 | [sprint-16-web-frontend/](sprint-16-web-frontend/README.md) | 16 | Web frontend (SvelteKit) + web-bff (post-MVP, ADR-022) | - |
 
 Task IDs are hierarchical: `epic.feature.task` (for example `6.2.3`); subtasks add a fourth level
 (`6.2.3.1`). The epic number equals the sprint number.
@@ -104,8 +110,10 @@ restate them in code reviews; enforce them.
   `docs/architecture/event-catalog.md` and restated per producing sprint.
 
 ### 3.5 Security (ADR-011)
-- identity-service issues JWT (access + refresh). The gateway validates JWT on every request and
-  forwards `X-User-Id` / `X-User-Roles` downstream; services trust the gateway (gateway-behind-trust).
+- Keycloak issues JWT (access + refresh) and owns login/refresh/reuse-detection as realm features
+  (ADR-011); identity-service manages users/roles/permissions via the Keycloak Admin API. The gateway
+  validates the Keycloak JWT (JWKS) on every request and forwards `X-User-Id` / `X-User-Roles`
+  downstream; services trust the gateway (gateway-behind-trust).
 - Authorization via `@PreAuthorize` / mediator `AuthorizationRule` on admin and privileged endpoints.
 - PII at rest (TCKN, card number) encrypted with AES-GCM; key from K8s Secret/Vault (NFR-06).
 - PII masked in logs/telemetry (ADR-021). Audit log mandatory in identity, customer, payment,

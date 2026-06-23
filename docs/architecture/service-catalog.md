@@ -31,12 +31,17 @@ final Tech Lead Agent approval.
 
 ### identity-service (port 9001)
 
-- Bounded context: Identity and authorization.
+- Bounded context: Identity and authorization (user/role/permission management).
 - Architecture mode: CQRS + Mediator.
 - Aggregates: User, Role, Permission.
-- Responsibility: Authentication, JWT issuance (OAuth2/OIDC via Keycloak), RBAC.
-- Key APIs: `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `GET /api/v1/users/{id}`.
-- Events: publish `UserCreated`.
+- Responsibility: User/role/permission management and a domain projection of identity. **Token
+  issuance and the login/refresh flow belong to Keycloak (ADR-011)** - identity-service does NOT mint
+  JWTs. It administers users/roles via the Keycloak Admin API and owns app-specific authorization data
+  and audit. See [keycloak-and-auth.md](keycloak-and-auth.md).
+- Key APIs: `GET /api/v1/users/{id}`, `GET /api/v1/users`, `POST /api/v1/users`,
+  `PUT /api/v1/users/{id}/roles`. (Authentication endpoints are served by Keycloak's realm token
+  endpoint, not here.)
+- Events: publish `user.created.v1`.
 - Audit logging: mandatory.
 
 ### customer-service (port 9002)
@@ -158,6 +163,43 @@ Each service MUST declare its mode in its own `README.md` (ADR-004).
 | ticket-service | Ticket, TicketComment, SLA |
 
 Detailed entity-relationship diagrams: [`docs/erd/`](../erd/).
+
+---
+
+## 5. Infrastructure Profile
+
+Per-service infrastructure declaration (ADR-006). Default primary store is PostgreSQL 17; a
+non-default primary store is a Tech-Lead-approved exception. Binary artifacts go to MinIO, never a
+database. Cache/search are added only where justified.
+
+| Service | Primary store | Cache | Search | Object storage |
+| --- | --- | --- | --- | --- |
+| api-gateway | none (stateless) | Redis (rate limit) | - | - |
+| discovery-server | none | - | - | - |
+| config-server | none (config backend) | - | - | - |
+| identity-service | PostgreSQL | - | - | - |
+| customer-service | PostgreSQL | - | - | MinIO (KYC documents) |
+| product-catalog-service | PostgreSQL | Redis (cache-aside) | - | - |
+| order-service | PostgreSQL | - | - | - |
+| subscription-service | PostgreSQL | - | - | - |
+| usage-service | PostgreSQL | Redis (near-real-time quota) | - | - |
+| billing-service | PostgreSQL | - | - | MinIO (invoice PDFs) |
+| payment-service | PostgreSQL | Redis (idempotency keys) | - | - |
+| notification-service | **MongoDB** (approved exception) + PostgreSQL outbox | - | - | - |
+| ticket-service | PostgreSQL | - | - | - |
+
+Notes:
+
+- **notification-service** is the approved first MongoDB pilot (ADR-006): document/history data in
+  MongoDB; its single event `notification.dispatched.v1` is emitted via a co-located PostgreSQL
+  outbox (non-atomic across stores, acceptable for an idempotent non-financial event).
+- **product-catalog-service** is the designated *second* polyglot pilot (post-MVP) as a MongoDB
+  read-side projection fed by `tariff.created.v1` / `tariff.price-changed.v1`; PostgreSQL stays the
+  write model.
+- **customer-service** and **billing-service** use MinIO for binary artifacts; rows store only object
+  references, accessed via pre-signed URLs.
+- Financial/transactional services (order, billing, payment, subscription, identity, customer) remain
+  PostgreSQL-only for their system of record.
 
 ---
 

@@ -1,5 +1,11 @@
 # Sprint 02 - Platform Core Libraries
 
+| Status | Progress | Last updated |
+| --- | --- | --- |
+| DONE | 6/6 | 2026-06-22 |
+
+Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
+
 ## Objective
 
 Build the framework-agnostic internal platform (`platform-core/*`): the response/exception/context
@@ -21,14 +27,14 @@ outbox/inbox cores. These modules MUST NOT import Spring (PLATFORM-SPEC hard rul
 
 ## Features (one file per top-level task)
 
-| ID | Feature | File |
-| --- | --- | --- |
-| 2.1 | platform-common | [2.1-platform-common.md](2.1-platform-common.md) |
-| 2.2 | platform-cqrs | [2.2-platform-cqrs.md](2.2-platform-cqrs.md) |
-| 2.3 | platform-mediator | [2.3-platform-mediator.md](2.3-platform-mediator.md) |
-| 2.4 | platform-outbox | [2.4-platform-outbox.md](2.4-platform-outbox.md) |
-| 2.5 | platform-inbox | [2.5-platform-inbox.md](2.5-platform-inbox.md) |
-| 2.6 | Build and Verification | [2.6-build-and-verification.md](2.6-build-and-verification.md) |
+| ID | Feature | Status | File |
+| --- | --- | --- | --- |
+| 2.1 | platform-common | DONE | [2.1-platform-common.md](2.1-platform-common.md) |
+| 2.2 | platform-cqrs | DONE | [2.2-platform-cqrs.md](2.2-platform-cqrs.md) |
+| 2.3 | platform-mediator | DONE | [2.3-platform-mediator.md](2.3-platform-mediator.md) |
+| 2.4 | platform-outbox | DONE | [2.4-platform-outbox.md](2.4-platform-outbox.md) |
+| 2.5 | platform-inbox | DONE | [2.5-platform-inbox.md](2.5-platform-inbox.md) |
+| 2.6 | Build and Verification | DONE | [2.6-build-and-verification.md](2.6-build-and-verification.md) |
 
 ## Sprint Deliverables
 

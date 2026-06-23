@@ -27,7 +27,7 @@ Describe the desired behavior.
 ## Requirement / roadmap linkage
 
 - Related FR/NFR (see `docs/product/requirements.md`):
-- Related phase/epic (see `docs/product/roadmap.md` and `.claude/roadmap/`):
+- Related phase/epic/sprint (see `docs/product/roadmap.md` and `docs/tasks/STATUS.md`):
 
 ## Acceptance criteria
 

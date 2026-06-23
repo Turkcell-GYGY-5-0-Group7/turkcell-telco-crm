@@ -7,14 +7,15 @@
 | Document | Product Roadmap |
 | Version | 1.0 |
 | Status | Draft for review |
-| Owner | Product Owner Agent (modifications restricted per CLAUDE.md Section 11) |
+| Owner | product-owner agent (with tech-lead approval) |
 | Parent | [BRD.md](./BRD.md) |
-| Execution detail | [`/.claude/roadmap/`](../../.claude/roadmap/) |
-| Last updated | 2026-06-19 |
+| Execution detail | [`docs/tasks/`](../tasks/) and [`docs/tasks/STATUS.md`](../tasks/STATUS.md) |
+| Last updated | 2026-06-23 |
 
 This roadmap is the product-level view of delivery. The execution-level breakdown (epics,
-sprints, tasks, agent assignments) lives in [`/.claude/roadmap/roadmap.md`](../../.claude/roadmap/roadmap.md).
-Only the Product Owner Agent and Tech Lead Agent may modify roadmap documents.
+sprints, tasks, live status) lives in [`docs/tasks/`](../tasks/), rolled up in
+[`docs/tasks/STATUS.md`](../tasks/STATUS.md). Only the product-owner and tech-lead agents may
+modify roadmap documents.
 
 ---
 
@@ -65,7 +66,7 @@ Aligns with execution epics EPIC-001 through EPIC-004.
 
 Goal: authenticated access plus the master data needed to order.
 
-- identity-service: login, JWT issuance, roles/permissions (FR-IAM-01..05)
+- Keycloak realm (token issuance) + identity-service: user/roles/permissions management (FR-IAM-01..05)
 - api-gateway: JWT validation, header propagation, rate limiting
 - customer-service: registration, KYC, address/document management (FR-01..04)
 - product-catalog-service: tariff/addon/VAS catalog with versioning (FR-05..08)

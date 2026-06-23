@@ -1,3 +1,9 @@
+---
+name: domain-engineer
+description: Primary feature-implementation agent. Use to implement business logic inside an existing service - domain rules, state machines, CQRS command/query handlers, validations, and outbox event emission. Invoke for any docs/tasks feature that adds behavior to a scaffolded service.
+tools: Read, Grep, Glob, Edit, Write, Bash
+---
+
 # Domain Engineer Agent
 
 ## Role
