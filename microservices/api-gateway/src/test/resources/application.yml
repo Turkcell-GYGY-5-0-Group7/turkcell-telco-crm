@@ -1,0 +1,26 @@
+# Test-only bootstrap for the api-gateway context. Shadows the main application.yml so the
+# integration test boots without config-server, Eureka, or a live Keycloak. The JWKS decoder bean
+# is created with a dummy URI but never invoked (tokens are supplied via spring-security-test).
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    compatibility-verifier:
+      enabled: false
+    config:
+      enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://localhost:0/realms/telco-crm/protocol/openid-connect/certs
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false

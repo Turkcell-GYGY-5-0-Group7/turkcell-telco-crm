@@ -72,6 +72,7 @@
       "secret": "local-dev-secret",
       "protocol": "openid-connect",
       "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
       "serviceAccountsEnabled": true,
       "redirectUris": ["http://localhost:8080/*"],
       "webOrigins": ["+"],
@@ -82,6 +83,39 @@
         "web-origins",
         "telco-roles"
       ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin@telco.local",
+      "email": "admin@telco.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "admin", "temporary": false }
+      ],
+      "realmRoles": ["ADMIN"]
+    },
+    {
+      "username": "agent@telco.local",
+      "email": "agent@telco.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "agent", "temporary": false }
+      ],
+      "realmRoles": ["CALL_CENTER_AGENT"]
+    },
+    {
+      "username": "subscriber@telco.local",
+      "email": "subscriber@telco.local",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        { "type": "password", "value": "subscriber", "temporary": false }
+      ],
+      "realmRoles": ["SUBSCRIBER"]
     }
   ]
 }

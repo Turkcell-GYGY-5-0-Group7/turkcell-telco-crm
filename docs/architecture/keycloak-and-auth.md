@@ -110,8 +110,9 @@ make auth        # starts core services + keycloak (compose profile: auth)
 
 - Admin console: `http://localhost:8085` (bootstrap admin from `.env`: `admin` / `admin`).
 - Keycloak stores realm/user data in the `keycloak` PostgreSQL database (survives restarts).
-- The realm (roles, scopes, clients) is imported from the realm file. Demo users are seeded by the
-  companion `keycloak-config` container via `kcadm.sh` after startup.
+- The realm (roles, scopes, clients, and the local demo users) is imported from the realm file on
+  startup. The companion `keycloak-config` container only relaxes the `master` realm `sslRequired`
+  for plain-HTTP local admin access; it does not seed the `telco-crm` realm.
 - The realm signing key / OIDC discovery: `http://localhost:8085/realms/telco-crm`.
 
 ### Changing the realm
@@ -130,11 +131,11 @@ Because import skips realms that already exist, run `make destroy` (drops the DB
 
 ## 9. Setup and integration checklist (Sprint 04-05)
 
-- [ ] Realm imported and reachable; OIDC discovery returns a `jwks_uri` (infra; done).
-- [ ] Gateway configured to validate Keycloak JWT via JWKS and propagate identity headers (Sprint 04).
+- [x] Realm imported and reachable; OIDC discovery returns a `jwks_uri` (infra; done).
+- [x] Gateway configured to validate Keycloak JWT via JWKS and propagate identity headers (Sprint 04).
 - [ ] `starter-security` `telco.platform.security.jwt.public-key` wired to the realm key (Sprint 04-05).
 - [ ] identity-service integrated with the Keycloak Admin API for user/role provisioning (Sprint 05).
-- [ ] Role -> `roles` claim verified end to end; RBAC enforced on admin endpoints (Sprint 05).
+- [x] Role -> `roles` claim verified end to end (Sprint 05.3); RBAC enforced on admin endpoints (Sprint 05.5).
 - [ ] Web client (`telco-web`) Authorization Code + PKCE login working against the gateway (frontend sprint).
 - [ ] Production hardening: real secrets, HTTPS, key rotation, per-env realms (Sprint 14-15).
 

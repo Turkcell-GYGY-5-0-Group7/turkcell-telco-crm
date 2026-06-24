@@ -14,7 +14,7 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-06-25 (Sprint 05 feature 5.2 DONE)
+Last updated: 2026-06-25 (Sprint 05 feature 5.3 DONE)
 
 ## Sprint Rollup
 
@@ -24,7 +24,7 @@ Last updated: 2026-06-25 (Sprint 05 feature 5.2 DONE)
 | [02](sprint-02-platform-core/README.md) | platform-core libraries | DONE | 6/6 |
 | [03](sprint-03-platform-starters-and-events/README.md) | Starters, Avro contracts, service template | DONE | 4/4 |
 | [04](sprint-04-platform-infrastructure-services/README.md) | config, discovery, gateway | DONE | 3/3 |
-| [05](sprint-05-security-and-identity/README.md) | identity-service, JWT, RBAC | IN PROGRESS | 2/7 |
+| [05](sprint-05-security-and-identity/README.md) | identity-service, JWT, RBAC | IN PROGRESS | 3/7 |
 | [06](sprint-06-customer-domain/README.md) | customer-service | TODO | 0/4 |
 | [07](sprint-07-product-catalog-domain/README.md) | product-catalog-service | TODO | 0/5 |
 | [08](sprint-08-order-and-payment/README.md) | order-service, payment-service | TODO | 0/6 |
