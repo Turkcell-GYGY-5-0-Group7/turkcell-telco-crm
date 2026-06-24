@@ -6,6 +6,11 @@ server:
 spring:
   application:
     name: discovery-server
+  cloud:
+    # Spring Cloud 2025.1.0 + Spring Boot 4.1.0 are compatible;
+    # the verifier's known-version table lags the actual release.
+    compatibility-verifier:
+      enabled: false
   security:
     user:
       name: ${EUREKA_USERNAME:eureka}

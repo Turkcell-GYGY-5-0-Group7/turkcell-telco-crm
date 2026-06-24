@@ -14,6 +14,10 @@ spring:
       name: ${CONFIG_SERVER_USER:config}
       password: ${CONFIG_SERVER_PASSWORD:config}
   cloud:
+    # Spring Cloud 2025.1.0 + Spring Boot 4.1.0 are compatible;
+    # the verifier's known-version table lags the actual release.
+    compatibility-verifier:
+      enabled: false
     config:
       server:
         native:
@@ -21,8 +25,16 @@ spring:
             - file:${CONFIG_DIR:../configs}/
             - file:${CONFIG_DIR:../configs}/{application}/
 
+encrypt:
+  # No default fallback: config-server refuses to start without a real key.
+  # Generate one with: openssl rand -hex 32
+  key: ${ENCRYPT_KEY:?ENCRYPT_KEY env var must be set (openssl rand -hex 32)}
+
 management:
   endpoints:
     web:
       exposure:
+        # encrypt/decrypt are ops tools, not runtime probes — keep them off the public
+        # management interface. Use `curl -u config:... http://localhost:8888/encrypt`
+        # directly against the service port (which requires basic-auth) for CI/ops use.
         include: health,info
