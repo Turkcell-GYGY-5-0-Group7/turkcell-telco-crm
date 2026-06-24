@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| IN PROGRESS | 1/7 | 2026-06-25 |
+| IN PROGRESS | 2/7 | 2026-06-25 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -41,7 +41,7 @@ running.
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
 | 5.1 | Service Scaffold and Schema | DONE | [5.1-service-scaffold-and-schema.md](5.1-service-scaffold-and-schema.md) |
-| 5.2 | Domain and Persistence | TODO | [5.2-domain-and-persistence.md](5.2-domain-and-persistence.md) |
+| 5.2 | Domain and Persistence | DONE | [5.2-domain-and-persistence.md](5.2-domain-and-persistence.md) |
 | 5.3 | Authentication | TODO | [5.3-authentication.md](5.3-authentication.md) |
 | 5.4 | Refresh-Token Rotation and Reuse Detection | TODO | [5.4-refresh-token-rotation-and-reuse-detection.md](5.4-refresh-token-rotation-and-reuse-detection.md) |
 | 5.5 | User Management and RBAC | TODO | [5.5-user-management-and-rbac.md](5.5-user-management-and-rbac.md) |
