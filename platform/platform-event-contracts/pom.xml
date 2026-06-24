@@ -19,6 +19,12 @@
         <!-- Only Avro-generated classes here; static analysis would flag generated code. -->
         <spotbugs.skip>true</spotbugs.skip>
         <checkstyle.skip>true</checkstyle.skip>
+
+        <!-- Schema Registry compatibility check (ADR-019, task 3.3.2). -->
+        <confluent-schema-registry-plugin.version>7.9.0</confluent-schema-registry-plugin.version>
+        <schema.registry.url>http://localhost:8081</schema.registry.url>
+        <!-- Set to true in CI where no Schema Registry is available (-Dschema.registry.skip=true). -->
+        <schema.registry.skip>false</schema.registry.skip>
     </properties>
 
     <dependencies>
@@ -27,6 +33,13 @@
             <artifactId>avro</artifactId>
         </dependency>
     </dependencies>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </pluginRepository>
+    </pluginRepositories>
 
     <build>
         <plugins>
@@ -51,7 +64,61 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>io.confluent</groupId>
+                <artifactId>kafka-schema-registry-maven-plugin</artifactId>
+                <version>${confluent-schema-registry-plugin.version}</version>
+                <configuration>
+                    <schemaRegistryUrls>
+                        <param>${schema.registry.url}</param>
+                    </schemaRegistryUrls>
+                    <skip>${schema.registry.skip}</skip>
+                    <subjects>
+                        <event.envelope.v1>${project.basedir}/src/main/avro/EventEnvelope.avsc</event.envelope.v1>
+                        <customer.registered.v1>${project.basedir}/src/main/avro/customer-registered.avsc</customer.registered.v1>
+                        <order.created.v1>${project.basedir}/src/main/avro/order-created.avsc</order.created.v1>
+                        <payment.completed.v1>${project.basedir}/src/main/avro/payment-completed.avsc</payment.completed.v1>
+                        <subscription.activated.v1>${project.basedir}/src/main/avro/subscription-activated.avsc</subscription.activated.v1>
+                        <invoice.generated.v1>${project.basedir}/src/main/avro/invoice-generated.avsc</invoice.generated.v1>
+                    </subjects>
+                    <schemaType>AVRO</schemaType>
+                    <compatibilityLevel>BACKWARD</compatibilityLevel>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>check-schema-compatibility</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>test-compatibility</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>register-schemas</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.confluent</groupId>
+                        <artifactId>kafka-schema-registry-maven-plugin</artifactId>
+                        <version>${confluent-schema-registry-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>register-schemas</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>register</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

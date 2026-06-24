@@ -1,6 +1,6 @@
-# api-gateway base config (port 8080, Spring Cloud Gateway).
-# Per-env overrides in api-gateway-{dev,test,staging,prod}.yml.
-# Routes defined here; services register dynamically via Eureka.
+# api-gateway base config (Spring Cloud Gateway Server MVC, port 8080).
+# All routes are defined here so they can be centrally managed (4.3.1, ADR-010).
+# Per-env overrides in application-{dev,staging,prod}.yml.
 
 server:
   port: 8080
@@ -8,22 +8,186 @@ server:
 spring:
   cloud:
     gateway:
-      discovery:
-        locator:
-          enabled: true
-          lower-case-service-id: true
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOriginPatterns: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
-            allowedMethods: GET,POST,PUT,DELETE,OPTIONS
-            allowedHeaders: '*'
-            allowCredentials: true
+      server:
+        webmvc:
+          routes:
+            # ---------------------------------------------------------------- Keycloak proxy
+            # Proxy /realms/** so clients have one origin for both auth and API calls.
+            - id: keycloak-route
+              uri: ${KEYCLOAK_URI:http://localhost:8085}
+              predicates:
+                - Path=/realms/**
 
+            # ---------------------------------------------------------------- Domain services
+            - id: identity-service-route
+              uri: lb://identity-service
+              predicates:
+                - Path=/api/v1/auth/**,/api/v1/users/**,/api/v1/roles/**
+
+            - id: customer-service-route
+              uri: lb://customer-service
+              predicates:
+                - Path=/api/v1/customers/**
+
+            - id: product-catalog-service-route
+              uri: lb://product-catalog-service
+              predicates:
+                - Path=/api/v1/tariffs/**,/api/v1/addons/**
+
+            - id: order-service-route
+              uri: lb://order-service
+              predicates:
+                - Path=/api/v1/orders/**
+
+            - id: subscription-service-route
+              uri: lb://subscription-service
+              predicates:
+                - Path=/api/v1/subscriptions/**
+
+            - id: usage-service-route
+              uri: lb://usage-service
+              predicates:
+                - Path=/api/v1/usage/**
+
+            - id: billing-service-route
+              uri: lb://billing-service
+              predicates:
+                - Path=/api/v1/invoices/**,/api/v1/billing/**
+
+            - id: payment-service-route
+              uri: lb://payment-service
+              predicates:
+                - Path=/api/v1/payments/**
+
+            - id: notification-service-route
+              uri: lb://notification-service
+              predicates:
+                - Path=/api/v1/notifications/**
+
+            - id: ticket-service-route
+              uri: lb://ticket-service
+              predicates:
+                - Path=/api/v1/tickets/**
+
+            # ---------------------------------------------------------------- OpenAPI aggregation (4.3.6)
+            # /api-docs/{service} -> lb://{service}/v3/api-docs
+            - id: openapi-identity
+              uri: lb://identity-service
+              predicates:
+                - Path=/api-docs/identity-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-customer
+              uri: lb://customer-service
+              predicates:
+                - Path=/api-docs/customer-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-product-catalog
+              uri: lb://product-catalog-service
+              predicates:
+                - Path=/api-docs/product-catalog-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-order
+              uri: lb://order-service
+              predicates:
+                - Path=/api-docs/order-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-subscription
+              uri: lb://subscription-service
+              predicates:
+                - Path=/api-docs/subscription-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-usage
+              uri: lb://usage-service
+              predicates:
+                - Path=/api-docs/usage-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-billing
+              uri: lb://billing-service
+              predicates:
+                - Path=/api-docs/billing-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-payment
+              uri: lb://payment-service
+              predicates:
+                - Path=/api-docs/payment-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-notification
+              uri: lb://notification-service
+              predicates:
+                - Path=/api-docs/notification-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-ticket
+              uri: lb://ticket-service
+              predicates:
+                - Path=/api-docs/ticket-service
+              filters:
+                - SetPath=/v3/api-docs
+
+  # JWKS URI validated against Keycloak realm (ADR-011). Port 8085 = local Keycloak.
   security:
     oauth2:
       resourceserver:
         jwt:
-          jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+          jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8085/realms/telco-crm/protocol/openid-connect/certs}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS,PATCH
+    allowed-headers: "*"
+    allow-credentials: true
+
+# Keycloak URI also exposed as a standalone property for the Keycloak proxy route above.
+gateway:
+  keycloak:
+    uri: ${KEYCLOAK_URI:http://localhost:8085}
+
+# Springdoc: Swagger UI aggregates specs from all domain services (4.3.6).
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html
+    urls:
+      - name: identity-service
+        url: /api-docs/identity-service
+      - name: customer-service
+        url: /api-docs/customer-service
+      - name: product-catalog-service
+        url: /api-docs/product-catalog-service
+      - name: order-service
+        url: /api-docs/order-service
+      - name: subscription-service
+        url: /api-docs/subscription-service
+      - name: usage-service
+        url: /api-docs/usage-service
+      - name: billing-service
+        url: /api-docs/billing-service
+      - name: payment-service
+        url: /api-docs/payment-service
+      - name: notification-service
+        url: /api-docs/notification-service
+      - name: ticket-service
+        url: /api-docs/ticket-service

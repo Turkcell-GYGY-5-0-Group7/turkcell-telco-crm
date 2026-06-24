@@ -3,7 +3,9 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/customer_db
     username: customer
-    password: customer
+    # Encrypted via: curl -u config:config -X POST http://localhost:8888/encrypt -d "s3cr3t-dev-db-pass"
+    # Config-server decrypts {cipher} values automatically before serving to clients.
+    password: '{cipher}f3d27b2a81a8bd8eca770fa8f1c0455fced4113ace90ea62ae7bdefb86a64a121ae3441366ca2cd7d59d1263cffdeb5e'
 minio:
   endpoint: http://localhost:9000
   access-key: minioadmin

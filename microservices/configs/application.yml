@@ -21,6 +21,10 @@ logging:
 
 spring:
   cloud:
+    # Spring Cloud 2025.1.0 + Spring Boot 4.1.0 are compatible;
+    # the verifier's known-version table lags the actual release.
+    compatibility-verifier:
+      enabled: false
     discovery:
       enabled: true
 

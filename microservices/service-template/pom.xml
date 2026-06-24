@@ -34,6 +34,17 @@
             <artifactId>starter-observability</artifactId>
         </dependency>
 
+        <!-- Cloud: config client pulls runtime config from config-server (ADR-010). -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-config</artifactId>
+        </dependency>
+        <!-- Cloud: Eureka client for dev service discovery (ADR-010). -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
+        </dependency>
+
         <!-- Web + validation + actuator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

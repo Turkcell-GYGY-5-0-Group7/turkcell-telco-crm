@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/3 | 2026-06-22 |
+| DONE | 3/3 | 2026-06-24 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -21,9 +21,9 @@ rate limiting, correlationId injection). They are configuration-only services wi
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 4.1 | Config Server | TODO | [4.1-config-server.md](4.1-config-server.md) |
-| 4.2 | Discovery Server | TODO | [4.2-discovery-server.md](4.2-discovery-server.md) |
-| 4.3 | API Gateway | TODO | [4.3-api-gateway.md](4.3-api-gateway.md) |
+| 4.1 | Config Server | DONE | [4.1-config-server.md](4.1-config-server.md) |
+| 4.2 | Discovery Server | DONE | [4.2-discovery-server.md](4.2-discovery-server.md) |
+| 4.3 | API Gateway | DONE | [4.3-api-gateway.md](4.3-api-gateway.md) |
 
 ## Sprint Deliverables
 

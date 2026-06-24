@@ -12,4 +12,4 @@ spring:
       username: ${CONFIG_SERVER_USER:config}
       password: ${CONFIG_SERVER_PASSWORD:config}
   config:
-    import: optional:configserver:
+    import: "optional:configserver:"

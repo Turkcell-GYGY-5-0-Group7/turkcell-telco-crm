@@ -14,7 +14,7 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-06-23
+Last updated: 2026-06-24 (Sprint 04 DONE)
 
 ## Sprint Rollup
 
@@ -22,8 +22,8 @@ Last updated: 2026-06-23
 | --- | --- | --- | --- |
 | [01](sprint-01-foundation/README.md) | Foundation, build, infra, CI skeleton | DONE | 4/4 |
 | [02](sprint-02-platform-core/README.md) | platform-core libraries | DONE | 6/6 |
-| [03](sprint-03-platform-starters-and-events/README.md) | Starters, Avro contracts, service template | IN PROGRESS | 3/4 |
-| [04](sprint-04-platform-infrastructure-services/README.md) | config, discovery, gateway | TODO | 0/3 |
+| [03](sprint-03-platform-starters-and-events/README.md) | Starters, Avro contracts, service template | DONE | 4/4 |
+| [04](sprint-04-platform-infrastructure-services/README.md) | config, discovery, gateway | DONE | 3/3 |
 | [05](sprint-05-security-and-identity/README.md) | identity-service, JWT, RBAC | TODO | 0/7 |
 | [06](sprint-06-customer-domain/README.md) | customer-service | TODO | 0/4 |
 | [07](sprint-07-product-catalog-domain/README.md) | product-catalog-service | TODO | 0/5 |
@@ -37,19 +37,8 @@ Last updated: 2026-06-23
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 2 sprints DONE, 1 IN PROGRESS, 12 TODO. Features: 13 DONE / 1 IN PROGRESS
-/ 61 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
-
-## Active Work (IN PROGRESS detail)
-
-### Sprint 03 - Platform Starters and Event Contracts (3/4)
-
-| Feature | Status | Note |
-| --- | --- | --- |
-| 3.1 Shared Autoconfigure | DONE | platform-autoconfigure shipped |
-| 3.2 Starters | DONE | six starters build and auto-configure |
-| 3.3 Event Contracts (Avro) | IN PROGRESS | Avro envelope + 5 MVP schemas done; Schema Registry runtime wiring (T-010) pending the infra stack; Debezium delivery (T-011) DEFERRED |
-| 3.4 Service Template and Reference Service | DONE | service-template + reference-service with tests |
+Totals (MVP, Sprints 01-15): 4 sprints DONE, 0 IN PROGRESS, 11 TODO. Features: 17 DONE / 0 IN PROGRESS
+/ 58 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 
 ## Epics and Phases
 

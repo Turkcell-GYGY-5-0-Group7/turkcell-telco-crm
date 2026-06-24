@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| IN PROGRESS | 3/4 | 2026-06-22 |
+| DONE | 4/4 | 2026-06-24 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -29,7 +29,7 @@ is a copy-and-fill exercise.
 | --- | --- | --- | --- |
 | 3.1 | Shared Autoconfigure | DONE | [3.1-shared-autoconfigure.md](3.1-shared-autoconfigure.md) |
 | 3.2 | Starters | DONE | [3.2-starters.md](3.2-starters.md) |
-| 3.3 | Event Contracts (Avro) | IN PROGRESS | [3.3-event-contracts-avro.md](3.3-event-contracts-avro.md) |
+| 3.3 | Event Contracts (Avro) | DONE | [3.3-event-contracts-avro.md](3.3-event-contracts-avro.md) |
 | 3.4 | Service Template and Reference Service | DONE | [3.4-service-template-and-reference-service.md](3.4-service-template-and-reference-service.md) |
 
 ## Sprint Deliverables

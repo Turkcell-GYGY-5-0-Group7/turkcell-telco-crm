@@ -1,14 +1,30 @@
-# API Gateway minimal bootstrap. It is a normal config-server client: routes, filters, CORS, and
-# rate-limit config are served centrally from api-gateway.yml (ADR-010). Port is set centrally.
+# API Gateway minimal bootstrap. Central config (routes, CORS, rate-limit) is served by
+# config-server (ADR-010). Security properties must be present locally as defaults so
+# Spring Security can create JwtDecoder before config-server values override them at runtime.
 spring:
   application:
     name: api-gateway
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
   cloud:
+    # Spring Cloud 2025.1.0 + Spring Boot 4.1.0 are compatible.
+    compatibility-verifier:
+      enabled: false
     config:
       uri: ${CONFIG_SERVER_URI:http://localhost:8888}
       username: ${CONFIG_SERVER_USER:config}
       password: ${CONFIG_SERVER_PASSWORD:config}
   config:
-    import: optional:configserver:
+    import: "optional:configserver:"
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Default points to local Keycloak. Config-server overrides for staging/prod.
+          jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8085/realms/telco-crm/protocol/openid-connect/certs}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:telco}

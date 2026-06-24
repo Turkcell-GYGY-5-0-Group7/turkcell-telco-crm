@@ -52,8 +52,8 @@ jobs:
       - name: Build and verify (unit + integration tests)
         if: steps.reactor.outputs.found == 'true'
         working-directory: platform
-        # Static analysis runs in its own job; skip it here to keep this stage focused on tests.
-        run: mvn ${MAVEN_ARGS} verify -Dcheckstyle.skip=true -Dspotbugs.skip=true
+        # Static analysis runs in its own job; schema-registry check requires a live server.
+        run: mvn ${MAVEN_ARGS} verify -Dcheckstyle.skip=true -Dspotbugs.skip=true -Dschema.registry.skip=true
 
       - name: Upload test reports
         if: always() && steps.reactor.outputs.found == 'true'
@@ -82,10 +82,12 @@ jobs:
 
       # Checkstyle + SpotBugs are bound to the verify phase in platform/pom.xml (ADR-014).
       # Skipping tests keeps this stage focused on static analysis; it fails on any violation.
+      # Schema Registry is not available in CI; the compatibility check runs locally or in
+      # a dedicated integration environment against a live Schema Registry.
       - name: Run static analysis
         if: hashFiles('platform/pom.xml') != ''
         working-directory: platform
-        run: mvn ${MAVEN_ARGS} -DskipTests verify
+        run: mvn ${MAVEN_ARGS} -DskipTests verify -Dschema.registry.skip=true
 
   codeql:
     name: Security Scan (CodeQL)
