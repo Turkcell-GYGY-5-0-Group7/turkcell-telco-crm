@@ -23,6 +23,8 @@
         <!-- Schema Registry compatibility check (ADR-019, task 3.3.2). -->
         <confluent-schema-registry-plugin.version>7.9.0</confluent-schema-registry-plugin.version>
         <schema.registry.url>http://localhost:8081</schema.registry.url>
+        <!-- Set to true in CI where no Schema Registry is available (-Dschema.registry.skip=true). -->
+        <schema.registry.skip>false</schema.registry.skip>
     </properties>
 
     <dependencies>
@@ -70,6 +72,7 @@
                     <schemaRegistryUrls>
                         <param>${schema.registry.url}</param>
                     </schemaRegistryUrls>
+                    <skip>${schema.registry.skip}</skip>
                     <subjects>
                         <event.envelope.v1>${project.basedir}/src/main/avro/EventEnvelope.avsc</event.envelope.v1>
                         <customer.registered.v1>${project.basedir}/src/main/avro/customer-registered.avsc</customer.registered.v1>
