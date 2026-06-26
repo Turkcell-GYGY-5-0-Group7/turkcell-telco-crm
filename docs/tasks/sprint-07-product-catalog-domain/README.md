@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/5 | 2026-06-22 |
+| DONE | 5/5 features, 12/12 integration tests pass | 2026-06-26 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -23,11 +23,11 @@ Covers FR-05, FR-06, FR-07, FR-08.
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 7.1 | Scaffold and Schema | TODO | [7.1-scaffold-and-schema.md](7.1-scaffold-and-schema.md) |
-| 7.2 | Domain and Persistence | TODO | [7.2-domain-and-persistence.md](7.2-domain-and-persistence.md) |
-| 7.3 | Caching | TODO | [7.3-caching.md](7.3-caching.md) |
-| 7.4 | Application (Commands, Queries, Endpoints) | TODO | [7.4-application-commands-queries-endpoints.md](7.4-application-commands-queries-endpoints.md) |
-| 7.5 | Tests | TODO | [7.5-tests.md](7.5-tests.md) |
+| 7.1 | Scaffold and Schema | DONE | [7.1-scaffold-and-schema.md](7.1-scaffold-and-schema.md) |
+| 7.2 | Domain and Persistence | DONE | [7.2-domain-and-persistence.md](7.2-domain-and-persistence.md) |
+| 7.3 | Caching | DONE | [7.3-caching.md](7.3-caching.md) |
+| 7.4 | Application (Commands, Queries, Endpoints) | DONE | [7.4-application-commands-queries-endpoints.md](7.4-application-commands-queries-endpoints.md) |
+| 7.5 | Tests | DONE | [7.5-tests.md](7.5-tests.md) |
 
 ## Sprint Deliverables
 

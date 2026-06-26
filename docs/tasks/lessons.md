@@ -44,6 +44,43 @@ Format:
   outage must not bring down the gateway. Also add `.requestMatchers("/error").permitAll()` so
   filter exceptions don't redirect to a secured `/error` endpoint and cascade to 401.
 
+## 2026-06-26 - Dockerizing Spring Boot services in a Maven multi-module repo
+- **Builder image must have Maven**: `eclipse-temurin:21-jdk-alpine` has no `mvn`. Use
+  `maven:3.9-eclipse-temurin-21-alpine` as the builder stage.
+- **Schema Registry unreachable inside Docker build**: the `kafka-schema-registry-maven-plugin`
+  runs during `mvn install` and tries to hit `localhost:8081`. It has a built-in skip flag:
+  add `-Dschema.registry.skip=true` to the `mvn -f platform/pom.xml install ...` command in
+  every Dockerfile.
+- **Maven reactor needs all sibling pom.xml files**: a Dockerfile that copies only
+  `microservices/SERVICE/pom.xml` causes `mvn -f microservices/pom.xml -pl SERVICE` to fail
+  because the parent pom lists all sibling modules. Fix: add `# syntax=docker/dockerfile:1`
+  and use `COPY --parents microservices/*/pom.xml ./` to copy every module's pom in one line
+  while preserving the directory structure.
+- **No curl in Alpine JRE runtime image**: `eclipse-temurin:21-jre-alpine` has no `curl`, so
+  compose healthchecks that use `curl` fail silently. Add `RUN apk add --no-cache curl` to the
+  runtime stage of every service Dockerfile.
+- **Spring Cloud Config does NOT resolve `${...}` server-side**: placeholders in served YAML
+  (e.g. `${REDIS_HOST:localhost}`) are forwarded raw to clients, who resolve them with their
+  own environment. Hardcoded values in `application-dev.yml` (e.g. `host: 127.0.0.1`) cannot
+  be overridden by env vars at all. Fix: introduce a `docker` Spring profile. Create
+  `configs/application-docker.yml` and per-service `application-docker.yml` files with Docker
+  service-name addresses; run containers with `SPRING_PROFILES_ACTIVE=dev,docker` so the
+  `docker` profile overrides the `dev` hardcoded values.
+
+## 2026-06-26 - Spring Security AccessDeniedException is NOT the platform exception
+
+- `GlobalExceptionHandler` in `starter-api` handles `com.telco.platform.common.exception.AccessDeniedException`
+  → 403. But `@PreAuthorize` throws `org.springframework.security.access.AccessDeniedException` — a
+  completely different type. Without a handler for it, the platform catch-all `handleUnexpected(Exception)`
+  fires and returns 500.
+- Rule: whenever a service uses `@PreAuthorize` (method-level RBAC), add a service-level
+  `@RestControllerAdvice` with `@ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)`
+  that returns 403. Spring MVC picks the most specific exception handler, so this beats the
+  platform catch-all without touching platform code.
+- Do NOT try to move RBAC to `authorizeHttpRequests` as a workaround on Spring Boot 4.x /
+  Spring Security 7.x — rejection at the filter layer triggers `ExceptionTranslationFilter` which
+  may see the authenticated user as anonymous (deferred context issue) and returns 401 instead of 403.
+
 ## 2026-06-22 - docs/tasks is the single status source of truth
 - Mistake: status lived in two unreconciled places (.claude/roadmap vs docs/tasks).
 - Rule: `docs/tasks/` is authoritative for delivery status and program structure (epics/phases live

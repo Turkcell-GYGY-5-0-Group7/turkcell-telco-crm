@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # Build the service jar with the Spring Boot plugin, then run on a slim JRE.
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace

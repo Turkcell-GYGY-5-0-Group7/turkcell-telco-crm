@@ -14,12 +14,22 @@
     <artifactId>product-catalog-service</artifactId>
     <name>product-catalog-service</name>
     <description>Product and tariff catalog, read-heavy with Redis cache (port 9003, CQRS + Mediator).
-        Skeleton only - no business code.</description>
+        Persists to PostgreSQL with Flyway and publishes domain events via the transactional outbox.</description>
+
+    <properties>
+        <!-- Not managed by the Spring Boot BOM; pinned here until centralized in the platform BOM. -->
+        <testcontainers.version>1.20.6</testcontainers.version>
+    </properties>
 
     <dependencies>
+        <!-- Platform starters only (ADR-018). -->
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
         </dependency>
         <dependency>
             <groupId>com.telco.platform</groupId>
@@ -29,6 +39,19 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-observability</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-outbox</artifactId>
+        </dependency>
+
+        <!-- Security config (HttpSecurity, @PreAuthorize, SecurityFilterChain). starter-security marks
+             spring-boot-starter-security as optional so consuming services must declare it directly. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Web + validation + actuator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -41,6 +64,47 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- Persistence: JPA + PostgreSQL + Flyway (ADR-006, ADR-016). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Spring Boot 4.x split Flyway autoconfiguration into its own starter module;
+             flyway-core alone does not wire the Spring Boot autoconfiguration. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Redis cache-aside (feature 7.3). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+
+        <!-- Per-service OpenAPI / Swagger UI (ARC-08). Version not managed by the platform BOM;
+             aligned with identity-service. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.8.9</version>
+        </dependency>
+
+        <!-- Centralized config + service discovery (ADR-010). -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
@@ -49,9 +113,45 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- @DataJpaTest slice for repository tests. Spring Boot 4.0 modularized the test slices
+             out of starter-test. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Testcontainers Postgres + Redis for integration tests (ADR-013). -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- RestAssured for HTTP-level integration tests (feature 7.5.1, ADR-013). -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>5.5.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -61,6 +161,19 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- RestAssured uses Groovy reflection internals that hit JDK 21 module boundaries.
+                 The add-opens flags unblock Class.isAssignableFrom in Groovy metaclass. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                    </argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

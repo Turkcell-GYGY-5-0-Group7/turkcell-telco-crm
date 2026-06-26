@@ -1,10 +1,12 @@
 # product-catalog-service dev overrides.
+# Lettuce macOS DNS issue: use 127.0.0.1 instead of localhost (see lessons.md 2026-06-24).
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/catalog_db
-    username: catalog
-    password: catalog
+    url: jdbc:postgresql://localhost:5432/product_catalog
+    username: telco
+    password: telco
   data:
     redis:
-      host: localhost
+      host: 127.0.0.1
       port: 6379
+      password: telco

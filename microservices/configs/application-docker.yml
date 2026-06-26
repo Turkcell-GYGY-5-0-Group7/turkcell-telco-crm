@@ -1,0 +1,10 @@
+# Shared Docker Compose overrides applied to ALL services when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides dev (localhost) addresses with Docker service-name addresses.
+# Loaded AFTER application-dev.yml so these values win.
+
+eureka:
+  instance:
+    hostname: ${spring.application.name}
+  client:
+    service-url:
+      defaultZone: http://${EUREKA_USERNAME:eureka}:${EUREKA_PASSWORD:eureka}@discovery-server:8761/eureka
