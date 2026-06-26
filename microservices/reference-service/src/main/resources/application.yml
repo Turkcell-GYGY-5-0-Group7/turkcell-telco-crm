@@ -2,9 +2,9 @@ spring:
   application:
     name: reference-service
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:reference}
-    username: ${DB_USER:telco}
-    password: ${DB_PASSWORD:telco}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:reference_db}
+    username: ${DB_USER:reference}
+    password: ${DB_PASSWORD:reference}
   jpa:
     hibernate:
       ddl-auto: none

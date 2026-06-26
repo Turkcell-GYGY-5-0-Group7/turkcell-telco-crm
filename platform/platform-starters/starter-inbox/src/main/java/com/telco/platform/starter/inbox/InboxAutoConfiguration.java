@@ -10,6 +10,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -21,7 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * Active when {@code telco.platform.inbox.enabled} is not {@code false} and a {@link JdbcTemplate}
  * is available.
  */
-@AutoConfiguration
+@AutoConfiguration(after = JdbcTemplateAutoConfiguration.class)
 @ConditionalOnClass(JdbcTemplate.class)
 @ConditionalOnProperty(prefix = "telco.platform.inbox", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(InboxProperties.class)

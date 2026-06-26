@@ -1,0 +1,40 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: localhost:19999
+    listener:
+      auto-startup: false
+    consumer:
+      group-id: payment-test
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1wYXltZW50LXNlcnZpY2UtMjAyNg==
+        issuer: telco
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true

@@ -10,7 +10,7 @@ spring:
     mongodb:
       uri: ${NOTIFICATION_MONGO_URI:mongodb://localhost:27017/notification_db}
   datasource:
-    url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_outbox_db}
+    url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_db}
     username: ${NOTIFICATION_DB_USER:notification}
     password: ${NOTIFICATION_DB_PASSWORD:notification}
   jpa:

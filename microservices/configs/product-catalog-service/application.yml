@@ -6,9 +6,9 @@ server:
 
 spring:
   datasource:
-    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/product_catalog}
-    username: ${CATALOG_DB_USER:telco}
-    password: ${CATALOG_DB_PASSWORD:telco}
+    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/product_catalog_db}
+    username: ${CATALOG_DB_USER:product_catalog}
+    password: ${CATALOG_DB_PASSWORD:product_catalog}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:

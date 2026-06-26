@@ -41,6 +41,13 @@
             <groupId>org.springframework</groupId>
             <artifactId>spring-jdbc</artifactId>
         </dependency>
+        <!-- Required to reference JdbcTemplateAutoConfiguration in @AutoConfiguration(after = ...).
+             Services already have this transitively via spring-boot-starter-data-jpa. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <dependency>
             <groupId>org.flywaydb</groupId>
