@@ -11,6 +11,13 @@ spring:
     password: ${CUSTOMER_DB_PASSWORD:customer}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
 
 security:
   oauth2:
@@ -24,3 +31,23 @@ minio:
   secret-key: ${MINIO_SECRET_KEY:minioadmin}
   bucket:
     kyc-documents: kyc-documents
+
+customer:
+  crypto:
+    # Base64-encoded 256-bit AES-GCM key for PII-at-rest (NFR-06). Dev default only; staging/prod
+    # inject CUSTOMER_AES_KEY from a Kubernetes Secret / Vault. Generate: openssl rand -base64 32
+    aes-key: ${CUSTOMER_AES_KEY:MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true

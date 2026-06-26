@@ -76,6 +76,9 @@
                     <subjects>
                         <event.envelope.v1>${project.basedir}/src/main/avro/EventEnvelope.avsc</event.envelope.v1>
                         <customer.registered.v1>${project.basedir}/src/main/avro/customer-registered.avsc</customer.registered.v1>
+                        <customer.updated.v1>${project.basedir}/src/main/avro/customer-updated.avsc</customer.updated.v1>
+                        <customer.kyc-approved.v1>${project.basedir}/src/main/avro/customer-kyc-approved.avsc</customer.kyc-approved.v1>
+                        <customer.kyc-rejected.v1>${project.basedir}/src/main/avro/customer-kyc-rejected.avsc</customer.kyc-rejected.v1>
                         <order.created.v1>${project.basedir}/src/main/avro/order-created.avsc</order.created.v1>
                         <payment.completed.v1>${project.basedir}/src/main/avro/payment-completed.avsc</payment.completed.v1>
                         <subscription.activated.v1>${project.basedir}/src/main/avro/subscription-activated.avsc</subscription.activated.v1>
