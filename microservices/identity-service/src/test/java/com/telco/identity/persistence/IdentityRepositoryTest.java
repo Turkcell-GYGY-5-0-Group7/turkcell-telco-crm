@@ -86,7 +86,7 @@ class IdentityRepositoryTest {
         Permission read = permissions.save(Permission.of("user:read"));
         Permission write = permissions.save(Permission.of("user:write"));
 
-        Role admin = Role.of("ADMIN");
+        Role admin = Role.of("RBAC_TEST_ROLE");
         admin.addPermission(read);
         admin.addPermission(write);
         roles.save(admin);
