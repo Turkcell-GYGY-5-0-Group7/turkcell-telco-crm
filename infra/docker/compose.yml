@@ -3,7 +3,7 @@
 #
 # Profiles:
 #   (none)        core data + event backbone: postgres, redis, kafka,
-#                 schema-registry, kafka-connect (Debezium)
+#                 schema-registry, kafka-connect (Debezium), minio (object store)
 #   platform      Spring Boot infra services: config-server, discovery-server,
 #                 api-gateway (built from source; requires ENCRYPT_KEY in .env)
 #   tools         kafka-ui
@@ -35,6 +35,7 @@ volumes:
   kafka-data:
   grafana-data:
   prometheus-data:
+  minio-data:
 
 services:
 
@@ -267,6 +268,50 @@ services:
       timeout: 10s
       retries: 12
       start_period: 45s
+  # --------------------------------------------------------- MinIO (object store)
+  # S3-compatible object storage for KYC document storage (Sprint 06, ADR-006).
+  # Console is mapped to host 9090 (NOT 9001, which identity-service uses); the
+  # S3 API stays on 9000 because customer-service expects it there.
+  minio:
+    image: minio/minio:${MINIO_VERSION:-RELEASE.2025-04-08T15-41-24Z}
+    container_name: telco-minio
+    restart: *restart
+    command: server /data --console-address ":9090"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9090}:9090"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [telco]
+
+  # ----------------------------------------------- MinIO bucket bootstrap
+  # One-shot job: waits for MinIO to be healthy, points an mc alias at it, then
+  # creates the kyc-documents bucket idempotently (--ignore-existing). Re-runs on
+  # every `up`, so it survives a fresh volume / new machine.
+  createbuckets:
+    image: minio/mc:${MINIO_MC_VERSION:-RELEASE.2025-04-08T15-39-49Z}
+    container_name: telco-minio-createbuckets
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing local/kyc-documents
+        echo "bucket kyc-documents ready"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     networks: [telco]
 
   # --------------------------------------------------------- Kafka UI (tools)

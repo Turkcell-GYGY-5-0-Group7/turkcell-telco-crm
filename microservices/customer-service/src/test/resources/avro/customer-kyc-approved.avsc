@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "CustomerKycApprovedV1",
+  "namespace": "com.telco.platform.events.customer",
+  "doc": "Emitted when a customer's KYC is approved (customer.kyc-approved.v1). Producer: customer-service.",
+  "fields": [
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Unique customer identifier (UUID)."
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "doc": "Lifecycle status after approval, for example ACTIVE."
+    },
+    {
+      "name": "approvedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the customer KYC was approved, in epoch milliseconds (UTC)."
+    }
+  ]
+}

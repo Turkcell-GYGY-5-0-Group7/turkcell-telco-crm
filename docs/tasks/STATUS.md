@@ -25,8 +25,8 @@ Last updated: 2026-06-26 (Sprint 07 DONE — 12/12 integration tests pass)
 | [03](sprint-03-platform-starters-and-events/README.md) | Starters, Avro contracts, service template | DONE | 4/4 |
 | [04](sprint-04-platform-infrastructure-services/README.md) | config, discovery, gateway | DONE | 3/3 |
 | [05](sprint-05-security-and-identity/README.md) | identity-service, JWT, RBAC | DONE | 7/7 |
-| [06](sprint-06-customer-domain/README.md) | customer-service | TODO | 0/4 |
 | [07](sprint-07-product-catalog-domain/README.md) | product-catalog-service | DONE | 5/5 |
+| [06](sprint-06-customer-domain/README.md) | customer-service | DONE | 4/4 |
 | [08](sprint-08-order-and-payment/README.md) | order-service, payment-service | TODO | 0/6 |
 | [09](sprint-09-subscription-and-onboarding-saga/README.md) | subscription-service, saga (AC-01) | TODO | 0/5 |
 | [10](sprint-10-usage-metering/README.md) | usage-service, CDR (AC-03) | TODO | 0/7 |
@@ -37,8 +37,8 @@ Last updated: 2026-06-26 (Sprint 07 DONE — 12/12 integration tests pass)
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 6 sprints DONE, 0 IN PROGRESS, 9 TODO. Features: 30 DONE / 0 IN PROGRESS
-/ 45 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Totals (MVP, Sprints 01-15): 7 sprints DONE, 0 IN PROGRESS, 9 TODO. Features: 30 DONE / 0 IN PROGRESS
+/ 41 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 
 ## Epics and Phases
 
