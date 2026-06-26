@@ -45,6 +45,13 @@
             <artifactId>starter-outbox</artifactId>
         </dependency>
 
+        <!-- Security config (HttpSecurity, @PreAuthorize, SecurityFilterChain). starter-security marks
+             spring-boot-starter-security as optional so consuming services must declare it directly. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- Web + validation + actuator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -69,9 +76,11 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Spring Boot 4.x split Flyway autoconfiguration into its own starter module;
+             flyway-core alone does not wire the Spring Boot autoconfiguration. -->
         <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-core</artifactId>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
         <dependency>
             <groupId>org.flywaydb</groupId>
@@ -130,6 +139,14 @@
             <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- RestAssured for HTTP-level integration tests (feature 5.7.1, ADR-013). -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>5.5.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -137,6 +154,19 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- RestAssured uses Groovy reflection internals that hit JDK 21 module boundaries.
+                 The add-opens flags unblock Class.isAssignableFrom in Groovy metaclass. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>
+                        --add-opens java.base/java.lang=ALL-UNNAMED
+                        --add-opens java.base/java.util=ALL-UNNAMED
+                        --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+                    </argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

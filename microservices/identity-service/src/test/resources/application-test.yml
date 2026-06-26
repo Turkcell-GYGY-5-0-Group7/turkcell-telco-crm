@@ -1,0 +1,40 @@
+# Test profile overrides (feature 5.7.1). Disables all external infrastructure dependencies so
+# the identity-service context can boot with only a Testcontainers Postgres.
+
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+# HMAC secret for JwtService.issue() in tests. Decoded value is 39 bytes (312 bits) -> valid for HS256.
+# Plain text: "my-test-secret-key-for-identity-service"
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1pZGVudGl0eS1zZXJ2aWNl
+        issuer: telco
+
+# Placeholder Keycloak admin config; never reached because KeycloakAdminClient is mocked in tests.
+keycloak:
+  admin:
+    server-url: http://localhost:19999
+    realm: telco-crm
+    client-id: test-cli
+    client-secret: test-secret

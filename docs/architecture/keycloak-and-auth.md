@@ -35,6 +35,8 @@ imported on startup via `start-dev --import-realm`. Local development only.
 | --- | --- |
 | Access token lifespan | 3600s |
 | SSO session idle / max | 1800s / 36000s |
+| Refresh-token rotation | enabled (`revokeRefreshToken: true`, `refreshTokenMaxReuse: 0`) |
+| Event logging | enabled — `REFRESH_TOKEN_ERROR`, `LOGIN_ERROR`, etc. (90-day retention) |
 | Registration | disabled (users provisioned by admin / identity-service) |
 | Reset password | enabled |
 
@@ -134,8 +136,9 @@ Because import skips realms that already exist, run `make destroy` (drops the DB
 - [x] Realm imported and reachable; OIDC discovery returns a `jwks_uri` (infra; done).
 - [x] Gateway configured to validate Keycloak JWT via JWKS and propagate identity headers (Sprint 04).
 - [ ] `starter-security` `telco.platform.security.jwt.public-key` wired to the realm key (Sprint 04-05).
-- [ ] identity-service integrated with the Keycloak Admin API for user/role provisioning (Sprint 05).
+- [x] identity-service integrated with the Keycloak Admin API for user/role provisioning (Sprint 05).
 - [x] Role -> `roles` claim verified end to end (Sprint 05.3); RBAC enforced on admin endpoints (Sprint 05.5).
+- [x] Refresh-token rotation enabled (`revokeRefreshToken: true`, `refreshTokenMaxReuse: 0`) and event logging wired for reuse-detection audit (Sprint 05.4).
 - [ ] Web client (`telco-web`) Authorization Code + PKCE login working against the gateway (frontend sprint).
 - [ ] Production hardening: real secrets, HTTPS, key rotation, per-env realms (Sprint 14-15).
 

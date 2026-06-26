@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| IN PROGRESS | 3/7 | 2026-06-25 |
+| DONE | 7/7 | 2026-06-26 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -43,10 +43,10 @@ running.
 | 5.1 | Service Scaffold and Schema | DONE | [5.1-service-scaffold-and-schema.md](5.1-service-scaffold-and-schema.md) |
 | 5.2 | Domain and Persistence | DONE | [5.2-domain-and-persistence.md](5.2-domain-and-persistence.md) |
 | 5.3 | Authentication | DONE | [5.3-authentication.md](5.3-authentication.md) |
-| 5.4 | Refresh-Token Rotation and Reuse Detection | TODO | [5.4-refresh-token-rotation-and-reuse-detection.md](5.4-refresh-token-rotation-and-reuse-detection.md) |
-| 5.5 | User Management and RBAC | TODO | [5.5-user-management-and-rbac.md](5.5-user-management-and-rbac.md) |
-| 5.6 | Audit Logging | TODO | [5.6-audit-logging.md](5.6-audit-logging.md) |
-| 5.7 | Tests | TODO | [5.7-tests.md](5.7-tests.md) |
+| 5.4 | Refresh-Token Rotation and Reuse Detection | DONE | [5.4-refresh-token-rotation-and-reuse-detection.md](5.4-refresh-token-rotation-and-reuse-detection.md) |
+| 5.5 | User Management and RBAC | DONE | [5.5-user-management-and-rbac.md](5.5-user-management-and-rbac.md) |
+| 5.6 | Audit Logging | DONE | [5.6-audit-logging.md](5.6-audit-logging.md) |
+| 5.7 | Tests | DONE | [5.7-tests.md](5.7-tests.md) |
 
 ## Sprint Deliverables
 
