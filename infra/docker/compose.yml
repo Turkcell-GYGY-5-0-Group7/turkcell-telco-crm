@@ -268,6 +268,8 @@ services:
       timeout: 10s
       retries: 12
       start_period: 45s
+    networks: [telco]
+
   # --------------------------------------------------------- MinIO (object store)
   # S3-compatible object storage for KYC document storage (Sprint 06, ADR-006).
   # Console is mapped to host 9090 (NOT 9001, which identity-service uses); the
