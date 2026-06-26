@@ -16,9 +16,10 @@ Admin console: http://localhost:8085  (bootstrap admin from `.env`: `admin` / `a
 
 ## Imported realm: `telco-crm`
 
-Defined in `realm/realm-export.json` (roles, client scopes, clients). Demo users are seeded by the
-companion `keycloak-config` container via `kcadm.sh` after startup. Local development only. Full
-auth integration guide: [`docs/architecture/keycloak-and-auth.md`](../../../docs/architecture/keycloak-and-auth.md).
+Defined in `realm/realm-export.json` (roles, client scopes, clients, and the local demo users), all
+imported on startup. The companion `keycloak-config` container only relaxes the `master` realm
+`sslRequired` for local plain-HTTP admin access; it does not seed this realm. Local development only.
+Full auth integration guide: [`docs/architecture/keycloak-and-auth.md`](../../../docs/architecture/keycloak-and-auth.md).
 
 Realm roles: `SUBSCRIBER`, `CALL_CENTER_AGENT`, `DEALER`, `MARKETING_MANAGER`,
 `BILLING_OPERATOR`, `ADMIN`, `SERVICE`. A protocol mapper exposes realm roles as a flat `roles`
