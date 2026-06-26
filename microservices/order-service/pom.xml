@@ -17,9 +17,14 @@
         only - no business code.</description>
 
     <dependencies>
+        <!-- Platform starters only (ADR-018). -->
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
         </dependency>
         <dependency>
             <groupId>com.telco.platform</groupId>
@@ -29,6 +34,19 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-observability</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-outbox</artifactId>
+        </dependency>
+
+        <!-- Security config (HttpSecurity, @PreAuthorize, SecurityFilterChain). starter-security marks
+             spring-boot-starter-security as optional so consuming services must declare it directly. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Web + validation + actuator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -41,6 +59,36 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- Persistence: JPA + PostgreSQL + Flyway (ADR-006, ADR-016). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Spring Boot 4.x splits Flyway autoconfiguration into its own starter module;
+             flyway-core alone does not wire Spring Boot autoconfiguration. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Resilience4j circuit breaker for external HTTP clients (starter-resilience not yet
+             available; flagged for migration when the platform module ships). -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+        </dependency>
+
+        <!-- Centralized config + service discovery (ADR-010). -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
@@ -49,9 +97,22 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.6</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

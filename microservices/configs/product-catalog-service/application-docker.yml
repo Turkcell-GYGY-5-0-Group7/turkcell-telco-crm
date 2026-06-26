@@ -3,9 +3,9 @@
 
 spring:
   datasource:
-    url: jdbc:postgresql://postgres:5432/product_catalog
-    username: telco
-    password: telco
+    url: jdbc:postgresql://postgres:5432/product_catalog_db
+    username: product_catalog
+    password: product_catalog
   data:
     redis:
       host: redis

@@ -7,9 +7,9 @@
 
     "database.hostname": "postgres",
     "database.port": "5432",
-    "database.user": "telco",
-    "database.password": "telco",
-    "database.dbname": "customer",
+    "database.user": "debezium",
+    "database.password": "debezium",
+    "database.dbname": "customer_db",
 
     "topic.prefix": "customer",
     "slot.name": "customer_outbox_slot",

@@ -358,8 +358,8 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
-      KC_DB_USERNAME: ${POSTGRES_USER:-telco}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-telco}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
     volumes:
       - ./keycloak/realm:/opt/keycloak/data/import:ro
     networks: [telco]

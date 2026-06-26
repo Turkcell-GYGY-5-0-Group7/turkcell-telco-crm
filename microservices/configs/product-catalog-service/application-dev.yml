@@ -2,9 +2,9 @@
 # Lettuce macOS DNS issue: use 127.0.0.1 instead of localhost (see lessons.md 2026-06-24).
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/product_catalog
-    username: telco
-    password: telco
+    url: jdbc:postgresql://localhost:5432/product_catalog_db
+    username: product_catalog
+    password: product_catalog
   data:
     redis:
       host: 127.0.0.1

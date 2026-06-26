@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/6 | 2026-06-22 |
+| DONE | 6/6 | 2026-06-26 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -23,12 +23,12 @@ Covers FR-09, FR-10, FR-11, FR-12 (order) and FR-25, FR-26, FR-27 (payment).
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 8.1 | Order Service - Scaffold and Schema | TODO | [8.1-order-service-scaffold-and-schema.md](8.1-order-service-scaffold-and-schema.md) |
-| 8.2 | Order Service - Domain and Validation | TODO | [8.2-order-service-domain-and-validation.md](8.2-order-service-domain-and-validation.md) |
-| 8.3 | Order Service - Application | TODO | [8.3-order-service-application.md](8.3-order-service-application.md) |
-| 8.4 | Payment Service - Scaffold and Schema | TODO | [8.4-payment-service-scaffold-and-schema.md](8.4-payment-service-scaffold-and-schema.md) |
-| 8.5 | Payment Service - Domain and Application | TODO | [8.5-payment-service-domain-and-application.md](8.5-payment-service-domain-and-application.md) |
-| 8.6 | Tests | TODO | [8.6-tests.md](8.6-tests.md) |
+| 8.1 | Order Service - Scaffold and Schema | DONE | [8.1-order-service-scaffold-and-schema.md](8.1-order-service-scaffold-and-schema.md) |
+| 8.2 | Order Service - Domain and Validation | DONE | [8.2-order-service-domain-and-validation.md](8.2-order-service-domain-and-validation.md) |
+| 8.3 | Order Service - Application | DONE | [8.3-order-service-application.md](8.3-order-service-application.md) |
+| 8.4 | Payment Service - Scaffold and Schema | DONE | [8.4-payment-service-scaffold-and-schema.md](8.4-payment-service-scaffold-and-schema.md) |
+| 8.5 | Payment Service - Domain and Application | DONE | [8.5-payment-service-domain-and-application.md](8.5-payment-service-domain-and-application.md) |
+| 8.6 | Tests | DONE | [8.6-tests.md](8.6-tests.md) |
 
 ## Sprint Deliverables
 

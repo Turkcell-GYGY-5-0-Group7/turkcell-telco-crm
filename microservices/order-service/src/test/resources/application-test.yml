@@ -1,0 +1,29 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1vcmRlci1zZXJ2aWNlLTIwMjY=
+        issuer: telco
+    outbox:
+      enabled: true

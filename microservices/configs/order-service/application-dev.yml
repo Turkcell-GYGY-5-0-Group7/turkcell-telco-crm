@@ -4,3 +4,10 @@ spring:
     url: jdbc:postgresql://localhost:5432/order_db
     username: order
     password: order
+
+telco:
+  clients:
+    customer-service:
+      url: http://localhost:9002
+    product-catalog-service:
+      url: http://localhost:9003
