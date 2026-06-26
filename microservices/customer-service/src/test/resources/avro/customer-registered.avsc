@@ -1,0 +1,37 @@
+{
+  "type": "record",
+  "name": "CustomerRegisteredV1",
+  "namespace": "com.telco.platform.events.customer",
+  "doc": "Emitted when a new customer is registered (customer.registered.v1). Producer: customer-service.",
+  "fields": [
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Unique customer identifier (UUID)."
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "doc": "Customer type, for example INDIVIDUAL or CORPORATE."
+    },
+    {
+      "name": "identityNumber",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Sensitive national identity / tax number. PII: MUST be masked or tokenized downstream. Nullable for backward compatibility."
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "doc": "Lifecycle status at registration, for example PENDING_KYC or ACTIVE."
+    },
+    {
+      "name": "registeredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the customer was registered, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# Test profile for CustomerIntegrationTest. Disables all external infrastructure dependencies
+# (config-server, Eureka) so the service boots with only a Testcontainers Postgres.
+
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+# HMAC secret for JwtService.issue() in tests (256-bit, base64).
+# Plain text: "my-test-secret-key-for-customer-service"
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1jdXN0b21lci1zZXJ2aWNl
+        issuer: telco
+
+# AES-256 key for PII encryption (32 bytes, base64). Same value used in CustomerRepositoryTest.
+customer:
+  crypto:
+    aes-key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
+# Placeholder MinIO config; the MinioClient bean is created but never reached because
+# DocumentStorage is mocked via @MockitoBean in the integration test.
+minio:
+  endpoint: http://localhost:19999
+  access-key: test
+  secret-key: test
+  bucket:
+    kyc-documents: kyc-documents

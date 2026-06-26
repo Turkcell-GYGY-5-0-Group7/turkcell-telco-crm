@@ -49,3 +49,21 @@ Format:
 - Rule: `docs/tasks/` is authoritative for delivery status and program structure (epics/phases live
   in `docs/tasks/STATUS.md`). Update the owning sprint README and `STATUS.md` together. The separate
   `.claude/roadmap` tracker was removed to eliminate the dual-source-of-truth complexity.
+
+## 2026-06-26 - CustomerIntegrationTest patterns for CQRS + Mediator services with security and PII
+- Rule: use `@MockitoBean OutboxService` (JDBC outbox, no Kafka) and `@MockitoBean DocumentStorage`
+  (MinIO adapter) to boot the full Spring context with only a Testcontainers Postgres. Still provide
+  dummy `minio.*` properties so `MinioConfig` can create the `MinioClient` bean without connecting.
+- Rule: in `@SpringBootTest(webEnvironment = RANDOM_PORT)` tests, use `DELETE FROM` statements in
+  `@BeforeEach` in FK-safe order (`audit_log, documents, addresses, customers`) rather than TRUNCATE,
+  which requires listing every table or using CASCADE. This avoids accidentally wiping platform tables.
+- Rule: the schema-compat gate stores `.avsc` snapshots in `src/test/resources/avro/` and uses
+  Jackson's `ObjectMapper` (already on the classpath) to compare Avro field names against Java record
+  components via reflection. No Avro library or Schema Registry is needed for this guard. Update both
+  the `.avsc` snapshot and the Java record together whenever the event contract changes.
+- Rule: when asserting on a soft-deleted row with a UUID primary key via `JdbcTemplate`, cast the
+  string parameter explicitly: `WHERE id = CAST(? AS uuid)`. Plain `?` fails on PostgreSQL because
+  the driver cannot infer the UUID type from a `String` parameter.
+- Rule: the `@ActiveProfiles("test")` profile resolves to `application-test.yml`; it must disable
+  config-server (`spring.cloud.config.enabled=false`, `spring.config.import=""`), Eureka, and
+  Spring Cloud compatibility verifier to allow a standalone context boot.

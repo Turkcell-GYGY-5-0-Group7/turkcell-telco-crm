@@ -8,7 +8,7 @@
 | Object storage | MinIO (KYC documents) |
 | Base path | `/api/v1` |
 | Owning sprint | [Sprint 06](../tasks/sprint-06-customer-domain/README.md) |
-| Build status | TODO |
+| Build status | DONE |
 | Requirements | FR-01, FR-02, FR-03, FR-04 |
 
 Bounded context: customer master record. Registration with TCKN/VKN validation, KYC workflow,
