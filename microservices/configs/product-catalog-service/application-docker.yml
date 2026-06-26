@@ -1,0 +1,18 @@
+# product-catalog-service Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the 127.0.0.1/localhost values in application-dev.yml with Docker service names.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/product_catalog
+    username: telco
+    password: telco
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password: ${REDIS_PASSWORD:telco}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs

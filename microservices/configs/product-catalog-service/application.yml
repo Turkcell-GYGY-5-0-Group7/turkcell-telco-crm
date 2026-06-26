@@ -6,18 +6,42 @@ server:
 
 spring:
   datasource:
-    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/catalog_db}
-    username: ${CATALOG_DB_USER:catalog}
-    password: ${CATALOG_DB_PASSWORD:catalog}
+    url: ${CATALOG_DB_URL:jdbc:postgresql://localhost:5432/product_catalog}
+    username: ${CATALOG_DB_USER:telco}
+    password: ${CATALOG_DB_PASSWORD:telco}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
+      host: ${REDIS_HOST:127.0.0.1}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:telco}
+  cache:
+    type: redis
 
 security:
   oauth2:
     resourceserver:
       jwt:
         jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true

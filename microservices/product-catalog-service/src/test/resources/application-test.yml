@@ -1,0 +1,34 @@
+# Test profile overrides (feature 7.5.1). Disables all external infrastructure dependencies so
+# the product-catalog-service context can boot with only Testcontainers Postgres and Redis.
+
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+  cache:
+    type: redis
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+# HMAC secret for JwtService.issue() in tests. Same pattern as identity-service tests.
+# Plain text: "my-test-secret-key-for-catalog-service"
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1jYXRhbG9nLXNlcnZpY2U=
+        issuer: telco

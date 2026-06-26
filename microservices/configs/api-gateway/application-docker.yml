@@ -1,0 +1,18 @@
+# API Gateway Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the 127.0.0.1/localhost values in application-dev.yml with Docker service names.
+
+spring:
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password: ${REDIS_PASSWORD:telco}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+gateway:
+  keycloak:
+    uri: http://keycloak:8080
