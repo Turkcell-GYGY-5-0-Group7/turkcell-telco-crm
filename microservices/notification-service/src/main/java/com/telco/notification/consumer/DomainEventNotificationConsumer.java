@@ -4,23 +4,44 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.telco.notification.service.NotificationService;
 import com.telco.platform.inbox.InboxService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Single consumer for all domain events that trigger notifications.
- * Maps each event type to a (templateCode, channel, userId) combination.
+ *
+ * <p>Producers publish JSON via the outbox; the Debezium {@code EventRouter} routes each outbox row
+ * to the {@code <aggregate_type>.events} topic (lowercase domain) and writes the event type into the
+ * {@code eventType} Kafka header (event-catalog, ADR-009). Each {@code <domain>.events} topic carries
+ * every event type of that domain, so this consumer subscribes per domain topic and dispatches by
+ * reading the {@code eventType} header - never by payload shape. Unrecognised types are ignored.
+ *
+ * <p>Idempotency: dedup uses the envelope {@code eventId} embedded in the JSON payload by
+ * {@code JacksonEventSerializer}, checked against the platform {@link InboxService} (ADR-005).
  */
 @Component
 public class DomainEventNotificationConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DomainEventNotificationConsumer.class);
     private static final String CONSUMER_NAME = "notification-service";
+    /** Kafka header the Debezium EventRouter writes the outbox {@code event_type} into. */
+    private static final String EVENT_TYPE_HEADER = "eventType";
+
+    // Event types (match the eventType header values).
+    private static final String SUBSCRIPTION_ACTIVATED = "subscription.activated.v1";
+    private static final String CUSTOMER_KYC_APPROVED = "customer.kyc-approved.v1";
+    private static final String CUSTOMER_KYC_REJECTED = "customer.kyc-rejected.v1";
+    private static final String INVOICE_GENERATED = "invoice.generated.v1";
+    private static final String QUOTA_THRESHOLD_REACHED = "quota.threshold-reached.v1";
+    private static final String QUOTA_EXCEEDED = "quota.exceeded.v1";
+    private static final String TICKET_OPENED = "ticket.opened.v1";
 
     private final NotificationService notificationService;
     private final InboxService inboxService;
@@ -34,113 +55,114 @@ public class DomainEventNotificationConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "subscription.activated.v1", groupId = "notification-service",
+    @KafkaListener(topics = "subscription.events", groupId = "notification-service",
             containerFactory = "kafkaListenerContainerFactory")
-    public void onSubscriptionActivated(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
+    public void onSubscriptionEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (!SUBSCRIPTION_ACTIVATED.equals(eventType)) {
+            return;
+        }
+        dispatch(record, eventType, payload -> {
             String customerId = payload.getOrDefault("customerId", "unknown");
             Map<String, String> vars = Map.of(
                     "customerName", payload.getOrDefault("customerName", customerId),
-                    "subscriptionId", payload.getOrDefault("subscriptionId", "")
-            );
+                    "subscriptionId", payload.getOrDefault("subscriptionId", ""));
             notificationService.dispatch(customerId, "WELCOME", "SMS", vars, "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing subscription.activated.v1", ex);
+        });
+    }
+
+    @KafkaListener(topics = "customer.events", groupId = "notification-service",
+            containerFactory = "kafkaListenerContainerFactory")
+    public void onCustomerEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (CUSTOMER_KYC_APPROVED.equals(eventType)) {
+            dispatch(record, eventType, payload -> {
+                String customerId = payload.getOrDefault("customerId", "unknown");
+                notificationService.dispatch(customerId, "KYC_APPROVED", "SMS",
+                        Map.of("customerId", customerId), "en");
+            });
+        } else if (CUSTOMER_KYC_REJECTED.equals(eventType)) {
+            dispatch(record, eventType, payload -> {
+                String customerId = payload.getOrDefault("customerId", "unknown");
+                notificationService.dispatch(customerId, "KYC_REJECTED", "SMS",
+                        Map.of("customerId", customerId,
+                                "reason", payload.getOrDefault("reason", "unspecified")), "en");
+            });
         }
     }
 
-    @KafkaListener(topics = "customer.kyc-approved.v1", groupId = "notification-service",
+    @KafkaListener(topics = "invoice.events", groupId = "notification-service",
             containerFactory = "kafkaListenerContainerFactory")
-    public void onKycApproved(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
-            String customerId = payload.getOrDefault("customerId", "unknown");
-            notificationService.dispatch(customerId, "KYC_APPROVED", "SMS",
-                    Map.of("customerId", customerId), "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing customer.kyc-approved.v1", ex);
+    public void onInvoiceEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (!INVOICE_GENERATED.equals(eventType)) {
+            return;
         }
-    }
-
-    @KafkaListener(topics = "customer.kyc-rejected.v1", groupId = "notification-service",
-            containerFactory = "kafkaListenerContainerFactory")
-    public void onKycRejected(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
-            String customerId = payload.getOrDefault("customerId", "unknown");
-            notificationService.dispatch(customerId, "KYC_REJECTED", "SMS",
-                    Map.of("customerId", customerId,
-                            "reason", payload.getOrDefault("reason", "unspecified")), "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing customer.kyc-rejected.v1", ex);
-        }
-    }
-
-    @KafkaListener(topics = "invoice.generated.v1", groupId = "notification-service",
-            containerFactory = "kafkaListenerContainerFactory")
-    public void onInvoiceGenerated(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
+        dispatch(record, eventType, payload -> {
             String customerId = payload.getOrDefault("customerId", "unknown");
             Map<String, String> vars = Map.of(
                     "customerName", customerId,
                     "invoiceId", payload.getOrDefault("invoiceId", ""),
                     "amount", payload.getOrDefault("grandTotal", "0"),
-                    "currency", payload.getOrDefault("currency", "TRY")
-            );
+                    "currency", payload.getOrDefault("currency", "TRY"));
             notificationService.dispatch(customerId, "INVOICE_GENERATED", "EMAIL", vars, "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing invoice.generated.v1", ex);
+        });
+    }
+
+    @KafkaListener(topics = "quota.events", groupId = "notification-service",
+            containerFactory = "kafkaListenerContainerFactory")
+    public void onQuotaEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (QUOTA_THRESHOLD_REACHED.equals(eventType)) {
+            dispatch(record, eventType, payload -> {
+                String customerId = payload.getOrDefault("customerId", "unknown");
+                notificationService.dispatch(customerId, "QUOTA_80_PERCENT", "SMS",
+                        Map.of("subscriptionId", payload.getOrDefault("subscriptionId", "")), "en");
+            });
+        } else if (QUOTA_EXCEEDED.equals(eventType)) {
+            dispatch(record, eventType, payload -> {
+                String customerId = payload.getOrDefault("customerId", "unknown");
+                notificationService.dispatch(customerId, "QUOTA_EXCEEDED", "SMS",
+                        Map.of("subscriptionId", payload.getOrDefault("subscriptionId", "")), "en");
+            });
         }
     }
 
-    @KafkaListener(topics = "quota.threshold-reached.v1", groupId = "notification-service",
+    @KafkaListener(topics = "ticket.events", groupId = "notification-service",
             containerFactory = "kafkaListenerContainerFactory")
-    public void onQuotaThresholdReached(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
-            String customerId = payload.getOrDefault("customerId", "unknown");
-            notificationService.dispatch(customerId, "QUOTA_80_PERCENT", "SMS",
-                    Map.of("subscriptionId", payload.getOrDefault("subscriptionId", "")), "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing quota.threshold-reached.v1", ex);
+    public void onTicketEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (!TICKET_OPENED.equals(eventType)) {
+            return;
         }
-    }
-
-    @KafkaListener(topics = "quota.exceeded.v1", groupId = "notification-service",
-            containerFactory = "kafkaListenerContainerFactory")
-    public void onQuotaExceeded(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
-            String customerId = payload.getOrDefault("customerId", "unknown");
-            notificationService.dispatch(customerId, "QUOTA_EXCEEDED", "SMS",
-                    Map.of("subscriptionId", payload.getOrDefault("subscriptionId", "")), "en");
-        } catch (Exception ex) {
-            LOGGER.error("Failed processing quota.exceeded.v1", ex);
-        }
-    }
-
-    @KafkaListener(topics = "ticket.opened.v1", groupId = "notification-service",
-            containerFactory = "kafkaListenerContainerFactory")
-    public void onTicketOpened(ConsumerRecord<String, String> record) {
-        if (!inboxService.firstSeen(record.key() + ":" + record.offset(), CONSUMER_NAME)) return;
-        try {
-            Map<String, String> payload = parsePayload(record.value());
+        dispatch(record, eventType, payload -> {
             String customerId = payload.getOrDefault("customerId", "unknown");
             Map<String, String> vars = Map.of(
                     "ticketId", payload.getOrDefault("ticketId", ""),
-                    "assignedTeam", payload.getOrDefault("assignedTeam", "support")
-            );
+                    "assignedTeam", payload.getOrDefault("assignedTeam", "support"));
             notificationService.dispatch(customerId, "TICKET_OPENED", "SMS", vars, "en");
+        });
+    }
+
+    /**
+     * Runs the inbox-idempotent dispatch: dedup on the envelope {@code eventId}, then apply the
+     * given action to the parsed payload. Parsing/dispatch failures are logged (never rethrown) so a
+     * poison notification does not stall the partition.
+     */
+    private void dispatch(ConsumerRecord<String, String> record, String eventType,
+                          java.util.function.Consumer<Map<String, String>> action) {
+        Map<String, String> payload = parsePayload(record.value());
+        String eventId = payload.get("eventId");
+        String messageId = eventId != null ? eventId
+                : (record.key() != null ? record.key() : "fallback-offset-" + record.offset());
+        if (!inboxService.firstSeen(messageId, CONSUMER_NAME)) {
+            LOGGER.debug("Duplicate {} messageId={}", eventType, messageId);
+            return;
+        }
+        try {
+            action.accept(payload);
         } catch (Exception ex) {
-            LOGGER.error("Failed processing ticket.opened.v1", ex);
+            LOGGER.error("Failed processing {} messageId={}", eventType, messageId, ex);
         }
     }
 
@@ -154,5 +176,11 @@ public class DomainEventNotificationConsumer {
             LOGGER.warn("Could not parse event payload: {}", json);
             return Map.of();
         }
+    }
+
+    /** Returns the UTF-8 value of the last header with the given key, or {@code null} if absent. */
+    private static String headerValue(ConsumerRecord<String, String> record, String key) {
+        Header header = record.headers().lastHeader(key);
+        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 }

@@ -33,7 +33,10 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class MeterCdrCommandHandlerTest {
 
-    private static final String AGGREGATE_TYPE = "Quota";
+    // Outbox routing aggregate types (lowercase domain): usage.* -> usage.events,
+    // quota.* -> quota.events. Assert the correct per-event routing key (ADR-009).
+    private static final String USAGE_AGGREGATE_TYPE = "usage";
+    private static final String QUOTA_AGGREGATE_TYPE = "quota";
     private static final String EVENT_USAGE_RECORDED = "usage.recorded.v1";
     private static final String EVENT_THRESHOLD_REACHED = "quota.threshold-reached.v1";
     private static final String EVENT_QUOTA_EXCEEDED = "quota.exceeded.v1";
@@ -113,7 +116,7 @@ class MeterCdrCommandHandlerTest {
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(1)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
+                eq(USAGE_AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
 
         assertThat(eventTypeCaptor.getValue()).isEqualTo(EVENT_USAGE_RECORDED);
         assertThat(payloadCaptor.getValue()).isInstanceOf(UsageRecordedEvent.class);
@@ -132,12 +135,14 @@ class MeterCdrCommandHandlerTest {
 
         handler.handle(command);
 
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(2)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), any());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), any());
 
         assertThat(eventTypeCaptor.getAllValues())
                 .containsExactlyInAnyOrder(EVENT_USAGE_RECORDED, EVENT_THRESHOLD_REACHED);
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
     }
 
     @Test
@@ -157,12 +162,14 @@ class MeterCdrCommandHandlerTest {
 
         handler.handle(command);
 
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(2)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), any());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), any());
 
         assertThat(eventTypeCaptor.getAllValues())
                 .containsExactlyInAnyOrder(EVENT_USAGE_RECORDED, EVENT_QUOTA_EXCEEDED);
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
     }
 
     @Test
@@ -178,12 +185,14 @@ class MeterCdrCommandHandlerTest {
 
         handler.handle(command);
 
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(3)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), any());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), any());
 
         assertThat(eventTypeCaptor.getAllValues())
                 .containsExactlyInAnyOrder(EVENT_USAGE_RECORDED, EVENT_THRESHOLD_REACHED, EVENT_QUOTA_EXCEEDED);
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
     }
 
     @Test
@@ -206,10 +215,12 @@ class MeterCdrCommandHandlerTest {
         handler.handle(command);
 
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(2)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
 
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
         int usageRecordedIndex = eventTypeCaptor.getAllValues().indexOf(EVENT_USAGE_RECORDED);
         UsageRecordedEvent event = (UsageRecordedEvent) payloadCaptor.getAllValues().get(usageRecordedIndex);
 
@@ -232,10 +243,12 @@ class MeterCdrCommandHandlerTest {
         handler.handle(command);
 
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(2)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
 
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
         int idx = eventTypeCaptor.getAllValues().indexOf(EVENT_THRESHOLD_REACHED);
         QuotaThresholdReachedEvent event = (QuotaThresholdReachedEvent) payloadCaptor.getAllValues().get(idx);
 
@@ -257,15 +270,34 @@ class MeterCdrCommandHandlerTest {
         handler.handle(command);
 
         ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        ArgumentCaptor<String> aggregateTypeCaptor = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
         verify(outboxService, times(3)).publish(
-                eq(AGGREGATE_TYPE), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
+                aggregateTypeCaptor.capture(), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
 
+        assertRoutingKeys(eventTypeCaptor.getAllValues(), aggregateTypeCaptor.getAllValues());
         int idx = eventTypeCaptor.getAllValues().indexOf(EVENT_QUOTA_EXCEEDED);
         QuotaExceededEvent event = (QuotaExceededEvent) payloadCaptor.getAllValues().get(idx);
 
         assertThat(event.subscriptionId()).isEqualTo(subscriptionId.toString());
         assertThat(event.quotaId()).isEqualTo(quota.getId().toString());
         assertThat(event.usageType()).isEqualTo("VOICE");
+    }
+
+    /**
+     * Asserts the per-event outbox routing key: usage.recorded.v1 routes to the {@code usage} domain
+     * and the quota.* events route to the {@code quota} domain. The captor lists are index-aligned:
+     * publish call i used aggregateTypes.get(i) and eventTypes.get(i).
+     */
+    private static void assertRoutingKeys(java.util.List<String> eventTypes,
+                                          java.util.List<String> aggregateTypes) {
+        assertThat(aggregateTypes).hasSameSizeAs(eventTypes);
+        for (int i = 0; i < eventTypes.size(); i++) {
+            String expected = EVENT_USAGE_RECORDED.equals(eventTypes.get(i))
+                    ? USAGE_AGGREGATE_TYPE : QUOTA_AGGREGATE_TYPE;
+            assertThat(aggregateTypes.get(i))
+                    .as("routing key for %s", eventTypes.get(i))
+                    .isEqualTo(expected);
+        }
     }
 }

@@ -18,6 +18,7 @@ CREATE TABLE tickets (
     assigned_team VARCHAR(100),
     subject       VARCHAR(500) NOT NULL,
     sla_due_at    TIMESTAMPTZ,
+    sla_breached_at TIMESTAMPTZ,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     resolved_at   TIMESTAMPTZ
@@ -37,27 +38,8 @@ CREATE TABLE ticket_comments (
 
 CREATE INDEX idx_ticket_comments_ticket_id ON ticket_comments(ticket_id);
 
--- Platform outbox table (ADR-019)
-CREATE TABLE outbox_events (
-    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    aggregate_type VARCHAR(100) NOT NULL,
-    aggregate_id   VARCHAR(255) NOT NULL,
-    event_type     VARCHAR(200) NOT NULL,
-    payload        JSONB        NOT NULL,
-    created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    dispatched_at  TIMESTAMPTZ
-);
-
-CREATE INDEX idx_outbox_events_undispatched ON outbox_events(created_at) WHERE dispatched_at IS NULL;
-
--- Platform inbox table (ADR-019)
-CREATE TABLE inbox_messages (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id    VARCHAR(255) NOT NULL,
-    consumer_name VARCHAR(200) NOT NULL,
-    received_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    UNIQUE (message_id, consumer_name)
-);
+-- Platform outbox (outbox_event) and inbox (inbox_message) tables are provided by
+-- starter-outbox (V900) and starter-inbox (V901) via classpath:db/migration/platform (ADR-016, ADR-019).
 
 -- Seed default SLA policies (FR-32)
 INSERT INTO sla_policies (category, priority, team, resolution_minutes) VALUES

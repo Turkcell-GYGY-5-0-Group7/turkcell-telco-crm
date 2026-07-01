@@ -1,11 +1,11 @@
 package com.telco.ticket.application.handler;
 
+import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.ticket.application.command.AddCommentCommand;
 import com.telco.ticket.domain.Ticket;
 import com.telco.ticket.domain.TicketComment;
 import com.telco.ticket.infrastructure.persistence.TicketRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.UUID;
@@ -23,7 +23,7 @@ public class AddCommentCommandHandler implements CommandHandler<AddCommentComman
     @Transactional
     public UUID handle(AddCommentCommand command) {
         Ticket ticket = ticketRepository.findByIdWithComments(command.ticketId())
-                .orElseThrow(() -> new EntityNotFoundException("Ticket not found: " + command.ticketId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + command.ticketId()));
         TicketComment comment = ticket.addComment(command.authorId(), command.body());
         ticketRepository.save(ticket);
         return comment.getId();

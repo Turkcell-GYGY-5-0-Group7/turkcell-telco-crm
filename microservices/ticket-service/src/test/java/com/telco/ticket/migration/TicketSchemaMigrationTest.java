@@ -41,13 +41,23 @@ class TicketSchemaMigrationTest {
 
     @Test
     void all_tables_exist() {
+        // Service tables plus platform outbox (V900) / inbox (V901) from classpath:db/migration/platform.
         for (String table : new String[]{"tickets", "ticket_comments", "sla_policies",
-                "outbox_events", "inbox_messages"}) {
+                "outbox_event", "inbox_message"}) {
             Long count = jdbc.queryForObject(
                     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name=?",
                     Long.class, table);
             assertThat(count).as("table %s should exist", table).isEqualTo(1L);
         }
+    }
+
+    @Test
+    void tickets_has_sla_breached_at_column() {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM information_schema.columns "
+                        + "WHERE table_schema='public' AND table_name='tickets' AND column_name='sla_breached_at'",
+                Long.class);
+        assertThat(count).as("tickets.sla_breached_at should exist").isEqualTo(1L);
     }
 
     @Test

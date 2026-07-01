@@ -26,10 +26,12 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 @SpringBootTest(
@@ -153,5 +155,47 @@ class TicketIntegrationTest {
         assertThat(breached).isEqualTo(1);
         verify(outboxService, atLeastOnce()).publish(anyString(), anyString(),
                 eq("ticket.sla-breached.v1"), any());
+    }
+
+    /**
+     * 12.5.3: an unresolved ticket past its SLA emits {@code ticket.sla-breached.v1} exactly ONCE.
+     * Running the detector twice must not re-emit, because the first run stamps {@code sla_breached_at}
+     * and {@code findBreached} excludes already-breached tickets.
+     */
+    @Test
+    void sla_breach_is_emitted_only_once_across_repeated_detector_runs() {
+        UUID ticketId = mediator.send(new OpenTicketCommand(
+                customerId, "BILLING", "HIGH", "SLA once"));
+        jdbc.execute("UPDATE tickets SET sla_due_at = NOW() - INTERVAL '1 hour' WHERE id = '" + ticketId + "'");
+
+        int firstRun = mediator.send(new DetectSlaBreachCommand());
+        int secondRun = mediator.send(new DetectSlaBreachCommand());
+
+        assertThat(firstRun).as("first run detects the overdue ticket").isEqualTo(1);
+        assertThat(secondRun).as("second run must find nothing new to breach").isEqualTo(0);
+
+        // Exactly one sla-breached event was published for this ticket across both runs.
+        verify(outboxService, times(1)).publish(eq("ticket"), eq(ticketId.toString()),
+                eq("ticket.sla-breached.v1"), any());
+
+        // The breach was persisted so a subsequent run excludes it.
+        Long stamped = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM tickets WHERE id = '" + ticketId + "' AND sla_breached_at IS NOT NULL",
+                Long.class);
+        assertThat(stamped).as("sla_breached_at is stamped after detection").isEqualTo(1L);
+    }
+
+    /**
+     * 12.5.4 AC: "unknown id returns 404". The ticket handlers throw the platform
+     * {@code ResourceNotFoundException}, which the platform {@code GlobalExceptionHandler} maps to
+     * HTTP 404 (customer-service/CLAUDE.md: "missing resources raise ResourceNotFoundException -> 404").
+     */
+    @Test
+    void get_unknown_ticket_id_returns_not_found() {
+        UUID unknownId = UUID.randomUUID();
+
+        assertThatThrownBy(() -> mediator.query(new GetTicketQuery(unknownId, customerId, true)))
+                .isInstanceOf(com.telco.platform.common.exception.ResourceNotFoundException.class)
+                .hasMessageContaining(unknownId.toString());
     }
 }

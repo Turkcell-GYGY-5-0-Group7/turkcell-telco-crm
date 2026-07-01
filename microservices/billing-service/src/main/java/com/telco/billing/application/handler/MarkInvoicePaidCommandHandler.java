@@ -17,7 +17,8 @@ import java.time.Instant;
 public class MarkInvoicePaidCommandHandler implements CommandHandler<MarkInvoicePaidCommand, Void> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MarkInvoicePaidCommandHandler.class);
-    private static final String AGGREGATE_TYPE = "Invoice";
+    // Lowercase outbox routing aggregate type -> `invoice.events` topic (event-catalog, ADR-009).
+    private static final String OUTBOX_AGGREGATE_TYPE = "invoice";
     private static final String EVENT_INVOICE_PAID = "invoice.paid.v1";
 
     private final InvoiceRepository invoiceRepo;
@@ -42,7 +43,7 @@ public class MarkInvoicePaidCommandHandler implements CommandHandler<MarkInvoice
         invoice.markPaid();
         invoiceRepo.save(invoice);
 
-        outboxService.publish(AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_PAID,
+        outboxService.publish(OUTBOX_AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_PAID,
                 new InvoicePaidEvent(
                         invoice.getId().toString(),
                         invoice.getCustomerId().toString(),

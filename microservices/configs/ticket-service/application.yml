@@ -20,6 +20,8 @@ spring:
   flyway:
     enabled: true
     baseline-on-migrate: true
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
   kafka:
     bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
     consumer:

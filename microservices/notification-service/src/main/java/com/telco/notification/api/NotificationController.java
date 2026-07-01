@@ -4,6 +4,7 @@ import com.telco.notification.api.dto.NotificationResponse;
 import com.telco.notification.domain.CommunicationPreference;
 import com.telco.notification.domain.Notification;
 import com.telco.notification.service.NotificationService;
+import com.telco.platform.common.api.PageResult;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -52,7 +53,9 @@ public class NotificationController {
         Page<Notification> notifications = notificationService.history(userId, page, size);
         List<NotificationResponse> content = notifications.getContent().stream()
                 .map(NotificationResponse::from).toList();
-        return ResponseEntity.ok(apiResponseFactory.ok(content));
+        PageResult<NotificationResponse> result = new PageResult<>(content, page, size,
+                notifications.getTotalElements(), notifications.getTotalPages());
+        return ResponseEntity.ok(apiResponseFactory.ok(result));
     }
 
     @GetMapping("/users/{userId}/preferences")
