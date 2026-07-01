@@ -45,6 +45,8 @@ public class Ticket {
 
     private Instant slaDueAt;
 
+    private Instant slaBreachedAt;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -85,6 +87,11 @@ public class Ticket {
         this.updatedAt = this.resolvedAt;
     }
 
+    public void markSlaBreached() {
+        this.slaBreachedAt = Instant.now();
+        this.updatedAt = this.slaBreachedAt;
+    }
+
     public TicketComment addComment(UUID authorId, String body) {
         var comment = TicketComment.of(this, authorId, body);
         comments.add(comment);
@@ -99,6 +106,7 @@ public class Ticket {
     public String getAssignedTeam() { return assignedTeam; }
     public String getSubject() { return subject; }
     public Instant getSlaDueAt() { return slaDueAt; }
+    public Instant getSlaBreachedAt() { return slaBreachedAt; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getResolvedAt() { return resolvedAt; }

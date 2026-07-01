@@ -19,7 +19,8 @@ import java.util.List;
 public class MarkInvoicesOverdueCommandHandler implements CommandHandler<MarkInvoicesOverdueCommand, Integer> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MarkInvoicesOverdueCommandHandler.class);
-    private static final String AGGREGATE_TYPE = "Invoice";
+    // Lowercase outbox routing aggregate type -> `invoice.events` topic (event-catalog, ADR-009).
+    private static final String OUTBOX_AGGREGATE_TYPE = "invoice";
     private static final String EVENT_INVOICE_OVERDUE = "invoice.overdue.v1";
 
     private final InvoiceRepository invoiceRepo;
@@ -40,7 +41,7 @@ public class MarkInvoicesOverdueCommandHandler implements CommandHandler<MarkInv
             invoice.markOverdue();
             invoiceRepo.save(invoice);
 
-            outboxService.publish(AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_OVERDUE,
+            outboxService.publish(OUTBOX_AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_OVERDUE,
                     new InvoiceOverdueEvent(
                             invoice.getId().toString(),
                             invoice.getCustomerId().toString(),

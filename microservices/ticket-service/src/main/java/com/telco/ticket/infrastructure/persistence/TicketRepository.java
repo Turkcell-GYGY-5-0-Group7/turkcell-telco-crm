@@ -14,6 +14,7 @@ public interface TicketRepository extends JpaRepository<Ticket, UUID> {
     @Query("SELECT t FROM Ticket t LEFT JOIN FETCH t.comments WHERE t.id = :id")
     Optional<Ticket> findByIdWithComments(@Param("id") UUID id);
 
-    @Query("SELECT t FROM Ticket t WHERE t.status IN ('OPEN','ASSIGNED') AND t.slaDueAt < :now")
+    @Query("SELECT t FROM Ticket t WHERE t.status IN ('OPEN','ASSIGNED') "
+            + "AND t.slaDueAt < :now AND t.slaBreachedAt IS NULL")
     List<Ticket> findBreached(@Param("now") Instant now);
 }

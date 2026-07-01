@@ -38,6 +38,9 @@ public class DetectSlaBreachCommandHandler implements CommandHandler<DetectSlaBr
                             "category", ticket.getCategory(),
                             "priority", ticket.getPriority(),
                             "slaDueAt", ticket.getSlaDueAt().toString()));
+            // Mark the breach so a subsequent scheduler run does not re-emit for this ticket (12.5.3: emit once).
+            ticket.markSlaBreached();
+            ticketRepository.save(ticket);
         }
         if (!breached.isEmpty()) {
             LOGGER.warn("SLA breach detected for {} tickets", breached.size());

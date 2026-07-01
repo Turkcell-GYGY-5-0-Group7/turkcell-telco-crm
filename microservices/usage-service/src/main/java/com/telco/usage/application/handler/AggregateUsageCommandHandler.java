@@ -24,7 +24,9 @@ public class AggregateUsageCommandHandler
 
     private static final Logger LOGGER = LoggerFactory.getLogger(AggregateUsageCommandHandler.class);
 
-    private static final String AGGREGATE_TYPE = "Subscription";
+    // Lowercase outbox routing aggregate type -> `usage.events` topic (billing-service subscribes
+    // there); a PascalCase value routes to the wrong topic (event-catalog, ADR-009).
+    private static final String OUTBOX_AGGREGATE_TYPE = "usage";
     private static final String EVENT_TYPE = "usage.aggregated.v1";
 
     private final UsageRecordRepository usageRecordRepository;
@@ -53,7 +55,7 @@ public class AggregateUsageCommandHandler
         Instant aggregatedAt = Instant.now();
 
         outboxService.publish(
-                AGGREGATE_TYPE, command.subscriptionId().toString(), EVENT_TYPE,
+                OUTBOX_AGGREGATE_TYPE, command.subscriptionId().toString(), EVENT_TYPE,
                 new UsageAggregatedEvent(
                         command.subscriptionId().toString(),
                         command.periodStart().toString(),

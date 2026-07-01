@@ -6,11 +6,13 @@ import com.telco.billing.application.command.RecordSubscriptionSuspendedCommand;
 import com.telco.platform.inbox.InboxService;
 import com.telco.platform.mediator.Mediator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -19,6 +21,9 @@ public class SubscriptionSuspendedBillingConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SubscriptionSuspendedBillingConsumer.class);
     private static final String CONSUMER_NAME = "SubscriptionSuspendedBillingConsumer";
+    /** Kafka header the Debezium EventRouter writes the outbox {@code event_type} into. */
+    private static final String EVENT_TYPE_HEADER = "eventType";
+    private static final String EVENT_TYPE = "subscription.suspended.v1";
 
     private final Mediator mediator;
     private final InboxService inboxService;
@@ -31,13 +36,24 @@ public class SubscriptionSuspendedBillingConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "subscription.suspended", groupId = "billing-service",
+    @KafkaListener(topics = "subscription.events", groupId = "billing-service",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onSubscriptionSuspended(ConsumerRecord<String, String> record) {
-        String messageId = record.key() != null ? record.key() : "fallback-offset-" + record.offset();
+        // Type filter FIRST (fail closed): subscription.events carries every subscription event type;
+        // only subscription.suspended.v1 is handled here.
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (!EVENT_TYPE.equals(eventType)) {
+            LOGGER.debug("Ignoring subscription event of type={} key={}", eventType, record.key());
+            return;
+        }
+
         try {
             Payload payload = objectMapper.readValue(record.value(), Payload.class);
             if (payload.subscriptionId() == null) return;
+
+            // Dedup on the stable envelope eventId (ADR-009); fall back only if absent.
+            String messageId = payload.eventId() != null ? payload.eventId()
+                    : (record.key() != null ? record.key() : "fallback-offset-" + record.offset());
 
             if (!inboxService.firstSeen(messageId, CONSUMER_NAME)) {
                 LOGGER.info("Duplicate subscription.suspended.v1 messageId={}", messageId);
@@ -50,11 +66,18 @@ public class SubscriptionSuspendedBillingConsumer {
             mediator.send(new RecordSubscriptionSuspendedCommand(
                     UUID.fromString(payload.subscriptionId()), suspendedAt));
         } catch (Exception e) {
-            LOGGER.error("Failed to process subscription.suspended.v1 messageId={}", messageId, e);
+            LOGGER.error("Failed to process subscription.suspended.v1 key={} offset={}",
+                    record.key(), record.offset(), e);
             throw new RuntimeException("subscription.suspended.v1 billing consumer failed", e);
         }
     }
 
+    /** Returns the UTF-8 value of the last header with the given key, or {@code null} if absent. */
+    private static String headerValue(ConsumerRecord<String, String> record, String key) {
+        Header header = record.headers().lastHeader(key);
+        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Payload(String subscriptionId, String suspendedAt) {}
+    public record Payload(String eventId, String subscriptionId, String suspendedAt) {}
 }

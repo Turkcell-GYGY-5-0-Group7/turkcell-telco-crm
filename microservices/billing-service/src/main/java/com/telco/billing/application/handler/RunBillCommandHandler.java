@@ -37,7 +37,9 @@ import java.util.UUID;
 public class RunBillCommandHandler implements CommandHandler<RunBillCommand, RunBillResult> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RunBillCommandHandler.class);
-    private static final String AGGREGATE_TYPE = "Invoice";
+    // Lowercase outbox routing aggregate type: Debezium EventRouter routes to `<aggregate_type>.events`
+    // (invoice.events); a PascalCase value would route to the wrong topic (event-catalog, ADR-009).
+    private static final String OUTBOX_AGGREGATE_TYPE = "invoice";
     private static final String EVENT_INVOICE_GENERATED = "invoice.generated.v1";
     private static final BigDecimal KB_PER_MB = BigDecimal.valueOf(1024);
 
@@ -111,7 +113,7 @@ public class RunBillCommandHandler implements CommandHandler<RunBillCommand, Run
 
                 ensureBillCycle(subscriber.getCustomerId(), command.periodEnd());
 
-                outboxService.publish(AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_GENERATED,
+                outboxService.publish(OUTBOX_AGGREGATE_TYPE, invoice.getId().toString(), EVENT_INVOICE_GENERATED,
                         new InvoiceGeneratedEvent(
                                 invoice.getId().toString(),
                                 invoice.getCustomerId().toString(),

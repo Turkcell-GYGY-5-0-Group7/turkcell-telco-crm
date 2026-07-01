@@ -81,6 +81,15 @@
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
+        <!-- Spring Boot 4 split Kafka autoconfiguration into this module. Without it, KafkaAutoConfiguration
+             (and thus KafkaTemplate, the kafkaListenerContainerFactory, and @EnableKafka annotation-driven
+             processing) is never activated, so the @KafkaListener consumers in this service DO NOT start.
+             spring-kafka on its own no longer brings the autoconfiguration in Boot 4. Required for the
+             DomainEventNotificationConsumer to actually receive from the broker. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-kafka</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
@@ -112,8 +121,19 @@
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

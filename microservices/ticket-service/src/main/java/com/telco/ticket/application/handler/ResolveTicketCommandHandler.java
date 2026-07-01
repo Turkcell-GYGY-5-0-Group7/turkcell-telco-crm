@@ -1,11 +1,11 @@
 package com.telco.ticket.application.handler;
 
+import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.ticket.application.command.ResolveTicketCommand;
 import com.telco.ticket.domain.Ticket;
 import com.telco.ticket.infrastructure.persistence.TicketRepository;
-import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Map;
@@ -27,7 +27,7 @@ public class ResolveTicketCommandHandler implements CommandHandler<ResolveTicket
     @Transactional
     public Void handle(ResolveTicketCommand command) {
         Ticket ticket = ticketRepository.findById(command.ticketId())
-                .orElseThrow(() -> new EntityNotFoundException("Ticket not found: " + command.ticketId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + command.ticketId()));
         if (ticket.getStatus().name().equals("RESOLVED")) return null;
 
         ticket.resolve();

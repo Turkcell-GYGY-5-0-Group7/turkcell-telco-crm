@@ -27,7 +27,9 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class AggregateUsageCommandHandlerTest {
 
-    private static final String AGGREGATE_TYPE = "Subscription";
+    // usage.aggregated.v1 routes to the lowercase `usage` domain (-> usage.events), which
+    // billing-service subscribes to. A PascalCase value routes to the wrong topic (ADR-009).
+    private static final String AGGREGATE_TYPE = "usage";
     private static final String EVENT_TYPE = "usage.aggregated.v1";
 
     @Mock

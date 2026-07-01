@@ -36,7 +36,12 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MeterCdrCommandHandler.class);
 
-    private static final String AGGREGATE_TYPE = "Quota";
+    // Lowercase outbox routing aggregate types: Debezium EventRouter routes each outbox row to
+    // `<aggregate_type>.events`. Per the event-catalog, usage.* events belong to the `usage` domain
+    // (-> usage.events) and quota.* events to the `quota` domain (-> quota.events, which
+    // notification-service subscribes to). A PascalCase value routes to the wrong topic (ADR-009).
+    private static final String USAGE_AGGREGATE_TYPE = "usage";
+    private static final String QUOTA_AGGREGATE_TYPE = "quota";
     private static final String EVENT_USAGE_RECORDED = "usage.recorded.v1";
     private static final String EVENT_THRESHOLD_REACHED = "quota.threshold-reached.v1";
     private static final String EVENT_QUOTA_EXCEEDED = "quota.exceeded.v1";
@@ -90,7 +95,7 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
         Instant now = Instant.now();
 
         outboxService.publish(
-                AGGREGATE_TYPE, quota.getId().toString(), EVENT_USAGE_RECORDED,
+                USAGE_AGGREGATE_TYPE, quota.getId().toString(), EVENT_USAGE_RECORDED,
                 new UsageRecordedEvent(
                         record.getId().toString(),
                         command.subscriptionId().toString(),
@@ -101,7 +106,7 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
 
         if (result.thresholdCrossed()) {
             outboxService.publish(
-                    AGGREGATE_TYPE, quota.getId().toString(), EVENT_THRESHOLD_REACHED,
+                    QUOTA_AGGREGATE_TYPE, quota.getId().toString(), EVENT_THRESHOLD_REACHED,
                     new QuotaThresholdReachedEvent(
                             command.subscriptionId().toString(),
                             quota.getId().toString(),
@@ -113,7 +118,7 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
 
         if (result.exceededCrossed()) {
             outboxService.publish(
-                    AGGREGATE_TYPE, quota.getId().toString(), EVENT_QUOTA_EXCEEDED,
+                    QUOTA_AGGREGATE_TYPE, quota.getId().toString(), EVENT_QUOTA_EXCEEDED,
                     new QuotaExceededEvent(
                             command.subscriptionId().toString(),
                             quota.getId().toString(),
