@@ -32,9 +32,33 @@ The example maps the `outbox_event` columns created by `starter-outbox` (migrati
 | --- | --- |
 | `id` | event id (Kafka message id) |
 | `aggregate_id` | message key |
-| `event_type` | event type header |
+| `event_type` | placed into the `eventType` Kafka **header** (consumers filter on it) |
 | `payload` | message value (JSON) |
 | `aggregate_type` | routing field -> topic `<aggregate_type>.events` |
+
+### `eventType` header
+
+By default the EventRouter SMT keeps the event type inside the value envelope, not as a Kafka
+header. Saga consumers (e.g. `subscription-service` `PaymentFailedEventConsumer`) dispatch on the
+canonical `eventType` header (`<event>.v1`), so the connector must surface it explicitly via:
+
+```json
+"transforms.outbox.table.fields.additional.placement": "event_type:header:eventType"
+```
+
+This is the standard Debezium EventRouter `table.fields.additional.placement` property
+(`<column>:<placement>:<alias>`, `placement=header`), valid for the pinned
+`quay.io/debezium/connect:3.1.0.Final`. The alias `eventType` must match the header name the
+consumers read.
+
+Verify against a live broker:
+
+```bash
+kafka-console-consumer --bootstrap-server localhost:9092 \
+  --topic <aggregate_type>.events --from-beginning \
+  --property print.headers=true
+# expect a header: eventType:<event>.v1   (e.g. eventType:payment.failed.v1)
+```
 
 ## Prerequisites per service
 

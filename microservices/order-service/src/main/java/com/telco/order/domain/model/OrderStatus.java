@@ -4,6 +4,7 @@ package com.telco.order.domain.model;
 public enum OrderStatus {
     PENDING,
     CONFIRMED,
+    FULFILLED,
     CANCELLED,
     FAILED
 }

@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "SubscriptionTerminatedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when a subscription is terminated (subscription.terminated.v1). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer (UUID)."
+    },
+    {
+      "name": "msisdn",
+      "type": "string",
+      "doc": "Mobile number (MSISDN) released from the subscription on termination."
+    },
+    {
+      "name": "terminatedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the subscription was terminated, in epoch milliseconds (UTC)."
+    }
+  ]
+}

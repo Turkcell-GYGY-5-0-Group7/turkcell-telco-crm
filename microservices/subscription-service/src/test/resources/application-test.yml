@@ -1,0 +1,42 @@
+# Test profile for subscription-service integration tests. Disables all external infrastructure
+# dependencies (config-server, Eureka) so the service boots with only a Testcontainers Postgres.
+
+spring:
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  config:
+    import: ""
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+  # Tests drive the payment.failed.v1 consumer directly; never start the Kafka listener container
+  # or attempt a broker connection.
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+# HMAC secret for JwtService.issue() in tests (256-bit, base64).
+# Plain text: "my-test-secret-key-for-subscription-svc"
+telco:
+  clients:
+    # Dummy URL: tests stub OrderServiceClient (@MockitoBean), so the real RestClient is never built.
+    order:
+      url: http://localhost:0
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1zdWJzY3JpcHRpb24tc3Zj
+        issuer: telco

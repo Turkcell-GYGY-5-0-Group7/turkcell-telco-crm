@@ -17,7 +17,11 @@ import java.util.UUID;
 @Component
 public class CreateDemoItemCommandHandler implements CommandHandler<CreateDemoItemCommand, DemoItemResponse> {
 
-    private static final String AGGREGATE_TYPE = "DemoItem";
+    // Debezium's EventRouter routes topic = <aggregateType>.events, so the outbox aggregate type is
+    // the LOWERCASE domain ("demoitem"), matching the event-catalog topic convention. Audit-mandated
+    // services keep a separate PascalCase constant for the audit entity type (ADR-021); this template
+    // service does not audit, so a single lowercase constant is sufficient.
+    private static final String OUTBOX_AGGREGATE_TYPE = "demoitem";
     private static final String EVENT_TYPE = "demoitem.created.v1";
 
     private final DemoItemRepository repository;
@@ -32,7 +36,7 @@ public class CreateDemoItemCommandHandler implements CommandHandler<CreateDemoIt
     public DemoItemResponse handle(CreateDemoItemCommand command) {
         DemoItem item = new DemoItem(UUID.randomUUID(), command.name(), Instant.now());
         repository.save(item);
-        outbox.publish(AGGREGATE_TYPE, item.getId().toString(), EVENT_TYPE,
+        outbox.publish(OUTBOX_AGGREGATE_TYPE, item.getId().toString(), EVENT_TYPE,
                 new DemoItemCreatedV1(item.getId().toString(), item.getName(), item.getCreatedAt()));
         return DemoItemResponse.from(item);
     }

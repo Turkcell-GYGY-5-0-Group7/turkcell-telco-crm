@@ -108,7 +108,7 @@ class OrderServiceIntegrationTest {
         when(customerServiceClient.getCustomer(any()))
                 .thenReturn(new CustomerClientResponse(CUSTOMER_ID, "ACTIVE"));
         when(productCatalogServiceClient.getTariff(any()))
-                .thenReturn(new TariffClientResponse(TARIFF_ID, "POSTPAID-001", "Postpaid Basic", new BigDecimal("49.99"), "TRY"));
+                .thenReturn(new TariffClientResponse(TARIFF_ID, "POSTPAID-001", "Postpaid Basic", new BigDecimal("49.99"), "TRY", 3));
     }
 
     @Test
@@ -265,6 +265,38 @@ class OrderServiceIntegrationTest {
                 .toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    // --- internal system read (saga sync hop, no JWT, no ownership guard) ---
+
+    @Test
+    void internal_get_order_succeeds_without_jwt() {
+        String orderId = orderId(createOrder(customerAlphaToken, UUID.randomUUID().toString()));
+
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/internal/orders/" + orderId)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> data = data(response);
+        assertThat(data.get("id")).isEqualTo(orderId);
+        assertThat(data.get("customerId")).isEqualTo(CUSTOMER_ID.toString());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) data.get("items");
+        assertThat(items).hasSize(1);
+        assertThat(items.get(0).get("tariffCode")).isEqualTo("POSTPAID-001");
+        assertThat(items.get(0).get("tariffVersion")).isEqualTo(3);
+    }
+
+    @Test
+    void internal_get_nonexistent_order_returns_404() {
+        ResponseEntity<String> response = client.get()
+                .uri("/internal/orders/" + UUID.randomUUID())
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test

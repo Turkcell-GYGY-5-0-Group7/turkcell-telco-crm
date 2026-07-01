@@ -13,7 +13,10 @@
 All events are immutable, versioned (`domain.event.v1`), Avro-encoded, and registered in the
 Schema Registry. Events are published through the transactional outbox and consumed
 idempotently via the inbox pattern (ADR-005). Topic names follow `domain.event` with the
-version carried by the schema.
+version carried by the schema. Debezium routes on the outbox `aggregate_type` column via
+`${routedByValue}.events`; therefore `aggregate_type` MUST be the lowercase domain (e.g.
+`subscription`), producing the `subscription.events` topic consumers subscribe to. A PascalCase
+`aggregate_type` routes to the wrong topic and is silently never delivered.
 
 ---
 
@@ -37,7 +40,7 @@ version carried by the schema.
 | `tariff.created.v1` | product-catalog-service | notification | New tariff published. |
 | `tariff.price-changed.v1` | product-catalog-service | billing, notification | Tariff price updated (versioned). |
 | `order.created.v1` | order-service | payment, notification | Order placed; starts the saga. |
-| `order.confirmed.v1` | order-service | subscription, notification | Order confirmed for fulfillment. |
+| `order.confirmed.v1` | order-service | subscription, notification | Order confirmed for fulfillment. (deferred; not produced in the MVP - subscription activates on `payment.completed.v1`) |
 | `order.cancelled.v1` | order-service | payment, subscription, notification | Order cancelled; triggers compensation. |
 | `payment.completed.v1` | payment-service | order, subscription, billing, notification | Payment succeeded. |
 | `payment.failed.v1` | payment-service | order, subscription, notification | Payment failed; may trigger retry. |
@@ -47,6 +50,7 @@ version carried by the schema.
 | `subscription.activated.v1` | subscription-service | order, billing, notification | Subscription activated. |
 | `subscription.suspended.v1` | subscription-service | billing, notification | Subscription suspended (non-payment). |
 | `subscription.terminated.v1` | subscription-service | billing, notification | Subscription terminated. |
+| `subscription.activation-failed.v1` | subscription-service | payment, order, notification | Subscription activation failed; triggers saga compensation. |
 | `usage.recorded.v1` | usage-service | - | Usage applied to quota. |
 | `quota.threshold-reached.v1` | usage-service | notification | 80% usage threshold reached. |
 | `quota.exceeded.v1` | usage-service | billing, notification | 100% usage reached; overage begins. |
@@ -71,7 +75,7 @@ order.created.v1
             -> order (FULFILLED), notification (welcome SMS)
 
 Compensation on activation failure:
-  subscription activation fails
+  subscription.activation-failed.v1
   -> payment.refunded.v1
   -> order.cancelled.v1
 ```

@@ -30,6 +30,12 @@ public class OrderItem {
     @Column(name = "tariff_id", nullable = false)
     private UUID tariffId;
 
+    @Column(name = "tariff_code", nullable = false, length = 64)
+    private String tariffCode;
+
+    @Column(name = "tariff_version", nullable = false)
+    private int tariffVersion;
+
     @Column(name = "tariff_name", length = 255)
     private String tariffName;
 
@@ -43,19 +49,22 @@ public class OrderItem {
     protected OrderItem() {
     }
 
-    private OrderItem(UUID id, Order order, UUID tariffId, String tariffName,
-                      BigDecimal unitPrice, int quantity) {
+    private OrderItem(UUID id, Order order, UUID tariffId, String tariffCode, int tariffVersion,
+                      String tariffName, BigDecimal unitPrice, int quantity) {
         this.id = Objects.requireNonNull(id, "id");
         this.order = Objects.requireNonNull(order, "order");
         this.tariffId = Objects.requireNonNull(tariffId, "tariffId");
+        this.tariffCode = Objects.requireNonNull(tariffCode, "tariffCode");
+        this.tariffVersion = tariffVersion;
         this.tariffName = tariffName;
         this.unitPrice = unitPrice;
         this.quantity = quantity;
     }
 
-    public static OrderItem create(Order order, UUID tariffId, String tariffName,
-                                   BigDecimal unitPrice, int quantity) {
-        return new OrderItem(UUID.randomUUID(), order, tariffId, tariffName, unitPrice, quantity);
+    public static OrderItem create(Order order, UUID tariffId, String tariffCode, int tariffVersion,
+                                   String tariffName, BigDecimal unitPrice, int quantity) {
+        return new OrderItem(UUID.randomUUID(), order, tariffId, tariffCode, tariffVersion,
+                tariffName, unitPrice, quantity);
     }
 
     public UUID getId() {
@@ -68,6 +77,14 @@ public class OrderItem {
 
     public UUID getTariffId() {
         return tariffId;
+    }
+
+    public String getTariffCode() {
+        return tariffCode;
+    }
+
+    public int getTariffVersion() {
+        return tariffVersion;
     }
 
     public String getTariffName() {

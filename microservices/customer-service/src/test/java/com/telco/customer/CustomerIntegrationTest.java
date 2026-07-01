@@ -132,7 +132,7 @@ class CustomerIntegrationTest {
                 .body("data.identityNumberMasked", matchesPattern("\\*+\\d{4}"))
                 .body("data.identityNumberMasked", not(containsString(VALID_TCKN)));
 
-        verify(outboxService).publish(eq("Customer"), any(), eq("customer.registered.v1"), any());
+        verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), any());
     }
 
     @Test
@@ -186,7 +186,7 @@ class CustomerIntegrationTest {
                 .body("data.firstName", equalTo("Grace"))
                 .body("data.lastName", equalTo("Hopper"));
 
-        verify(outboxService).publish(eq("Customer"), eq(id), eq("customer.updated.v1"), any());
+        verify(outboxService).publish(eq("customer"), eq(id), eq("customer.updated.v1"), any());
     }
 
     // --- PII assertion: identity number is ciphertext in the DB ---
@@ -252,7 +252,7 @@ class CustomerIntegrationTest {
                 .statusCode(200)
                 .body("data.status", equalTo("ACTIVE"));
 
-        verify(outboxService).publish(eq("Customer"), eq(id), eq("customer.kyc-approved.v1"), any());
+        verify(outboxService).publish(eq("customer"), eq(id), eq("customer.kyc-approved.v1"), any());
 
         Integer auditCount = jdbc.queryForObject(
                 "SELECT count(*) FROM audit_log WHERE entity_id = ? AND action = 'CUSTOMER_KYC_APPROVED'",
@@ -274,7 +274,7 @@ class CustomerIntegrationTest {
                 .statusCode(200)
                 .body("data.status", equalTo("REJECTED"));
 
-        verify(outboxService).publish(eq("Customer"), eq(id), eq("customer.kyc-rejected.v1"), any());
+        verify(outboxService).publish(eq("customer"), eq(id), eq("customer.kyc-rejected.v1"), any());
     }
 
     // --- FR-03: Address management ---

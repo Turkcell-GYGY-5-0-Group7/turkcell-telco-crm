@@ -11,9 +11,45 @@ spring:
     password: ${SUBSCRIPTION_DB_PASSWORD:subscription}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    # Consumes payment.failed.v1 (saga suspend path) idempotently via the inbox. ADR-005, FR-14.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: subscription-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 security:
   oauth2:
     resourceserver:
       jwt:
         jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
+  clients:
+    # Single synchronous hop on the payment.completed.v1 activation path: order-service supplies the
+    # authoritative customerId and the tariff snapshot (tariffCode/tariffVersion) for activation.
+    order:
+      url: ${ORDER_SERVICE_URL:http://order-service}

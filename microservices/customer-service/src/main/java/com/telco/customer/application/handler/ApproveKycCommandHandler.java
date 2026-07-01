@@ -23,6 +23,7 @@ import java.time.Instant;
 public class ApproveKycCommandHandler implements CommandHandler<ApproveKycCommand, CustomerResponse> {
 
     private static final String AGGREGATE_TYPE = "Customer";
+    private static final String OUTBOX_AGGREGATE_TYPE = "customer";
     private static final String EVENT_TYPE = "customer.kyc-approved.v1";
 
     private final CustomerRepository customers;
@@ -52,7 +53,7 @@ public class ApproveKycCommandHandler implements CommandHandler<ApproveKycComman
         customers.save(customer);
 
         String id = customer.getId().toString();
-        outbox.publish(AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerKycApprovedV1(
+        outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerKycApprovedV1(
                 id, customer.getStatus().name(), Instant.now().toEpochMilli()));
 
         audit.log("CUSTOMER_KYC_APPROVED", AGGREGATE_TYPE, id, null);

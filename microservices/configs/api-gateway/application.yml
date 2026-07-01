@@ -11,6 +11,27 @@ spring:
       server:
         webmvc:
           routes:
+            # ---------------------------------------------------------------- Internal surface deny (ADR-011)
+            # /internal/** is a SERVICE-TO-SERVICE-ONLY surface (e.g. order-service
+            # GET /internal/orders/{orderId} used by the onboarding saga, Sprint 09 Feature 9.4).
+            # Those endpoints are permitAll with NO JWT and NO ownership guard; their entire
+            # security rests on the network boundary (gateway-behind-trust, ADR-011). The gateway
+            # therefore MUST NEVER route /internal/** to any downstream service.
+            #
+            # Every domain route below is narrowly scoped to /api/v1/** (or /api-docs/**, /realms/**),
+            # so /internal/** is already unrouted and would 404 by default. This first, highest-priority
+            # route makes the intent explicit and fail-safe: it matches /internal/** and forwards to a
+            # local 404 sink (forward to a RouterFunction, not a downstream lb://), so even a future
+            # broad or mistaken route change cannot accidentally expose /internal/** through the
+            # gateway. The SetStatus filter pins the response to 404 regardless of the forward target.
+            # See GatewayRouteConfig#internalDenyRouterFunction and api-gateway/README.md.
+            - id: internal-deny-route
+              uri: forward:/__gateway_blocked
+              predicates:
+                - Path=/internal/**
+              filters:
+                - SetStatus=404
+
             # ---------------------------------------------------------------- Keycloak proxy
             # Proxy /realms/** so clients have one origin for both auth and API calls.
             - id: keycloak-route

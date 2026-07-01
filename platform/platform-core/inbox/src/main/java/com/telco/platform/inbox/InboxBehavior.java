@@ -7,9 +7,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Idempotency guard for {@link IdempotentRequest}s. Runs at {@link PipelineOrder#INBOX} (inside the
- * transaction) so the inbox insert and the handler's writes commit together: if the message was
- * already processed, the handler is skipped (returns null); otherwise it runs and the row marks it done.
+ * Idempotency guard for {@link IdempotentRequest}s. Runs at {@link PipelineOrder#INBOX}, which is
+ * INNER to {@link PipelineOrder#TRANSACTION} so the inbox dedup INSERT executes inside the handler's
+ * already-open transaction (via the shared {@code JdbcTemplate}/{@code DataSource}). The inbox row and
+ * the handler's writes therefore commit or roll back together: a handler failure rolls the inbox row
+ * back too, so redelivery is treated as first-seen (exactly-once-effect, ADR-005). If the message was
+ * already processed the handler is skipped (returns null); otherwise it runs and the row marks it done.
  */
 public final class InboxBehavior implements PipelineBehavior {
 

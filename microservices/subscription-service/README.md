@@ -6,9 +6,11 @@
 | Architecture Mode (ADR-004) | CQRS + Mediator |
 | Infrastructure Profile (ADR-006) | PostgreSQL |
 | Owning sprint | [Sprint 09](../../docs/tasks/sprint-09-subscription-and-onboarding-saga/README.md) |
-| Status | Skeleton (no business code) |
+| Status | Scaffold + schema (Feature 9.1); domain logic in 9.2/9.3 |
 
-Subscription lifecycle state machine and atomic MSISDN allocation/release.
+Subscription lifecycle state machine and atomic MSISDN allocation/release, plus SIM-card inventory.
+Audit-mandated service (NFR-12). Publishes domain events via the transactional outbox and consumes
+onboarding-saga events idempotently via the inbox (AC-01).
 Contract: [subscription-service](../../docs/api-contracts/subscription-service.md).
 
 Runtime config is centralized in config-server; this module keeps only the `spring.config.import`

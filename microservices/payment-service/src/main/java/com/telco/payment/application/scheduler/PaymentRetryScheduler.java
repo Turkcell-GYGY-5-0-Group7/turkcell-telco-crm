@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Periodically retries PENDING and FAILED payments within their configured retry windows.
@@ -142,11 +143,17 @@ public class PaymentRetryScheduler {
         try {
             LOGGER.info("Scheduling retry for payment id={} orderId={} window={}",
                     payment.getId(), payment.getOrderId(), window);
+            // Each retry must actually re-run the charge, so it carries a FRESH unique inbox key
+            // (not the stable paymentRequestId, which would make the inbox short-circuit every retry
+            // after the first as an already-seen delivery). Command-level idempotency via
+            // paymentRequestId still re-uses the same Payment entity for the retry.
+            String retryMessageId = "retry-" + payment.getId() + "-" + UUID.randomUUID();
             mediator.send(new ChargePaymentCommand(
                     payment.getOrderId(),
                     payment.getCustomerId(),
                     payment.getAmount(),
-                    payment.getPaymentRequestId()));
+                    payment.getPaymentRequestId(),
+                    retryMessageId));
         } catch (Exception e) {
             // Non-fatal: next run will try again if still within the retry window.
             LOGGER.warn("Retry dispatch failed for payment id={}: {}", payment.getId(), e.getMessage());

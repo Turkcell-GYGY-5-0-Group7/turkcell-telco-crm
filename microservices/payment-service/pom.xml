@@ -125,6 +125,31 @@
             <version>1.20.6</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Debezium EventRouter outbox SMT + Kafka Connect API, TEST scope only. Used by the
+             outbox routing regression test (Sprint 09 Feature 9.5) to run the REAL SMT
+             (io.debezium.transforms.outbox.EventRouter) against the aggregate_type this service
+             actually writes, proving Debezium routes to the lowercase <domain>.events topic the
+             saga consumers subscribe to. connect-api/connect-transforms are pinned to the same
+             4.2.1 line as the resolved kafka-clients; debezium-core 3.0.x targets Kafka 4.x. -->
+        <dependency>
+            <groupId>io.debezium</groupId>
+            <artifactId>debezium-core</artifactId>
+            <version>3.0.8.Final</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-api</artifactId>
+            <version>4.2.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-transforms</artifactId>
+            <version>4.2.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

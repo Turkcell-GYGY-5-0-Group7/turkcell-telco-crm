@@ -23,6 +23,7 @@ import java.util.Map;
 public class CreateUserCommandHandler implements CommandHandler<CreateUserCommand, UserResponse> {
 
     private static final String AGGREGATE_TYPE = "User";
+    private static final String OUTBOX_AGGREGATE_TYPE = "user";
     private static final String EVENT_TYPE = "user.created.v1";
 
     private final UserRepository userRepository;
@@ -52,7 +53,7 @@ public class CreateUserCommandHandler implements CommandHandler<CreateUserComman
         String userId = user.getId().toString();
 
         outboxService.publish(
-                AGGREGATE_TYPE,
+                OUTBOX_AGGREGATE_TYPE,
                 userId,
                 EVENT_TYPE,
                 new UserCreatedV1(userId, user.getUsername(), user.getEmail(),

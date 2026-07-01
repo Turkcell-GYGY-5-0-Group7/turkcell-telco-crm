@@ -23,7 +23,11 @@ class OrderSecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(a -> a
-                        .requestMatchers("/actuator/health", "/actuator/info")
+                        .requestMatchers(
+                                "/actuator/health", "/actuator/info",
+                                // Trusted system-to-system order read for the onboarding saga. The
+                                // gateway excludes /internal/** from public traffic (devops).
+                                "/internal/**")
                         .permitAll()
                         .anyRequest().authenticated()
                 )

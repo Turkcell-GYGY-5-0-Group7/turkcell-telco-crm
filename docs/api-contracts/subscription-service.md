@@ -31,8 +31,8 @@ Read and lifecycle endpoints require a valid JWT. Activation is internal (saga-d
 
 | Direction | Event |
 | --- | --- |
-| Publish | `subscription.activated.v1`, `subscription.suspended.v1`, `subscription.terminated.v1`, `msisdn.allocated.v1`, `msisdn.released.v1` |
-| Consume | `order.confirmed.v1`, `payment.completed.v1`, `payment.failed.v1` (after grace period) |
+| Publish | `subscription.activated.v1`, `subscription.suspended.v1`, `subscription.terminated.v1`, `subscription.activation-failed.v1`, `msisdn.allocated.v1`, `msisdn.released.v1` |
+| Consume | `payment.completed.v1` (activation trigger), `payment.failed.v1` (after grace period) |
 
 ## Notes
 

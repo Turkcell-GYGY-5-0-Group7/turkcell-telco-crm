@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "SubscriptionSuspendedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when a subscription is suspended, typically for non-payment (subscription.suspended.v1). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer (UUID)."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "doc": "Reason the subscription was suspended (e.g. NON_PAYMENT). Drives notification templating and billing dunning."
+    },
+    {
+      "name": "suspendedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the subscription was suspended, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -81,7 +81,12 @@
                         <customer.kyc-rejected.v1>${project.basedir}/src/main/avro/customer-kyc-rejected.avsc</customer.kyc-rejected.v1>
                         <order.created.v1>${project.basedir}/src/main/avro/order-created.avsc</order.created.v1>
                         <payment.completed.v1>${project.basedir}/src/main/avro/payment-completed.avsc</payment.completed.v1>
+                        <msisdn.allocated.v1>${project.basedir}/src/main/avro/msisdn-allocated.avsc</msisdn.allocated.v1>
+                        <msisdn.released.v1>${project.basedir}/src/main/avro/msisdn-released.avsc</msisdn.released.v1>
                         <subscription.activated.v1>${project.basedir}/src/main/avro/subscription-activated.avsc</subscription.activated.v1>
+                        <subscription.suspended.v1>${project.basedir}/src/main/avro/subscription-suspended.avsc</subscription.suspended.v1>
+                        <subscription.terminated.v1>${project.basedir}/src/main/avro/subscription-terminated.avsc</subscription.terminated.v1>
+                        <subscription.activation-failed.v1>${project.basedir}/src/main/avro/subscription-activation-failed.avsc</subscription.activation-failed.v1>
                         <invoice.generated.v1>${project.basedir}/src/main/avro/invoice-generated.avsc</invoice.generated.v1>
                     </subjects>
                     <schemaType>AVRO</schemaType>

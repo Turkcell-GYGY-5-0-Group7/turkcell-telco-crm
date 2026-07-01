@@ -38,6 +38,19 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-outbox</artifactId>
         </dependency>
+        <!-- Consumes onboarding-saga events idempotently via the transactional inbox (ADR-005, AC-01).
+             The inbox_message table ships with the platform V901 migration. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-inbox</artifactId>
+        </dependency>
+
+        <!-- Kafka for the saga consumers: payment.completed.v1 / subscription.activated.v1 /
+             payment.refunded.v1 (ADR-009, AC-01). -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
 
         <!-- Security config (HttpSecurity, @PreAuthorize, SecurityFilterChain). starter-security marks
              spring-boot-starter-security as optional so consuming services must declare it directly. -->
@@ -113,6 +126,31 @@
             <groupId>org.testcontainers</groupId>
             <artifactId>junit-jupiter</artifactId>
             <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Debezium EventRouter outbox SMT + Kafka Connect API, TEST scope only. Used by the
+             outbox routing regression test (Sprint 09 Feature 9.5) to run the REAL SMT
+             (io.debezium.transforms.outbox.EventRouter) against the aggregate_type this service
+             actually writes, proving Debezium routes to the lowercase <domain>.events topic the
+             saga consumers subscribe to. connect-api/connect-transforms are pinned to the same
+             4.2.1 line as the resolved kafka-clients; debezium-core 3.0.x targets Kafka 4.x. -->
+        <dependency>
+            <groupId>io.debezium</groupId>
+            <artifactId>debezium-core</artifactId>
+            <version>3.0.8.Final</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-api</artifactId>
+            <version>4.2.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>connect-transforms</artifactId>
+            <version>4.2.1</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

@@ -22,6 +22,7 @@ import java.util.Map;
 public class RejectKycCommandHandler implements CommandHandler<RejectKycCommand, CustomerResponse> {
 
     private static final String AGGREGATE_TYPE = "Customer";
+    private static final String OUTBOX_AGGREGATE_TYPE = "customer";
     private static final String EVENT_TYPE = "customer.kyc-rejected.v1";
 
     private final CustomerRepository customers;
@@ -45,7 +46,7 @@ public class RejectKycCommandHandler implements CommandHandler<RejectKycCommand,
         customers.save(customer);
 
         String id = customer.getId().toString();
-        outbox.publish(AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerKycRejectedV1(
+        outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerKycRejectedV1(
                 id, customer.getStatus().name(), command.reason(), Instant.now().toEpochMilli()));
 
         audit.log("CUSTOMER_KYC_REJECTED", AGGREGATE_TYPE, id,

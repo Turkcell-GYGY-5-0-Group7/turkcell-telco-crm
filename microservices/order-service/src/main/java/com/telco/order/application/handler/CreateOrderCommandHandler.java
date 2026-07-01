@@ -34,7 +34,7 @@ import java.util.Optional;
 @Component
 public class CreateOrderCommandHandler implements CommandHandler<CreateOrderCommand, OrderResponse> {
 
-    private static final String AGGREGATE_TYPE = "Order";
+    private static final String OUTBOX_AGGREGATE_TYPE = "order";
     private static final String EVENT_TYPE = "order.created.v1";
 
     private final OrderRepository orderRepository;
@@ -88,6 +88,8 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
             TariffClientResponse tariff = tariffs.get(i);
             order.addItem(
                     itemReq.tariffId(),
+                    tariff.code(),
+                    tariff.version(),
                     tariff.name(),
                     tariff.monthlyFee(),
                     itemReq.quantity()
@@ -112,7 +114,7 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
 
         // Publish order.created.v1 through the transactional outbox (ADR-009).
         outboxService.publish(
-                AGGREGATE_TYPE,
+                OUTBOX_AGGREGATE_TYPE,
                 order.getId().toString(),
                 EVENT_TYPE,
                 new OrderCreatedEvent(

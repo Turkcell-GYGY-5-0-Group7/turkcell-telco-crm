@@ -9,6 +9,8 @@ import java.util.UUID;
 public record OrderItemResponse(
         UUID id,
         UUID tariffId,
+        String tariffCode,
+        int tariffVersion,
         String tariffName,
         BigDecimal unitPrice,
         int quantity
@@ -18,6 +20,8 @@ public record OrderItemResponse(
         return new OrderItemResponse(
                 item.getId(),
                 item.getTariffId(),
+                item.getTariffCode(),
+                item.getTariffVersion(),
                 item.getTariffName(),
                 item.getUnitPrice(),
                 item.getQuantity()

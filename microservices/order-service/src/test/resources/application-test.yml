@@ -10,6 +10,16 @@ spring:
     locations:
       - classpath:db/migration
       - classpath:db/migration/platform
+  # Tests drive the saga consumers directly; never start the Kafka listener container or attempt a
+  # broker connection.
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: order-service
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      auto-startup: false
 
 eureka:
   client:
@@ -27,3 +37,12 @@ telco:
         issuer: telco
     outbox:
       enabled: true
+    inbox:
+      enabled: true
+  # Downstream client base URLs (normally from config-server). Tests never make real HTTP calls
+  # (clients are mocked or unused); these are present only so RestClientConfig can wire its beans.
+  clients:
+    customer-service:
+      url: http://customer-service
+    product-catalog-service:
+      url: http://product-catalog-service

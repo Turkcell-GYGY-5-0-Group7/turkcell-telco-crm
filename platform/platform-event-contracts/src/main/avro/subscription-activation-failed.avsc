@@ -1,0 +1,37 @@
+{
+  "type": "record",
+  "name": "SubscriptionActivationFailedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when subscription activation fails during the new-line onboarding saga (subscription.activation-failed.v1). Producer: subscription-service. Consumers: payment (refund), order (compensation/saga-state), notification. Triggers the compensation chain: subscription.activation-failed.v1 -> payment.refunded.v1 -> order.cancelled.v1. On failure no MSISDN is allocated.",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Saga correlation key (UUID). The key payment-service and order-service match on to find the payment/order and start compensation."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer (UUID)."
+    },
+    {
+      "name": "subscriptionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Subscription identifier (UUID) that failed to activate; null when the failure occurred before a subscription id was assigned."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "doc": "Failure cause code, e.g. MSISDN_POOL_EXHAUSTED, TARIFF_SNAPSHOT_INVALID."
+    },
+    {
+      "name": "failedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the activation failed, in epoch milliseconds (UTC). Uses timestamp-millis for consistency with every other event in this module."
+    }
+  ]
+}

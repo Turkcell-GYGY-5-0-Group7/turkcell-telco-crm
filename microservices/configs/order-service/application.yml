@@ -16,8 +16,17 @@ spring:
       ddl-auto: none
     open-in-view: false
   flyway:
-    # Service migrations + platform migrations (outbox V900). ADR-016.
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
     locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    # Consumes onboarding-saga events (payment.completed.v1, subscription.activated.v1,
+    # payment.refunded.v1) idempotently via the inbox. ADR-005, ADR-009, AC-01.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: order-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 security:
   oauth2:
@@ -37,6 +46,8 @@ telco:
       correlation:
         enabled: true
     outbox:
+      enabled: true
+    inbox:
       enabled: true
   clients:
     customer-service:
