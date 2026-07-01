@@ -29,7 +29,7 @@ public class RefundPaymentCommandHandler
         implements CommandHandler<RefundPaymentCommand, PaymentResponse> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RefundPaymentCommandHandler.class);
-    private static final String AGGREGATE_TYPE = "Payment";
+    private static final String OUTBOX_AGGREGATE_TYPE = "payment";
     private static final String EVENT_REFUNDED = "payment.refunded.v1";
 
     private final PaymentRepository paymentRepository;
@@ -64,7 +64,7 @@ public class RefundPaymentCommandHandler
         paymentRepository.save(payment);
 
         outboxService.publish(
-                AGGREGATE_TYPE, payment.getId().toString(), EVENT_REFUNDED,
+                OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_REFUNDED,
                 new PaymentRefundedEvent(
                         payment.getId().toString(),
                         payment.getOrderId().toString(),

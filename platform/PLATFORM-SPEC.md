@@ -230,6 +230,15 @@ public final class DefaultOutboxService implements OutboxService { /* serialize 
 DB write and the outbox row commit atomically; Debezium captures the insert. Provide an OPTIONAL
 polling relay class in starter-outbox, disabled by default.
 
+`aggregateType` is the **Debezium routing key**, not the DDD aggregate class name. Debezium's
+EventRouter routes on the `aggregate_type` column via `${routedByValue}.events`, so `aggregateType`
+MUST be the **lowercase event domain** (e.g. `subscription`, `order`, `payment`) and MUST match the
+lowercase `domain.events` topic convention consumers subscribe to (event-catalog). It MUST NOT be
+PascalCase - a PascalCase value routes to the wrong topic (`Subscription.events`) and no consumer
+receives it. When a handler also writes an audit row, use a SEPARATE PascalCase constant for the
+audit entity-type (ADR-021) and a distinct lowercase constant for `publish(...)`; do not share one
+symbol across both sinks. (`DefaultOutboxService` MAY fail-fast on a non-lowercase `aggregateType`.)
+
 ---
 
 ## 6. platform-inbox (idempotent consume, ADR-005)

@@ -3,7 +3,7 @@ package com.telco.subscription;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-/** subscription-service (CQRS + Mediator). Skeleton only - no business code. */
+/** subscription-service (CQRS + Mediator): subscription lifecycle, MSISDN pool, SIM-card inventory, audit. */
 @SpringBootApplication
 public class SubscriptionServiceApplication {
 

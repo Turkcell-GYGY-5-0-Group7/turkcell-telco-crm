@@ -66,6 +66,15 @@ requirement (FR) is traced to the owning service and the release phase from
 | FR-11 | Order statuses MUST be: DRAFT, PENDING_PAYMENT, PAID, FULFILLED, CANCELLED. | order-service | P2 | MUST |
 | FR-12 | On order cancellation, compensation events MUST be triggered. | order-service | P2 | MUST |
 
+> **FR-11 MVP reconciliation (Sprint 09 tech-lead ruling).** For the MVP the Order aggregate enum is
+> `{PENDING, CONFIRMED, FULFILLED, CANCELLED, FAILED}`. FR-11's MUST list maps onto this enum as
+> follows: `DRAFT` and `PENDING_PAYMENT` map to `PENDING` (with `PENDING_PAYMENT` reflected as
+> saga_state `AWAITING_PAYMENT`); `PAID` maps to `CONFIRMED` with saga_state `PAID`; `FULFILLED` and
+> `CANCELLED` are real enum states. This mapping was ratified by the Sprint 09 tech-lead ruling
+> because order-service already models post-payment as `CONFIRMED` and publishes `order.confirmed.v1`.
+> AC-01 asserts on `order.status == FULFILLED` (happy) and `order.status == CANCELLED` (compensation),
+> which the enum satisfies literally; AC-01 text is unchanged.
+
 ### 2.5 Subscription Management (subscription-service)
 
 | ID | Requirement | Service | Phase | Priority |

@@ -22,6 +22,7 @@ public class RegisterCustomerCommandHandler
         implements CommandHandler<RegisterCustomerCommand, CustomerResponse> {
 
     private static final String AGGREGATE_TYPE = "Customer";
+    private static final String OUTBOX_AGGREGATE_TYPE = "customer";
     private static final String EVENT_TYPE = "customer.registered.v1";
 
     private final CustomerRepository customers;
@@ -42,7 +43,7 @@ public class RegisterCustomerCommandHandler
         customers.save(customer);
 
         String id = customer.getId().toString();
-        outbox.publish(AGGREGATE_TYPE, id, EVENT_TYPE, CustomerRegisteredV1.of(
+        outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, CustomerRegisteredV1.of(
                 id, customer.getType().name(), customer.getStatus().name(),
                 customer.getCreatedAt().toEpochMilli()));
 

@@ -47,11 +47,17 @@ public class PaymentController {
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResult<PaymentResponse> charge(@Valid @RequestBody ChargePaymentRequest request) {
+        // Admin/non-saga path: no Kafka message, so supply a FRESH unique inbox key per request. The
+        // atomic inbox guard is then a harmless per-request no-op and never short-circuits a repeat
+        // call - the handler's paymentRequestId lookup remains the source of charge idempotency, so a
+        // second POST with the same paymentRequestId still returns the existing payment.
+        String messageId = "admin-" + UUID.randomUUID();
         ChargePaymentCommand command = new ChargePaymentCommand(
                 request.orderId(),
                 request.customerId(),
                 request.amount(),
-                request.paymentRequestId());
+                request.paymentRequestId(),
+                messageId);
         return responses.ok(mediator.send(command));
     }
 
@@ -75,6 +81,11 @@ public class PaymentController {
     public ApiResult<PaymentResponse> refund(
             @PathVariable UUID paymentId,
             @Valid @RequestBody RefundPaymentRequest request) {
-        return responses.ok(mediator.send(new RefundPaymentCommand(paymentId, request.reason())));
+        // Admin/non-saga path: no Kafka message, so supply a fresh unique inbox key. The atomic inbox
+        // guard is then a per-request no-op; the COMPLETED->REFUNDED domain rule still prevents a
+        // double refund.
+        String messageId = "admin-" + UUID.randomUUID();
+        return responses.ok(
+                mediator.send(new RefundPaymentCommand(paymentId, request.reason(), messageId)));
     }
 }

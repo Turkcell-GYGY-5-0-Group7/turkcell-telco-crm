@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class CreateTariffCommandHandler implements CommandHandler<CreateTariffCommand, TariffResponse> {
 
-    private static final String AGGREGATE_TYPE = "Tariff";
+    private static final String AGGREGATE_TYPE = "tariff";
     private static final String EVENT_TYPE = "tariff.created.v1";
 
     private final TariffRepository tariffRepository;

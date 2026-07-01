@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "MsisdnAllocatedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when an MSISDN is allocated to a subscription (msisdn.allocated.v1). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "msisdn",
+      "type": "string",
+      "doc": "Mobile number (MSISDN) allocated from the number pool."
+    },
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Identifier of the subscription the MSISDN was allocated to (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer (UUID)."
+    },
+    {
+      "name": "allocatedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the MSISDN was allocated, in epoch milliseconds (UTC)."
+    }
+  ]
+}

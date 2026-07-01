@@ -43,7 +43,7 @@ public class ChargePaymentCommandHandler
         implements CommandHandler<ChargePaymentCommand, PaymentResponse> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ChargePaymentCommandHandler.class);
-    private static final String AGGREGATE_TYPE = "Payment";
+    private static final String OUTBOX_AGGREGATE_TYPE = "payment";
     private static final String EVENT_COMPLETED = "payment.completed.v1";
     private static final String EVENT_FAILED = "payment.failed.v1";
 
@@ -108,7 +108,7 @@ public class ChargePaymentCommandHandler
             paymentRepository.save(payment);
 
             outboxService.publish(
-                    AGGREGATE_TYPE, payment.getId().toString(), EVENT_COMPLETED,
+                    OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_COMPLETED,
                     new PaymentCompletedEvent(
                             payment.getId().toString(),
                             payment.getOrderId().toString(),
@@ -128,7 +128,7 @@ public class ChargePaymentCommandHandler
             paymentRepository.save(payment);
 
             outboxService.publish(
-                    AGGREGATE_TYPE, payment.getId().toString(), EVENT_FAILED,
+                    OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_FAILED,
                     new PaymentFailedEvent(
                             payment.getId().toString(),
                             payment.getOrderId().toString(),

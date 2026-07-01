@@ -9,6 +9,19 @@ spring:
       enabled: false
     config:
       enabled: false
+    # Mirror the production internal-deny-route so the test can prove /internal/** is blocked at
+    # the edge (forwarded to the local 404 sink, never proxied downstream). The full route set is
+    # served by config-server in production; here we only need the deny route under test.
+    gateway:
+      server:
+        webmvc:
+          routes:
+            - id: internal-deny-route
+              uri: forward:/__gateway_blocked
+              predicates:
+                - Path=/internal/**
+              filters:
+                - SetStatus=404
   security:
     oauth2:
       resourceserver:

@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "MsisdnReleasedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when an MSISDN is returned to the number pool (msisdn.released.v1). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "msisdn",
+      "type": "string",
+      "doc": "Mobile number (MSISDN) returned to the number pool."
+    },
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Identifier of the subscription the MSISDN was released from (UUID)."
+    },
+    {
+      "name": "releasedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the MSISDN was released, in epoch milliseconds (UTC)."
+    }
+  ]
+}

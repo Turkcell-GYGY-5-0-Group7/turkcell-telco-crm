@@ -14,7 +14,7 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-06-26 (Sprint 08 DONE — 13/13 order-service + 12/12 payment-service integration tests pass)
+Last updated: 2026-07-01 (Sprint 09 DONE — full onboarding saga (AC-01 built); 9.5 real-broker de-risk proved the Debezium eventType header and caught+fixed a saga-breaking platform-wide bug (PascalCase outbox aggregate_type routed to the wrong topic); 123 saga tests green + a routing regression gate. Full-system AC-01 acceptance is Sprint 14. Also fixed a latent platform inbox-atomicity bug + an unauth sync-hop dead-loop earlier in the sprint)
 
 ## Sprint Rollup
 
@@ -28,7 +28,7 @@ Last updated: 2026-06-26 (Sprint 08 DONE — 13/13 order-service + 12/12 payment
 | [06](sprint-06-customer-domain/README.md) | customer-service | DONE | 4/4 |
 | [07](sprint-07-product-catalog-domain/README.md) | product-catalog-service | DONE | 5/5 |
 | [08](sprint-08-order-and-payment/README.md) | order-service, payment-service | DONE | 6/6 |
-| [09](sprint-09-subscription-and-onboarding-saga/README.md) | subscription-service, saga (AC-01) | TODO | 0/5 |
+| [09](sprint-09-subscription-and-onboarding-saga/README.md) | subscription-service, saga (AC-01) | DONE | 5/5 |
 | [10](sprint-10-usage-metering/README.md) | usage-service, CDR (AC-03) | TODO | 0/7 |
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | TODO | 0/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | TODO | 0/6 |
@@ -37,8 +37,9 @@ Last updated: 2026-06-26 (Sprint 08 DONE — 13/13 order-service + 12/12 payment
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 8 sprints DONE, 0 IN PROGRESS, 7 TODO. Features: 39 DONE / 0 IN PROGRESS
-/ 36 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Totals (MVP, Sprints 01-15): 9 sprints DONE, 0 IN PROGRESS, 6 TODO. Features: 44 DONE / 0 IN PROGRESS
+/ 31 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 
 ## Epics and Phases
 

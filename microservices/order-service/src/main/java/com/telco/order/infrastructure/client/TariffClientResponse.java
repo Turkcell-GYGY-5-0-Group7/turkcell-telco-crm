@@ -12,6 +12,7 @@ public record TariffClientResponse(
         String code,
         String name,
         BigDecimal monthlyFee,
-        String currency
+        String currency,
+        int version
 ) {
 }

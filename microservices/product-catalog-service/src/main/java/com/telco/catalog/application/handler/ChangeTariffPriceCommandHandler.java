@@ -26,7 +26,7 @@ import java.util.Map;
 public class ChangeTariffPriceCommandHandler
         implements CommandHandler<ChangeTariffPriceCommand, TariffResponse> {
 
-    private static final String AGGREGATE_TYPE = "Tariff";
+    private static final String AGGREGATE_TYPE = "tariff";
     private static final String EVENT_TYPE = "tariff.price-changed.v1";
 
     private final TariffRepository tariffRepository;

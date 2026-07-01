@@ -5,6 +5,7 @@ import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.event.OrderCancelledEvent;
 import com.telco.order.domain.model.Order;
 import com.telco.order.infrastructure.persistence.OrderRepository;
+import com.telco.order.infrastructure.persistence.SagaStateRepository;
 import com.telco.platform.common.exception.AccessDeniedException;
 import com.telco.platform.common.exception.CommonErrorCode;
 import com.telco.platform.common.exception.ResourceNotFoundException;
@@ -16,21 +17,27 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Cancels a PENDING order. Enforces ownership: CUSTOMER callers may only cancel their own orders.
- * The PENDING -> CANCELLED state transition is enforced by {@link Order#cancel()}.
- * Publishes {@code order.cancelled.v1}.
+ * Cancels an order. Enforces ownership: CUSTOMER callers may only cancel their own orders; system
+ * callers ({@code callerIsAdmin=true}) bypass the guard for saga compensation. The legal source
+ * states (PENDING or CONFIRMED -> CANCELLED) are enforced by {@link Order#cancel()}; illegal
+ * transitions raise {@link com.telco.platform.common.exception.BusinessRuleException} (-> 422).
+ * Publishes {@code order.cancelled.v1} and advances saga_state to COMPENSATED/CANCELLED.
  */
 @Component
 public class CancelOrderCommandHandler implements CommandHandler<CancelOrderCommand, OrderResponse> {
 
-    private static final String AGGREGATE_TYPE = "Order";
+    private static final String OUTBOX_AGGREGATE_TYPE = "order";
     private static final String EVENT_TYPE = "order.cancelled.v1";
 
     private final OrderRepository orderRepository;
+    private final SagaStateRepository sagaStateRepository;
     private final OutboxService outboxService;
 
-    public CancelOrderCommandHandler(OrderRepository orderRepository, OutboxService outboxService) {
+    public CancelOrderCommandHandler(OrderRepository orderRepository,
+                                     SagaStateRepository sagaStateRepository,
+                                     OutboxService outboxService) {
         this.orderRepository = orderRepository;
+        this.sagaStateRepository = sagaStateRepository;
         this.outboxService = outboxService;
     }
 
@@ -49,8 +56,15 @@ public class CancelOrderCommandHandler implements CommandHandler<CancelOrderComm
         order.cancel();
         orderRepository.save(order);
 
+        // Terminate the saga: cancellation is the compensated/terminal path.
+        sagaStateRepository.findByOrderId(order.getId()).ifPresent(saga -> {
+            saga.advance("COMPENSATED", "CANCELLED",
+                    command.reason() == null ? null : "{\"reason\":\"" + command.reason() + "\"}");
+            sagaStateRepository.save(saga);
+        });
+
         outboxService.publish(
-                AGGREGATE_TYPE,
+                OUTBOX_AGGREGATE_TYPE,
                 order.getId().toString(),
                 EVENT_TYPE,
                 new OrderCancelledEvent(

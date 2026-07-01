@@ -19,6 +19,7 @@ public class UpdateCustomerCommandHandler
         implements CommandHandler<UpdateCustomerCommand, CustomerResponse> {
 
     private static final String AGGREGATE_TYPE = "Customer";
+    private static final String OUTBOX_AGGREGATE_TYPE = "customer";
     private static final String EVENT_TYPE = "customer.updated.v1";
 
     private final CustomerRepository customers;
@@ -41,7 +42,7 @@ public class UpdateCustomerCommandHandler
         customers.save(customer);
 
         String id = customer.getId().toString();
-        outbox.publish(AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerUpdatedV1(
+        outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerUpdatedV1(
                 id, customer.getFirstName(), customer.getLastName(), Instant.now().toEpochMilli()));
 
         audit.log("CUSTOMER_UPDATED", AGGREGATE_TYPE, id, null);

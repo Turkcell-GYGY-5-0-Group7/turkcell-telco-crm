@@ -72,7 +72,7 @@ class ApproveKycCommandHandlerTest {
         var response = handler.handle(new ApproveKycCommand(customer.getId()));
 
         assertThat(response.status()).isEqualTo("ACTIVE");
-        verify(outbox).publish(eq("Customer"), eq(customer.getId().toString()),
+        verify(outbox).publish(eq("customer"), eq(customer.getId().toString()),
                 eq("customer.kyc-approved.v1"), any());
         verify(audit).log(eq("CUSTOMER_KYC_APPROVED"), eq("Customer"),
                 eq(customer.getId().toString()), any());

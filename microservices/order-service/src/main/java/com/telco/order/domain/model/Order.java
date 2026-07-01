@@ -80,21 +80,26 @@ public class Order {
     /**
      * Adds an item to this order. Callers use this to build the item list before persisting.
      */
-    public OrderItem addItem(UUID tariffId, String tariffName, BigDecimal unitPrice, int quantity) {
-        OrderItem item = OrderItem.create(this, tariffId, tariffName, unitPrice, quantity);
+    public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
+                             BigDecimal unitPrice, int quantity) {
+        OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName, unitPrice, quantity);
         items.add(item);
         return item;
     }
 
     /**
      * Transitions this order to {@link OrderStatus#CANCELLED}.
-     * Only PENDING orders may be cancelled; any other status triggers {@link BusinessRuleException}.
+     *
+     * <p>Allowed from PENDING (customer cancellation of an unpaid order) or CONFIRMED (saga
+     * compensation after a post-payment failure, e.g. {@code payment.refunded.v1}). The terminal
+     * states FULFILLED and FAILED may never be cancelled; any disallowed source status triggers
+     * {@link BusinessRuleException}.
      */
     public void cancel() {
-        if (this.status != OrderStatus.PENDING) {
+        if (this.status != OrderStatus.PENDING && this.status != OrderStatus.CONFIRMED) {
             throw new BusinessRuleException(
                     "Cannot cancel order in status: " + this.status.name()
-                            + ". Only PENDING orders may be cancelled.");
+                            + ". Only PENDING or CONFIRMED orders may be cancelled.");
         }
         this.status = OrderStatus.CANCELLED;
         this.updatedAt = Instant.now();
@@ -110,8 +115,34 @@ public class Order {
         this.updatedAt = Instant.now();
     }
 
-    /** Transitions this order to {@link OrderStatus#FAILED} (used by saga on payment failure). */
+    /**
+     * Transitions this order to {@link OrderStatus#FULFILLED} (terminal success, used by saga on
+     * {@code subscription.activated.v1}). Only a CONFIRMED order may be fulfilled; any other status
+     * triggers {@link BusinessRuleException}.
+     */
+    public void fulfill() {
+        if (this.status != OrderStatus.CONFIRMED) {
+            throw new BusinessRuleException(
+                    "Cannot fulfill order in status: " + this.status.name()
+                            + ". Only CONFIRMED orders may be fulfilled.");
+        }
+        this.status = OrderStatus.FULFILLED;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Transitions this order to {@link OrderStatus#FAILED} (used by saga on payment failure).
+     *
+     * <p>Allowed only from PENDING or CONFIRMED (an in-flight order whose saga aborts). The terminal
+     * states FULFILLED, FAILED and CANCELLED may never be failed; any disallowed source status
+     * triggers {@link BusinessRuleException}.
+     */
     public void fail() {
+        if (this.status != OrderStatus.PENDING && this.status != OrderStatus.CONFIRMED) {
+            throw new BusinessRuleException(
+                    "Cannot fail order in status: " + this.status.name()
+                            + ". Only PENDING or CONFIRMED orders may be failed.");
+        }
         this.status = OrderStatus.FAILED;
         this.updatedAt = Instant.now();
     }
