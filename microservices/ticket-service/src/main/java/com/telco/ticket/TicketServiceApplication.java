@@ -2,9 +2,10 @@ package com.telco.ticket;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
-/** ticket-service (CQRS+Mediator; PostgreSQL). Skeleton only. */
 @SpringBootApplication
+@EnableScheduling
 public class TicketServiceApplication {
 
     public static void main(String[] args) {

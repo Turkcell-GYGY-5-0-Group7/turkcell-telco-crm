@@ -12,6 +12,8 @@ import java.util.UUID;
  */
 public record SuspendSubscriptionCommand(
         UUID subscriptionId,
-        String reason
+        String reason,
+        String callerUserId,
+        boolean callerIsAdmin
 ) implements Command<UUID> {
 }

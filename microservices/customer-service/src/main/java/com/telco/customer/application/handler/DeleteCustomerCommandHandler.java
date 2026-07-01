@@ -3,7 +3,7 @@ package com.telco.customer.application.handler;
 import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.DeleteCustomerCommand;
 import com.telco.customer.domain.Customer;
-import com.telco.customer.infrastructure.CustomerRepository;
+import com.telco.customer.infrastructure.persistence.CustomerRepository;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.cqrs.Unit;

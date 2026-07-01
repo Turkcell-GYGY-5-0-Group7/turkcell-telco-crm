@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "QuotaThresholdReachedV1",
+  "namespace": "com.telco.platform.events.usage",
+  "doc": "Emitted once per period when 80% quota is consumed (quota.threshold-reached.v1). Producer: usage-service.",
+  "fields": [
+    { "name": "subscriptionId", "type": "string" },
+    { "name": "quotaId", "type": "string" },
+    { "name": "usageType", "type": "string", "doc": "VOICE, SMS, DATA, or ALL for aggregate threshold." },
+    { "name": "reachedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

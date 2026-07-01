@@ -1,6 +1,7 @@
 package com.telco.subscription.application.handler;
 
 import com.telco.platform.common.api.PageResult;
+import com.telco.platform.common.exception.AccessDeniedException;
 import com.telco.platform.cqrs.QueryHandler;
 import com.telco.subscription.application.dto.SubscriptionResponse;
 import com.telco.subscription.application.query.GetSubscriptionsByCustomerQuery;
@@ -22,6 +23,11 @@ public class GetSubscriptionsByCustomerQueryHandler
 
     @Override
     public PageResult<SubscriptionResponse> handle(GetSubscriptionsByCustomerQuery query) {
+        if (!query.callerIsAdmin()
+                && !query.customerId().toString().equals(query.callerUserId())) {
+            throw new AccessDeniedException("Cannot list subscriptions for another customer");
+        }
+
         PageRequest pageable = PageRequest.of(query.page(), query.size());
         Page<SubscriptionResponse> page = subscriptionRepository
                 .findByCustomerId(query.customerId(), pageable)

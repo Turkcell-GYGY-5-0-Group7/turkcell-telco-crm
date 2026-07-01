@@ -71,4 +71,51 @@
         </dependencies>
     </dependencyManagement>
 
+    <build>
+        <plugins>
+            <!--
+                JaCoCo instruments bytecode before Surefire (prepare-agent) and generates the
+                per-service XML report after verify (report). The check goal is intentionally
+                omitted here: enforcement is done by madrapps/jacoco-report in CI so that
+                skeleton services with no tests yet do not fail local builds.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <configuration>
+                    <excludes>
+                        <!-- Boot entry points carry no testable logic -->
+                        <exclude>**/*Application.class</exclude>
+                        <!-- Spring config/security config classes (wiring, not logic) -->
+                        <exclude>**/*Config.class</exclude>
+                        <exclude>**/*SecurityConfig.class</exclude>
+                        <exclude>**/*AutoConfiguration.class</exclude>
+                        <!-- Command, query, and event records are data carriers with no branch logic -->
+                        <exclude>**/application/command/**</exclude>
+                        <exclude>**/application/query/**</exclude>
+                        <exclude>**/application/event/**</exclude>
+                        <!-- Response/request DTO records: generated accessors only, no logic -->
+                        <exclude>**/application/dto/**</exclude>
+                    </excludes>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>jacoco-prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>jacoco-report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

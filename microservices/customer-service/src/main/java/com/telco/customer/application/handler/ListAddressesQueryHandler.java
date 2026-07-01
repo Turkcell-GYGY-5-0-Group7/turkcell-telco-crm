@@ -2,8 +2,8 @@ package com.telco.customer.application.handler;
 
 import com.telco.customer.application.dto.AddressResponse;
 import com.telco.customer.application.query.ListAddressesQuery;
-import com.telco.customer.infrastructure.AddressRepository;
-import com.telco.customer.infrastructure.CustomerRepository;
+import com.telco.customer.infrastructure.persistence.AddressRepository;
+import com.telco.customer.infrastructure.persistence.CustomerRepository;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.stereotype.Component;

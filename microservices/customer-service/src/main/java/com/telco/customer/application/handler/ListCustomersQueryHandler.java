@@ -3,7 +3,7 @@ package com.telco.customer.application.handler;
 import com.telco.customer.application.dto.CustomerResponse;
 import com.telco.customer.application.query.ListCustomersQuery;
 import com.telco.customer.domain.Customer;
-import com.telco.customer.infrastructure.CustomerRepository;
+import com.telco.customer.infrastructure.persistence.CustomerRepository;
 import com.telco.platform.common.api.PageResult;
 import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.data.domain.Page;

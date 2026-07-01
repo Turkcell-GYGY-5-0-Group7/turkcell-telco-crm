@@ -34,8 +34,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * <p>Boots the full Spring context (real Mediator pipeline + TransactionBehavior, Spring Security,
  * Flyway schema + MSISDN seed, real JDBC outbox) against a Testcontainers Postgres, and drives the
  * REST surface with JWTs issued by {@link JwtService}. Asserts state machine transitions, illegal
- * transitions (-> 4xx), reads (incl. a multi-subscription customer and 404), and the
- * subscription.* outbox emissions.
+ * transitions (-> 4xx), ownership enforcement (-> 403), reads, and outbox emissions.
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -74,7 +73,9 @@ class SubscriptionLifecycleIntegrationTest {
     int port;
 
     private RestClient client;
+    private UUID customerId;
     private String customerToken;
+    private String otherCustomerToken;
 
     @BeforeEach
     void setUp() {
@@ -88,14 +89,17 @@ class SubscriptionLifecycleIntegrationTest {
                 .defaultStatusHandler(HttpStatusCode::isError, (req, res) -> { /* never throw */ })
                 .build();
 
-        // Subject is a UUID, matching Keycloak's subject claim (the audit writer parses it as a UUID).
-        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
+        // Subject is a UUID matching Keycloak's sub claim. The same UUID is used as customerId
+        // so that ownership checks pass for this customer's own subscriptions.
+        customerId = UUID.randomUUID();
+        customerToken = jwtService.issue(customerId.toString(), Set.of("CUSTOMER"));
+        otherCustomerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
     }
 
-    /** Activates a subscription directly via the mediator (the internal endpoint path is covered elsewhere). */
-    private UUID activate(UUID customerId) {
+    /** Activates a subscription directly via the mediator (bypassing the internal HTTP endpoint). */
+    private UUID activate(UUID ownerId) {
         return mediator.send(new ActivateSubscriptionCommand(
-                UUID.randomUUID(), customerId, "TARIFF_BASIC", 1));
+                UUID.randomUUID(), ownerId, "TARIFF_BASIC", 1));
     }
 
     private long outboxCount(String eventType, UUID aggregateId) {
@@ -112,15 +116,14 @@ class SubscriptionLifecycleIntegrationTest {
     // --- 9.3.1 internal activation endpoint ---
 
     @Test
-    void post_subscriptions_activates_and_emits_activated_event() {
-        UUID customerId = UUID.randomUUID();
+    void post_internal_subscriptions_activates_and_emits_activated_event() {
+        UUID cid = UUID.randomUUID();
         ResponseEntity<Map<String, Object>> response = client.post()
-                .uri("/api/v1/subscriptions")
-                .header("Authorization", "Bearer " + customerToken)
+                .uri("/internal/subscriptions")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(Map.of(
                         "orderId", UUID.randomUUID().toString(),
-                        "customerId", customerId.toString(),
+                        "customerId", cid.toString(),
                         "tariffCode", "TARIFF_BASIC",
                         "tariffVersion", 1))
                 .retrieve()
@@ -137,7 +140,7 @@ class SubscriptionLifecycleIntegrationTest {
 
     @Test
     void suspend_then_reactivate_then_terminate_transitions_and_emits_events() {
-        UUID subscriptionId = activate(UUID.randomUUID());
+        UUID subscriptionId = activate(customerId);
 
         // suspend
         assertThat(post("/api/v1/subscriptions/" + subscriptionId + "/suspend",
@@ -169,7 +172,7 @@ class SubscriptionLifecycleIntegrationTest {
 
     @Test
     void reactivate_active_subscription_is_rejected_4xx() {
-        UUID subscriptionId = activate(UUID.randomUUID());
+        UUID subscriptionId = activate(customerId);
         ResponseEntity<Map<String, Object>> response =
                 post("/api/v1/subscriptions/" + subscriptionId + "/reactivate", null);
         assertThat(response.getStatusCode().is4xxClientError()).isTrue();
@@ -178,7 +181,7 @@ class SubscriptionLifecycleIntegrationTest {
 
     @Test
     void terminate_twice_is_rejected_4xx() {
-        UUID subscriptionId = activate(UUID.randomUUID());
+        UUID subscriptionId = activate(customerId);
         assertThat(post("/api/v1/subscriptions/" + subscriptionId + "/terminate", null)
                 .getStatusCode()).isEqualTo(HttpStatus.OK);
         ResponseEntity<Map<String, Object>> second =
@@ -188,7 +191,7 @@ class SubscriptionLifecycleIntegrationTest {
 
     @Test
     void lifecycle_endpoint_requires_authentication_401() {
-        UUID subscriptionId = activate(UUID.randomUUID());
+        UUID subscriptionId = activate(customerId);
         ResponseEntity<String> response = client.post()
                 .uri("/api/v1/subscriptions/" + subscriptionId + "/suspend")
                 .retrieve()
@@ -196,11 +199,27 @@ class SubscriptionLifecycleIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
+    // --- 9.3.2 ownership enforcement (IDOR guard) ---
+
+    @Test
+    void suspend_another_customers_subscription_is_rejected_403() {
+        UUID subscriptionId = activate(customerId);
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/subscriptions/" + subscriptionId + "/suspend")
+                .header("Authorization", "Bearer " + otherCustomerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("reason", "HACK"))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(status(subscriptionId)).isEqualTo("ACTIVE");
+    }
+
     // --- 9.3.3 reads ---
 
     @Test
     void get_subscription_returns_status_msisdn_tariff() {
-        UUID subscriptionId = activate(UUID.randomUUID());
+        UUID subscriptionId = activate(customerId);
         ResponseEntity<Map<String, Object>> response = client.get()
                 .uri("/api/v1/subscriptions/" + subscriptionId)
                 .header("Authorization", "Bearer " + customerToken)
@@ -216,6 +235,17 @@ class SubscriptionLifecycleIntegrationTest {
     }
 
     @Test
+    void get_another_customers_subscription_is_rejected_403() {
+        UUID subscriptionId = activate(customerId);
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/api/v1/subscriptions/" + subscriptionId)
+                .header("Authorization", "Bearer " + otherCustomerToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    @Test
     void get_missing_subscription_returns_404() {
         ResponseEntity<Map<String, Object>> response = client.get()
                 .uri("/api/v1/subscriptions/" + UUID.randomUUID())
@@ -227,7 +257,6 @@ class SubscriptionLifecycleIntegrationTest {
 
     @Test
     void customer_with_multiple_subscriptions_returns_all() {
-        UUID customerId = UUID.randomUUID();
         activate(customerId);
         activate(customerId);
         activate(customerId);
@@ -247,6 +276,17 @@ class SubscriptionLifecycleIntegrationTest {
         assertThat(content).hasSize(3);
     }
 
+    @Test
+    void list_another_customers_subscriptions_is_rejected_403() {
+        activate(customerId);
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/api/v1/subscriptions?customerId=" + customerId + "&page=0&size=20")
+                .header("Authorization", "Bearer " + otherCustomerToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
     private ResponseEntity<Map<String, Object>> post(String uri, Map<String, Object> body) {
         var spec = client.post()
                 .uri(uri)
@@ -257,8 +297,7 @@ class SubscriptionLifecycleIntegrationTest {
         return spec.retrieve().toEntity(MAP_TYPE);
     }
 
-    @SuppressWarnings("unchecked")
     private static Object data(ResponseEntity<Map<String, Object>> response) {
-        return ((Map<String, Object>) response.getBody()).get("data");
+        return response.getBody().get("data");
     }
 }

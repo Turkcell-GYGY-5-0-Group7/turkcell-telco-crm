@@ -2,7 +2,7 @@ package com.telco.identity.application.handler;
 
 import com.telco.identity.application.dto.UserResponse;
 import com.telco.identity.application.query.ListUsersQuery;
-import com.telco.identity.infrastructure.UserRepository;
+import com.telco.identity.infrastructure.persistence.UserRepository;
 import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.stereotype.Component;
 

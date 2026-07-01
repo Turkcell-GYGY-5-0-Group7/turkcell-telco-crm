@@ -5,15 +5,32 @@ server:
   port: 9010
 
 spring:
+  application:
+    name: ticket-service
   datasource:
     url: ${TICKET_DB_URL:jdbc:postgresql://localhost:5432/ticket_db}
     username: ${TICKET_DB_USER:ticket}
     password: ${TICKET_DB_PASSWORD:ticket}
+    driver-class-name: org.postgresql.Driver
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: ticket-service
+      auto-offset-reset: earliest
 
 security:
   oauth2:
     resourceserver:
       jwt:
         jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+ticket:
+  sla-breach-check-ms: 300000

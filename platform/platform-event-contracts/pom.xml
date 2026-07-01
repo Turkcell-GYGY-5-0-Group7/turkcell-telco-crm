@@ -88,6 +88,11 @@
                         <subscription.terminated.v1>${project.basedir}/src/main/avro/subscription-terminated.avsc</subscription.terminated.v1>
                         <subscription.activation-failed.v1>${project.basedir}/src/main/avro/subscription-activation-failed.avsc</subscription.activation-failed.v1>
                         <invoice.generated.v1>${project.basedir}/src/main/avro/invoice-generated.avsc</invoice.generated.v1>
+                        <cdr.recorded.v1>${project.basedir}/src/main/avro/cdr-recorded.avsc</cdr.recorded.v1>
+                        <usage.recorded.v1>${project.basedir}/src/main/avro/usage-recorded.avsc</usage.recorded.v1>
+                        <quota.threshold-reached.v1>${project.basedir}/src/main/avro/quota-threshold-reached.avsc</quota.threshold-reached.v1>
+                        <quota.exceeded.v1>${project.basedir}/src/main/avro/quota-exceeded.avsc</quota.exceeded.v1>
+                        <usage.aggregated.v1>${project.basedir}/src/main/avro/usage-aggregated.avsc</usage.aggregated.v1>
                     </subjects>
                     <schemaType>AVRO</schemaType>
                     <compatibilityLevel>BACKWARD</compatibilityLevel>

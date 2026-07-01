@@ -1,6 +1,6 @@
 package com.telco.identity;
 
-import com.telco.identity.infrastructure.AuditLogRepository;
+import com.telco.identity.infrastructure.persistence.AuditLogRepository;
 import com.telco.identity.infrastructure.KeycloakAdminClient;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.platform.starter.security.JwtService;

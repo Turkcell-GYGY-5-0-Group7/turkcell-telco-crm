@@ -2,7 +2,7 @@ package com.telco.payment.application.handler;
 
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.query.GetPaymentByOrderQuery;
-import com.telco.payment.domain.repository.PaymentRepository;
+import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.platform.common.exception.CommonErrorCode;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.QueryHandler;

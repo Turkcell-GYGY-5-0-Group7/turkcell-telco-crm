@@ -11,6 +11,8 @@ import java.util.UUID;
  * <p>The REST entry point for this command is delivered by feature 9.3.
  */
 public record TerminateSubscriptionCommand(
-        UUID subscriptionId
+        UUID subscriptionId,
+        String callerUserId,
+        boolean callerIsAdmin
 ) implements Command<UUID> {
 }

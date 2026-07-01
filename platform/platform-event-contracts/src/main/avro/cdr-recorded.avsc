@@ -1,0 +1,13 @@
+{
+  "type": "record",
+  "name": "CdrRecordedV1",
+  "namespace": "com.telco.platform.events.usage",
+  "doc": "External CDR event produced by the CDR simulator (cdr-recorded.v1). Consumer: usage-service.",
+  "fields": [
+    { "name": "subscriptionId", "type": "string", "doc": "Subscription this CDR belongs to (UUID)." },
+    { "name": "type", "type": { "type": "enum", "name": "CdrType", "symbols": ["VOICE", "SMS", "DATA"] }, "doc": "Usage type." },
+    { "name": "quantity", "type": "long", "doc": "Quantity: seconds for VOICE, count for SMS, kilobytes for DATA." },
+    { "name": "occurredAt", "type": { "type": "long", "logicalType": "timestamp-millis" }, "doc": "When the usage occurred, epoch millis UTC." },
+    { "name": "cdrRef", "type": "string", "doc": "Unique CDR reference for idempotency (inbox key)." }
+  ]
+}

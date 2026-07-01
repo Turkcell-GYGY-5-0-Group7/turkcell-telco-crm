@@ -14,6 +14,8 @@ import java.util.UUID;
  * introduce an uncataloged event.
  */
 public record ReactivateSubscriptionCommand(
-        UUID subscriptionId
+        UUID subscriptionId,
+        String callerUserId,
+        boolean callerIsAdmin
 ) implements Command<UUID> {
 }

@@ -1,0 +1,13 @@
+# usage-service Docker Compose overrides (SPRING_PROFILES_ACTIVE=docker).
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/usage_db
+    username: usage
+    password: usage
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
