@@ -72,6 +72,19 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.FORBIDDEN, ex, request);
     }
 
+    // Spring Security's own AccessDeniedException (thrown by @PreAuthorize) has a different type
+    // from the platform's AccessDeniedException. Without this handler it falls through to
+    // handleUnexpected and returns 500 instead of 403.
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiResult<Object>> handleSecurityAccessDenied(
+            org.springframework.security.access.AccessDeniedException ex, HttpServletRequest request) {
+        String logId = logRecorder.record(ex, request.getRequestURI(), HttpStatus.FORBIDDEN.value(),
+                CommonErrorCode.ACCESS_DENIED.code());
+        ApiError error = new ApiError(CommonErrorCode.ACCESS_DENIED.code(), "Access denied",
+                null, metaFactory.traceId(), logId);
+        return respond(HttpStatus.FORBIDDEN, error, request);
+    }
+
     @ExceptionHandler(BusinessRuleException.class)
     public ResponseEntity<ApiResult<Object>> handleBusinessRule(BusinessRuleException ex, HttpServletRequest request) {
         return build(HttpStatus.UNPROCESSABLE_ENTITY, ex, request);

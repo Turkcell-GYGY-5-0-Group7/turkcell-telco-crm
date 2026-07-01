@@ -11,6 +11,41 @@ spring:
     password: ${BILLING_DB_PASSWORD:billing}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: billing-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 500
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  clients:
+    product-catalog-service:
+      url: ${PRODUCT_CATALOG_URL:http://localhost:9003}
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
+  billing:
+    tax-rate: "0.18"
+    due-days: 30
 
 security:
   oauth2:

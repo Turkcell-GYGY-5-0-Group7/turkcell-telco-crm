@@ -14,7 +14,8 @@ on:
 
 permissions:
   contents: read
-  security-events: write
+  security-events: write   # CodeQL SARIF upload
+  pull-requests: write     # JaCoCo coverage comment on PRs
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -119,3 +120,68 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:java-kotlin"
+
+  microservices-test:
+    name: Microservices - Test and Coverage
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # Platform SNAPSHOTs are not published to Maven Central; install them into the local
+      # repo so microservices can resolve starter dependencies. Tests are skipped here because
+      # platform tests already ran and passed in build-test.
+      - name: Install platform to local Maven repo
+        if: hashFiles('platform/pom.xml') != ''
+        working-directory: platform
+        run: mvn ${MAVEN_ARGS} install -DskipTests -Dspotbugs.skip=true -Dschema.registry.skip=true
+
+      # --fail-at-end lets every service run even if one fails, so all surefire reports
+      # and JaCoCo XMLs are generated before the job is marked failed.
+      - name: Run microservices tests with coverage
+        if: hashFiles('microservices/pom.xml') != ''
+        working-directory: microservices
+        run: mvn ${MAVEN_ARGS} verify --fail-at-end -Dspotbugs.skip=true -Dcheckstyle.skip=true
+
+      # Posts a coverage table as a PR comment. The min-coverage-overall gate (70%) fails the
+      # check if aggregate line coverage drops below the threshold; min-coverage-changed-files
+      # (60%) fails if changed files are not adequately covered by new or existing tests.
+      # Only runs on PRs; pushes to master get the artifact but not the comment.
+      - name: Post coverage report on PR
+        if: github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1.6.1
+        with:
+          paths: ${{ github.workspace }}/microservices/**/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 70
+          min-coverage-changed-files: 60
+          title: Coverage Report
+          update-comment: true
+
+      - name: Upload JaCoCo coverage reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: jacoco-coverage-reports
+          path: microservices/**/target/site/jacoco/jacoco.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload surefire and failsafe reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: microservices-test-reports
+          path: |
+            microservices/**/target/surefire-reports/**
+            microservices/**/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7

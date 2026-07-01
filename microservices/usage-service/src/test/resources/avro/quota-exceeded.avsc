@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "QuotaExceededV1",
+  "namespace": "com.telco.platform.events.usage",
+  "doc": "Emitted by usage-service when quota is fully exhausted (quota.exceeded.v1).",
+  "fields": [
+    { "name": "subscriptionId", "type": "string" },
+    { "name": "quotaId", "type": "string" },
+    { "name": "usageType", "type": "string" },
+    { "name": "exceededAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

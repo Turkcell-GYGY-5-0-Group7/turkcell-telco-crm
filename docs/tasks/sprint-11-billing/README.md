@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/6 | 2026-06-22 |
+| DONE | 6/6 | 2026-07-01 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -23,12 +23,12 @@ Covers FR-21, FR-22, FR-23, FR-24.
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 11.1 | Scaffold and Schema | TODO | [11.1-scaffold-and-schema.md](11.1-scaffold-and-schema.md) |
-| 11.2 | Inputs for Billing | TODO | [11.2-inputs-for-billing.md](11.2-inputs-for-billing.md) |
-| 11.3 | Bill-Run and Invoice Generation | TODO | [11.3-bill-run-and-invoice-generation.md](11.3-bill-run-and-invoice-generation.md) |
-| 11.4 | Payment Reconciliation | TODO | [11.4-payment-reconciliation.md](11.4-payment-reconciliation.md) |
-| 11.5 | Read API | TODO | [11.5-read-api.md](11.5-read-api.md) |
-| 11.6 | Tests | TODO | [11.6-tests.md](11.6-tests.md) |
+| 11.1 | Scaffold and Schema | DONE | [11.1-scaffold-and-schema.md](11.1-scaffold-and-schema.md) |
+| 11.2 | Inputs for Billing | DONE | [11.2-inputs-for-billing.md](11.2-inputs-for-billing.md) |
+| 11.3 | Bill-Run and Invoice Generation | DONE | [11.3-bill-run-and-invoice-generation.md](11.3-bill-run-and-invoice-generation.md) |
+| 11.4 | Payment Reconciliation | DONE | [11.4-payment-reconciliation.md](11.4-payment-reconciliation.md) |
+| 11.5 | Read API | DONE | [11.5-read-api.md](11.5-read-api.md) |
+| 11.6 | Tests | DONE | [11.6-tests.md](11.6-tests.md) |
 
 ## Sprint Deliverables
 

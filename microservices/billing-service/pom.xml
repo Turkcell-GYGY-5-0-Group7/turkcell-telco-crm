@@ -13,13 +13,18 @@
 
     <artifactId>billing-service</artifactId>
     <name>billing-service</name>
-    <description>Invoice generation and monthly bill-run (port 9007, Domain Orchestration). Skeleton
-        only - no business code.</description>
+    <description>Invoice generation, monthly bill-run, PDF rendering, and payment reconciliation
+        (port 9007, Domain Orchestration). Implements features 11.1-11.6: AC-02.</description>
 
     <dependencies>
+        <!-- Platform starters only (ADR-018). -->
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
         </dependency>
         <dependency>
             <groupId>com.telco.platform</groupId>
@@ -29,6 +34,22 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-observability</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-outbox</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-inbox</artifactId>
+        </dependency>
+
+        <!-- Security config (starter-security marks spring-boot-starter-security as optional). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- Web + validation + actuator. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
@@ -41,6 +62,33 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- Persistence: JPA + PostgreSQL + Flyway (ADR-006, ADR-016). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- Kafka for event consumers. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+
+        <!-- Centralized config + service discovery (ADR-010). -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-config</artifactId>
@@ -49,9 +97,58 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-netflix-eureka-client</artifactId>
         </dependency>
+
+        <!-- Avro event contracts (subscription, usage, payment, invoice events). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+        </dependency>
+
+        <!-- PDF rendering: OpenPDF (MIT-licensed iText fork). -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>2.0.3</version>
+        </dependency>
+
+        <!-- MinIO SDK for invoice PDF object storage. -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+            <version>8.5.12</version>
+        </dependency>
+
+        <!-- Test. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.6</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

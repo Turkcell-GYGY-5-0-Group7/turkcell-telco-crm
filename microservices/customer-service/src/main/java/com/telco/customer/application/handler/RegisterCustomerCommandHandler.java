@@ -5,7 +5,7 @@ import com.telco.customer.application.command.RegisterCustomerCommand;
 import com.telco.customer.application.dto.CustomerResponse;
 import com.telco.customer.application.event.CustomerRegisteredV1;
 import com.telco.customer.domain.Customer;
-import com.telco.customer.infrastructure.CustomerRepository;
+import com.telco.customer.infrastructure.persistence.CustomerRepository;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.outbox.OutboxService;
 import org.springframework.stereotype.Component;

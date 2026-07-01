@@ -3,7 +3,7 @@ package com.telco.payment.application.scheduler;
 import com.telco.payment.application.command.ChargePaymentCommand;
 import com.telco.payment.domain.Payment;
 import com.telco.payment.domain.PaymentStatus;
-import com.telco.payment.domain.repository.PaymentRepository;
+import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.platform.mediator.Mediator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

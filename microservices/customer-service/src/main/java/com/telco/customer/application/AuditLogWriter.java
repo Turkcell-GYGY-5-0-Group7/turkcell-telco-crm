@@ -3,7 +3,7 @@ package com.telco.customer.application;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.telco.customer.domain.AuditLog;
-import com.telco.customer.infrastructure.AuditLogRepository;
+import com.telco.customer.infrastructure.persistence.AuditLogRepository;
 import com.telco.platform.common.context.CorrelationContextHolder;
 import com.telco.platform.common.context.UserContextHolder;
 import org.slf4j.Logger;

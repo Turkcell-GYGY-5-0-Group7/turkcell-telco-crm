@@ -9,7 +9,7 @@ import com.telco.payment.domain.AttemptStatus;
 import com.telco.payment.domain.Payment;
 import com.telco.payment.domain.PaymentAttempt;
 import com.telco.payment.domain.PaymentStatus;
-import com.telco.payment.domain.repository.PaymentRepository;
+import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.payment.infrastructure.psp.ChargeResult;
 import com.telco.payment.infrastructure.psp.PspAdapter;
 import com.telco.payment.infrastructure.psp.PspException;

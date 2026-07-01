@@ -164,7 +164,7 @@ class SubscriptionIntegrationTest {
                 "SELECT msisdn FROM subscriptions WHERE id = ?", String.class, subscriptionId);
         long freeAfterAllocate = freeCount();
 
-        mediator.send(new TerminateSubscriptionCommand(subscriptionId));
+        mediator.send(new TerminateSubscriptionCommand(subscriptionId, "admin-test", true));
 
         // Subscription is TERMINATED.
         String status = jdbc.queryForObject(

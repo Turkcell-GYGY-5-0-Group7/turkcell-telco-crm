@@ -1,0 +1,14 @@
+{
+  "type": "record",
+  "name": "UsageRecordedV1",
+  "namespace": "com.telco.platform.events.usage",
+  "doc": "Emitted by usage-service when a CDR is applied to quota (usage.recorded.v1). Producer: usage-service.",
+  "fields": [
+    { "name": "usageRecordId", "type": "string" },
+    { "name": "subscriptionId", "type": "string" },
+    { "name": "type", "type": "string", "doc": "VOICE, SMS, or DATA." },
+    { "name": "quantity", "type": "long" },
+    { "name": "overage", "type": "boolean", "doc": "True if this usage was post-quota-exhaustion." },
+    { "name": "recordedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+  ]
+}

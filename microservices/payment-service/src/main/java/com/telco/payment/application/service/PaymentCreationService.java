@@ -1,7 +1,7 @@
 package com.telco.payment.application.service;
 
 import com.telco.payment.domain.Payment;
-import com.telco.payment.domain.repository.PaymentRepository;
+import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;

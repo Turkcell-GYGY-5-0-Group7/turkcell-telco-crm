@@ -10,6 +10,8 @@ import java.util.UUID;
 public record GetSubscriptionsByCustomerQuery(
         UUID customerId,
         int page,
-        int size
+        int size,
+        String callerUserId,
+        boolean callerIsAdmin
 ) implements Query<PageResult<SubscriptionResponse>> {
 }

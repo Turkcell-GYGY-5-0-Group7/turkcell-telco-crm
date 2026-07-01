@@ -47,6 +47,13 @@
             <artifactId>spring-webmvc</artifactId>
             <optional>true</optional>
         </dependency>
+        <!-- Spring Security AccessDeniedException handler. Optional so non-security services do not
+             pull spring-security-core transitively; present at runtime when starter-security is used. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>

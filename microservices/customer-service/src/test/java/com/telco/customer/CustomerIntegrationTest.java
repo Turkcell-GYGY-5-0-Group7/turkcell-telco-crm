@@ -1,38 +1,40 @@
 package com.telco.customer;
 
-import static io.restassured.RestAssured.given;
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.matchesPattern;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.notNullValue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import com.telco.customer.infrastructure.storage.DocumentStorage;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.platform.starter.security.JwtService;
-import io.restassured.builder.RequestSpecBuilder;
-import io.restassured.http.ContentType;
-import io.restassured.specification.RequestSpecification;
-import java.util.Set;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClient;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * Full-stack integration test for customer-service (feature 6.4.1, ADR-013).
@@ -60,6 +62,9 @@ class CustomerIntegrationTest {
     private static final String VALID_TCKN = "10000000146";
     private static final String INVALID_TCKN = "12345678901";
 
+    private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
+            new ParameterizedTypeReference<>() {};
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");
 
@@ -70,24 +75,17 @@ class CustomerIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
     }
 
-    @MockitoBean
-    OutboxService outboxService;
+    @MockitoBean OutboxService outboxService;
+    @MockitoBean DocumentStorage documentStorage;
 
-    @MockitoBean
-    DocumentStorage documentStorage;
+    @Autowired JwtService jwtService;
+    @Autowired JdbcTemplate jdbc;
 
-    @Autowired
-    JwtService jwtService;
+    @LocalServerPort int port;
 
-    @Autowired
-    JdbcTemplate jdbc;
-
-    @LocalServerPort
-    int port;
-
-    RequestSpecification spec;
-    String customerToken;
-    String adminToken;
+    private RestClient client;
+    private String customerToken;
+    private String adminToken;
 
     @BeforeEach
     void setUp() {
@@ -99,9 +97,9 @@ class CustomerIntegrationTest {
         customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
         adminToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("ADMIN"));
 
-        spec = new RequestSpecBuilder()
-                .setPort(port)
-                .setContentType(ContentType.JSON)
+        client = RestClient.builder()
+                .baseUrl("http://localhost:" + port)
+                .defaultStatusHandler(HttpStatusCode::isError, (req, res) -> { /* never throw */ })
                 .build();
 
         when(documentStorage.store(any(), any(), any())).thenReturn("kyc/doc.png");
@@ -111,38 +109,49 @@ class CustomerIntegrationTest {
 
     @Test
     void unauthenticated_request_returns_401() {
-        given(spec)
-                .post("/api/v1/customers")
-                .then()
-                .statusCode(401);
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/customers")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{}")
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     // --- FR-01: Customer registration ---
 
     @Test
     void registration_with_valid_tckn_returns_201_pending() {
-        given(spec)
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(registerBody("Ada", "Lovelace", VALID_TCKN))
-                .post("/api/v1/customers")
-                .then()
-                .statusCode(201)
-                .body("success", equalTo(true))
-                .body("data.status", equalTo("PENDING"))
-                .body("data.identityNumberMasked", matchesPattern("\\*+\\d{4}"))
-                .body("data.identityNumberMasked", not(containsString(VALID_TCKN)));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = data(response);
+        assertThat(data.get("status")).isEqualTo("PENDING");
+        String masked = (String) data.get("identityNumberMasked");
+        assertThat(masked).matches("\\*+\\d{4}");
+        assertThat(masked).doesNotContain(VALID_TCKN);
 
         verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), any());
     }
 
     @Test
     void registration_with_invalid_tckn_returns_400() {
-        given(spec)
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/customers")
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(registerBody("Test", "User", INVALID_TCKN))
-                .post("/api/v1/customers")
-                .then()
-                .statusCode(400);
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     // --- FR-03 (GET + PUT) ---
@@ -151,40 +160,50 @@ class CustomerIntegrationTest {
     void get_customer_returns_masked_pii() {
         String id = doRegister("Ada", "Lovelace", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/api/v1/customers/{id}", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .get("/api/v1/customers/" + id)
-                .then()
-                .statusCode(200)
-                .body("data.id", equalTo(id))
-                .body("data.firstName", equalTo("Ada"))
-                .body("data.identityNumberMasked", matchesPattern("\\*+\\d{4}"))
-                .body("data.identityNumberMasked", not(containsString(VALID_TCKN)));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = data(response);
+        assertThat(data.get("id")).isEqualTo(id);
+        assertThat(data.get("firstName")).isEqualTo("Ada");
+        String masked = (String) data.get("identityNumberMasked");
+        assertThat(masked).matches("\\*+\\d{4}");
+        assertThat(masked).doesNotContain(VALID_TCKN);
     }
 
     @Test
     void get_unknown_customer_returns_404() {
-        given(spec)
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/customers/{id}", UUID.randomUUID())
                 .header("Authorization", "Bearer " + customerToken)
-                .get("/api/v1/customers/" + UUID.randomUUID())
-                .then()
-                .statusCode(404);
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
 
     @Test
     void update_customer_returns_200_and_publishes_event() {
         String id = doRegister("Ada", "Lovelace", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> response = client.put()
+                .uri("/api/v1/customers/{id}", id)
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body("""
                         {"firstName": "Grace", "lastName": "Hopper", "dateOfBirth": "1985-12-09"}
                         """)
-                .put("/api/v1/customers/" + id)
-                .then()
-                .statusCode(200)
-                .body("data.firstName", equalTo("Grace"))
-                .body("data.lastName", equalTo("Hopper"));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<?, ?> data = data(response);
+        assertThat(data.get("firstName")).isEqualTo("Grace");
+        assertThat(data.get("lastName")).isEqualTo("Hopper");
 
         verify(outboxService).publish(eq("customer"), eq(id), eq("customer.updated.v1"), any());
     }
@@ -208,19 +227,20 @@ class CustomerIntegrationTest {
     void soft_delete_returns_200_and_subsequent_get_returns_404() {
         String id = doRegister("Edsger", "Dijkstra", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<String> deleteResponse = client.delete()
+                .uri("/api/v1/customers/{id}", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .delete("/api/v1/customers/" + id)
-                .then()
-                .statusCode(200);
+                .retrieve()
+                .toEntity(String.class);
+        assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
-        given(spec)
+        ResponseEntity<String> getResponse = client.get()
+                .uri("/api/v1/customers/{id}", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .get("/api/v1/customers/" + id)
-                .then()
-                .statusCode(404);
+                .retrieve()
+                .toEntity(String.class);
+        assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 
-        // Row retained with deleted_at set (GDPR/KVKK: soft-delete only).
         Integer count = jdbc.queryForObject(
                 "SELECT count(*) FROM customers WHERE id = CAST(? AS uuid) AND deleted_at IS NOT NULL",
                 Integer.class, id);
@@ -233,11 +253,15 @@ class CustomerIntegrationTest {
     void kyc_approve_without_admin_role_returns_403() {
         String id = doRegister("Alan", "Turing", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/customers/{id}/kyc/approve", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .post("/api/v1/customers/" + id + "/kyc/approve")
-                .then()
-                .statusCode(403);
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{}")
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
@@ -245,12 +269,16 @@ class CustomerIntegrationTest {
         String id = doRegister("Alan", "Turing", VALID_TCKN);
         doUploadDocument(id);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers/{id}/kyc/approve", id)
                 .header("Authorization", "Bearer " + adminToken)
-                .post("/api/v1/customers/" + id + "/kyc/approve")
-                .then()
-                .statusCode(200)
-                .body("data.status", equalTo("ACTIVE"));
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{}")
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(data(response).get("status")).isEqualTo("ACTIVE");
 
         verify(outboxService).publish(eq("customer"), eq(id), eq("customer.kyc-approved.v1"), any());
 
@@ -264,15 +292,18 @@ class CustomerIntegrationTest {
     void kyc_reject_with_admin_transitions_to_rejected_and_publishes_event() {
         String id = doRegister("Donald", "Knuth", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers/{id}/kyc/reject", id)
                 .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body("""
                         {"reason": "Document photo unreadable"}
                         """)
-                .post("/api/v1/customers/" + id + "/kyc/reject")
-                .then()
-                .statusCode(200)
-                .body("data.status", equalTo("REJECTED"));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(data(response).get("status")).isEqualTo("REJECTED");
 
         verify(outboxService).publish(eq("customer"), eq(id), eq("customer.kyc-rejected.v1"), any());
     }
@@ -283,33 +314,38 @@ class CustomerIntegrationTest {
     void adding_second_default_address_unsets_first() {
         String id = doRegister("Linus", "Torvalds", VALID_TCKN);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> first = client.post()
+                .uri("/api/v1/customers/{id}/addresses", id)
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(addressBody("Istiklal Cad. 1", "Istanbul", "Beyoglu", "34433", true))
-                .post("/api/v1/customers/" + id + "/addresses")
-                .then()
-                .statusCode(201)
-                .body("data.isDefault", equalTo(true));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(first).get("isDefault")).isEqualTo(true);
 
-        given(spec)
+        client.post()
+                .uri("/api/v1/customers/{id}/addresses", id)
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(addressBody("Bagdat Cad. 5", "Istanbul", "Kadikoy", "34710", true))
-                .post("/api/v1/customers/" + id + "/addresses")
-                .then()
-                .statusCode(201);
+                .retrieve()
+                .toEntity(String.class);
 
-        // Exactly one default must remain.
         Integer defaultCount = jdbc.queryForObject(
                 "SELECT count(*) FROM addresses WHERE customer_id = CAST(? AS uuid) AND is_default = true",
                 Integer.class, id);
         assertThat(defaultCount).isEqualTo(1);
 
-        given(spec)
+        ResponseEntity<Map<String, Object>> list = client.get()
+                .uri("/api/v1/customers/{id}/addresses", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .get("/api/v1/customers/" + id + "/addresses")
-                .then()
-                .statusCode(200)
-                .body("data.size()", equalTo(2));
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
+        @SuppressWarnings("unchecked")
+        java.util.List<?> dataList = (java.util.List<?>) list.getBody().get("data");
+        assertThat(dataList).hasSize(2);
     }
 
     // --- Document upload (FR-03, AC-01 step 2) ---
@@ -318,39 +354,54 @@ class CustomerIntegrationTest {
     void document_upload_returns_201_with_metadata() {
         String id = doRegister("Tim", "Berners-Lee", VALID_TCKN);
 
-        given(spec)
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new NamedByteArrayResource("fake-png-bytes".getBytes(), "id-card.png"));
+
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers/{id}/documents?type=ID_CARD", id)
                 .header("Authorization", "Bearer " + customerToken)
-                .contentType("multipart/form-data")
-                .multiPart("file", "id-card.png", "fake-png-bytes".getBytes(), "image/png")
-                .queryParam("type", "ID_CARD")
-                .post("/api/v1/customers/" + id + "/documents")
-                .then()
-                .statusCode(201)
-                .body("data.type", equalTo("ID_CARD"))
-                .body("data.fileRef", notNullValue());
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(body)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        Map<?, ?> data = data(response);
+        assertThat(data.get("type")).isEqualTo("ID_CARD");
+        assertThat(data.get("fileRef")).isNotNull();
     }
 
     // --- Helpers ---
 
+    @SuppressWarnings("unchecked")
+    private Map<?, ?> data(ResponseEntity<Map<String, Object>> response) {
+        return (Map<?, ?>) response.getBody().get("data");
+    }
+
     private String doRegister(String firstName, String lastName, String tckn) {
-        return given(spec)
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
                 .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body(registerBody(firstName, lastName, tckn))
-                .post("/api/v1/customers")
-                .then()
-                .statusCode(201)
-                .extract().path("data.id");
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        return data(response).get("id").toString();
     }
 
     private void doUploadDocument(String customerId) {
-        given(spec)
+        MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+        body.add("file", new NamedByteArrayResource("fake-pdf-bytes".getBytes(), "passport.pdf"));
+
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/customers/{id}/documents?type=PASSPORT", customerId)
                 .header("Authorization", "Bearer " + customerToken)
-                .contentType("multipart/form-data")
-                .multiPart("file", "passport.pdf", "fake-pdf-bytes".getBytes(), "application/pdf")
-                .queryParam("type", "PASSPORT")
-                .post("/api/v1/customers/" + customerId + "/documents")
-                .then()
-                .statusCode(201);
+                .contentType(MediaType.MULTIPART_FORM_DATA)
+                .body(body)
+                .retrieve()
+                .toEntity(String.class);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 
     private static String registerBody(String firstName, String lastName, String tckn) {
@@ -376,5 +427,19 @@ class CustomerIntegrationTest {
                     "isDefault": %b
                 }
                 """.formatted(line1, city, district, postalCode, isDefault);
+    }
+
+    private static final class NamedByteArrayResource extends ByteArrayResource {
+        private final String filename;
+
+        NamedByteArrayResource(byte[] bytes, String filename) {
+            super(bytes);
+            this.filename = filename;
+        }
+
+        @Override
+        public String getFilename() {
+            return filename;
+        }
     }
 }

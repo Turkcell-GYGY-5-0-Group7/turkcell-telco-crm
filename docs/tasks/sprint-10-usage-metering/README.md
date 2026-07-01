@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/7 | 2026-06-22 |
+| DONE | 7/7 | 2026-07-01 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -22,13 +22,13 @@ Covers FR-17, FR-18, FR-19, FR-20.
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 10.1 | Scaffold and Schema | TODO | [10.1-scaffold-and-schema.md](10.1-scaffold-and-schema.md) |
-| 10.2 | Quota Provisioning | TODO | [10.2-quota-provisioning.md](10.2-quota-provisioning.md) |
-| 10.3 | CDR Ingestion and Metering | TODO | [10.3-cdr-ingestion-and-metering.md](10.3-cdr-ingestion-and-metering.md) |
-| 10.4 | Thresholds and Overage | TODO | [10.4-thresholds-and-overage.md](10.4-thresholds-and-overage.md) |
-| 10.5 | Read API | TODO | [10.5-read-api.md](10.5-read-api.md) |
-| 10.6 | CDR Simulator | TODO | [10.6-cdr-simulator.md](10.6-cdr-simulator.md) |
-| 10.7 | Tests | TODO | [10.7-tests.md](10.7-tests.md) |
+| 10.1 | Scaffold and Schema | DONE | [10.1-scaffold-and-schema.md](10.1-scaffold-and-schema.md) |
+| 10.2 | Quota Provisioning | DONE | [10.2-quota-provisioning.md](10.2-quota-provisioning.md) |
+| 10.3 | CDR Ingestion and Metering | DONE | [10.3-cdr-ingestion-and-metering.md](10.3-cdr-ingestion-and-metering.md) |
+| 10.4 | Thresholds and Overage | DONE | [10.4-thresholds-and-overage.md](10.4-thresholds-and-overage.md) |
+| 10.5 | Read API | DONE | [10.5-read-api.md](10.5-read-api.md) |
+| 10.6 | CDR Simulator | DONE | [10.6-cdr-simulator.md](10.6-cdr-simulator.md) |
+| 10.7 | Tests | DONE | [10.7-tests.md](10.7-tests.md) |
 
 ## Sprint Deliverables
 

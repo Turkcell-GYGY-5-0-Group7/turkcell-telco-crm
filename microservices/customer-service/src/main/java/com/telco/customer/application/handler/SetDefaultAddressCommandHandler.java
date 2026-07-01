@@ -2,7 +2,7 @@ package com.telco.customer.application.handler;
 
 import com.telco.customer.application.command.SetDefaultAddressCommand;
 import com.telco.customer.domain.Address;
-import com.telco.customer.infrastructure.AddressRepository;
+import com.telco.customer.infrastructure.persistence.AddressRepository;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.cqrs.Unit;

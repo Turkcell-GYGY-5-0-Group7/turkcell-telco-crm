@@ -1,5 +1,6 @@
 package com.telco.subscription.application.handler;
 
+import com.telco.platform.common.exception.AccessDeniedException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.QueryHandler;
 import com.telco.subscription.application.dto.SubscriptionResponse;
@@ -24,6 +25,12 @@ public class GetSubscriptionQueryHandler
         Subscription subscription = subscriptionRepository.findById(query.subscriptionId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Subscription not found: " + query.subscriptionId()));
+
+        if (!query.callerIsAdmin()
+                && !subscription.getCustomerId().toString().equals(query.callerUserId())) {
+            throw new AccessDeniedException("Subscription does not belong to caller");
+        }
+
         return SubscriptionResponse.from(subscription);
     }
 }

@@ -4,7 +4,7 @@ import com.telco.payment.application.command.RefundPaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.event.PaymentRefundedEvent;
 import com.telco.payment.domain.Payment;
-import com.telco.payment.domain.repository.PaymentRepository;
+import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.payment.infrastructure.psp.PspAdapter;
 import com.telco.platform.common.exception.CommonErrorCode;
 import com.telco.platform.common.exception.ResourceNotFoundException;

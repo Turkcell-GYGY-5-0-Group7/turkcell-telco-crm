@@ -6,7 +6,7 @@ import com.telco.identity.application.dto.UserResponse;
 import com.telco.identity.application.event.UserCreatedV1;
 import com.telco.identity.domain.User;
 import com.telco.identity.infrastructure.KeycloakAdminClient;
-import com.telco.identity.infrastructure.UserRepository;
+import com.telco.identity.infrastructure.persistence.UserRepository;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.outbox.OutboxService;
 import org.springframework.stereotype.Component;

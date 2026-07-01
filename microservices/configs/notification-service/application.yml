@@ -6,6 +6,8 @@ server:
   port: 9009
 
 spring:
+  application:
+    name: notification-service
   data:
     mongodb:
       uri: ${NOTIFICATION_MONGO_URI:mongodb://localhost:27017/notification_db}
@@ -13,8 +15,21 @@ spring:
     url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_db}
     username: ${NOTIFICATION_DB_USER:notification}
     password: ${NOTIFICATION_DB_PASSWORD:notification}
+    driver-class-name: org.postgresql.Driver
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/platform
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: earliest
 
 security:
   oauth2:

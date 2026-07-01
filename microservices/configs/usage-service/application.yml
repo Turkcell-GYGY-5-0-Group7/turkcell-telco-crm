@@ -1,4 +1,4 @@
-# usage-service base config (port 9006, CQRS+Mediator, PostgreSQL+Redis).
+# usage-service base config (port 9006, CQRS+Mediator, PostgreSQL, write-heavy CDR consumer).
 # Per-env overrides in usage-service-{dev,test,staging,prod}.yml.
 
 server:
@@ -11,13 +11,41 @@ spring:
     password: ${USAGE_DB_PASSWORD:usage}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: usage-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 500
 
 security:
   oauth2:
     resourceserver:
       jwt:
         jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  clients:
+    product-catalog-service:
+      url: ${PRODUCT_CATALOG_URL:http://localhost:9003}
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true

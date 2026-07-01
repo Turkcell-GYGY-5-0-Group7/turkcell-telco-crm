@@ -7,6 +7,8 @@ import java.util.UUID;
 
 /** Returns a single subscription by its id; a missing id raises {@code ResourceNotFoundException} (-> 404). */
 public record GetSubscriptionQuery(
-        UUID subscriptionId
+        UUID subscriptionId,
+        String callerUserId,
+        boolean callerIsAdmin
 ) implements Query<SubscriptionResponse> {
 }

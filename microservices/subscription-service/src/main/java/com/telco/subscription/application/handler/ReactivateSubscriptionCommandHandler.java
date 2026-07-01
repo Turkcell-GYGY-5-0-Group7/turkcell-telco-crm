@@ -1,5 +1,6 @@
 package com.telco.subscription.application.handler;
 
+import com.telco.platform.common.exception.AccessDeniedException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.outbox.OutboxService;
@@ -50,6 +51,11 @@ public class ReactivateSubscriptionCommandHandler
         Subscription subscription = subscriptionRepository.findById(command.subscriptionId())
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Subscription not found: " + command.subscriptionId()));
+
+        if (!command.callerIsAdmin()
+                && !subscription.getCustomerId().toString().equals(command.callerUserId())) {
+            throw new AccessDeniedException("Subscription does not belong to caller");
+        }
 
         subscription.reactivate();
         subscriptionRepository.save(subscription);
