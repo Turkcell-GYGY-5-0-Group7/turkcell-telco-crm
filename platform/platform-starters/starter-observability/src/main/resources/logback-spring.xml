@@ -69,10 +69,15 @@
                 <label>
                     <pattern>job=telco-crm,service=${appName}</pattern>
                 </label>
+                <!--
+                  loki4j's <message> element expects a Logback Layout<ILoggingEvent>, not an
+                  Encoder. LogstashEncoder (an Encoder) cannot be embedded here — doing so causes
+                  Logback to fall back to PatternLayout with a null pattern, which produces a
+                  config ERROR and aborts the Spring context. Use a plain pattern instead; the
+                  CONSOLE appender provides the structured JSON for aggregation pipelines.
+                -->
                 <message>
-                    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                        <includeContext>false</includeContext>
-                    </encoder>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{spanId:-},%X{correlationId:-}] %logger{36} - %message%n</pattern>
                 </message>
             </format>
         </appender>
