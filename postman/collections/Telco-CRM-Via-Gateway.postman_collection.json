@@ -1,0 +1,2316 @@
+{
+  "info": {
+    "_postman_id": "c0llec710-0001-0000-0000-000000000001",
+    "name": "Telco CRM \u2014 Via Gateway",
+    "description": "All Telco CRM APIs routed through the API Gateway at {{gateway_url}}.\nTwo top-level folders: 'By Service' (one folder per microservice) and 'Journeys' (end-to-end chained flows).\n\nPre-requisite: run postman/scripts/setup-hosts.sh (macOS) or setup-hosts.ps1 (Windows) once, then select the 'Local - Gateway' environment.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "token_expires_at",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "customer_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "order_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subscription_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "invoice_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ticket_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tariff_code",
+      "value": "POSTPAID_BASIC",
+      "type": "string"
+    },
+    {
+      "key": "channel",
+      "value": "EMAIL",
+      "type": "default"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-refresh Keycloak token when missing or within 30 s of expiry.",
+          "const token     = pm.collectionVariables.get('access_token');",
+          "const expiresAt = parseInt(pm.collectionVariables.get('token_expires_at') || '0');",
+          "const now       = Date.now();",
+          "",
+          "if (!token || now > expiresAt) {",
+          "    const url      = pm.environment.get('keycloak_url');",
+          "    const realm    = pm.environment.get('keycloak_realm');",
+          "    const clientId = pm.environment.get('keycloak_client_id');",
+          "    const username = pm.environment.get('keycloak_username');",
+          "    const password = pm.environment.get('keycloak_password');",
+          "",
+          "    pm.sendRequest({",
+          "        url:    `${url}/realms/${realm}/protocol/openid-connect/token`,",
+          "        method: 'POST',",
+          "        header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "        body: {",
+          "            mode: 'urlencoded',",
+          "            urlencoded: [",
+          "                { key: 'grant_type', value: 'password' },",
+          "                { key: 'client_id',  value: clientId },",
+          "                { key: 'username',   value: username },",
+          "                { key: 'password',   value: password }",
+          "            ]",
+          "        }",
+          "    }, (err, res) => {",
+          "        if (!err && res.code === 200) {",
+          "            const json = res.json();",
+          "            pm.collectionVariables.set('access_token', json.access_token);",
+          "            pm.collectionVariables.set('token_expires_at', Date.now() + (json.expires_in - 30) * 1000);",
+          "        } else {",
+          "            console.warn('Token refresh failed:', err || res.status);",
+          "        }",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "_Auth",
+      "description": "Explicit token management. The collection pre-request script handles auto-refresh; use these only for manual inspection or troubleshooting.",
+      "item": [
+        {
+          "name": "Get Token (Keycloak password grant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "password"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{keycloak_client_id}}"
+                },
+                {
+                  "key": "username",
+                  "value": "{{keycloak_username}}"
+                },
+                {
+                  "key": "password",
+                  "value": "{{keycloak_password}}"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": [
+                "{{keycloak_url}}"
+              ],
+              "path": [
+                "realms",
+                "{{keycloak_realm}}",
+                "protocol",
+                "openid-connect",
+                "token"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('access_token', json.access_token);",
+                  "    pm.collectionVariables.set('token_expires_at', Date.now() + (json.expires_in - 30) * 1000);",
+                  "    pm.test('Token obtained', () => pm.expect(json.access_token).to.be.a('string'));",
+                  "} else {",
+                  "    pm.test('Token request failed', () => pm.expect.fail(JSON.stringify(json)));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "By Service",
+      "description": "All endpoints grouped by microservice. The gateway routes each path to the correct downstream service.",
+      "item": [
+        {
+          "name": "Identity",
+          "item": [
+            {
+              "name": "Get Current User",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users/{{user_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "users",
+                    "{{user_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Users (admin)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users?page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get User by ID",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users/{{user_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "{{user_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create User (admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"mehmet.yilmaz\",\n  \"email\": \"mehmet.yilmaz@telco.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('user_id', pm.response.json().data.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Assign Role (admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"roleNames\": [\n    \"ADMIN\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users/{{user_id}}/roles",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "{{user_id}}",
+                    "roles"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete User (admin)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/users/{{user_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "users",
+                    "{{user_id}}"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Customer",
+          "item": [
+            {
+              "name": "Register Customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"INDIVIDUAL\",\n  \"firstName\": \"Mehmet\",\n  \"lastName\": \"Demir\",\n  \"identityNumber\": \"12345678950\",\n  \"dateOfBirth\": \"1990-05-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('customer_id', pm.response.json().data.id);",
+                      "    pm.test('Customer created', () => pm.expect(pm.response.json().data.id).to.be.a('string'));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Customer",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Customers",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers?page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Customer",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"firstName\": \"Mehmet\",\n  \"lastName\": \"Demir-Updated\",\n  \"dateOfBirth\": \"1990-05-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Approve KYC (ops)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}/kyc/approve",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}",
+                    "kyc",
+                    "approve"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Reject KYC (ops)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Document mismatch\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}/kyc/reject",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}",
+                    "kyc",
+                    "reject"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Delete Customer (soft-delete)",
+              "request": {
+                "method": "DELETE",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Product Catalog",
+          "item": [
+            {
+              "name": "List Tariffs",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tariffs?page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tariffs"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Create Tariff (admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"code\": \"POSTPAID_BASIC\",\n  \"name\": \"Postpaid Basic\",\n  \"monthlyFee\": 149.99,\n  \"currency\": \"TRY\",\n  \"voiceMinutes\": 500,\n  \"smsLimit\": 200,\n  \"dataGb\": 10\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tariffs",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tariffs"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Addons for Tariff",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/addons",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "addons"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Order",
+          "item": [
+            {
+              "name": "Place Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customerId\": \"{{customer_id}}\",\n  \"items\": [\n    { \"tariffId\": \"{{tariff_id}}\", \"quantity\": 1 }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/orders",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('order_id', pm.response.json().data.id);",
+                      "    pm.test('Order placed', () => pm.expect(pm.response.json().data.status).to.equal('PENDING'));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Order",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/orders/{{order_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    "{{order_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Orders",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/orders/customer/{{customer_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "orders",
+                    "customer",
+                    "{{customer_id}}"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Subscription",
+          "item": [
+            {
+              "name": "Get Subscription",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions/{{subscription_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "{{subscription_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "List Subscriptions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions?page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Suspend Subscription",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Non-payment\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions/{{subscription_id}}/suspend",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "suspend"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Reactivate Subscription",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions/{{subscription_id}}/reactivate",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "reactivate"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Terminate Subscription",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Customer churn\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions/{{subscription_id}}/terminate",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "terminate"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usage",
+          "item": [
+            {
+              "name": "Get Quota (near-real-time)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/usage/subscriptions/{{subscription_id}}/quota",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usage",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "quota"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Get Usage History",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/usage/subscriptions/{{subscription_id}}/history?from=2026-07-01T00:00:00Z&to=2026-07-31T23:59:59Z&limit=50",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usage",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-07-01T00:00:00Z"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-07-31T23:59:59Z"
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "",
+                      "disabled": true
+                    },
+                    {
+                      "key": "limit",
+                      "value": "50"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Billing",
+          "item": [
+            {
+              "name": "List Invoices",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices?customerId={{customer_id}}&page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices"
+                  ],
+                  "query": [
+                    {
+                      "key": "customerId",
+                      "value": "{{customer_id}}"
+                    },
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const data = pm.response.json().data;",
+                      "if (data && data.content && data.content.length > 0) {",
+                      "    pm.collectionVariables.set('invoice_id', data.content[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Invoice",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices/{{invoice_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    "{{invoice_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Download Invoice PDF",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices/{{invoice_id}}/pdf",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    "{{invoice_id}}",
+                    "pdf"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Trigger Bill Run (admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"periodStart\": \"2026-07-01T00:00:00Z\",\n  \"periodEnd\": \"2026-07-31T23:59:59Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/billing/runs",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "billing",
+                    "runs"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment",
+          "item": [
+            {
+              "name": "Create Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"customerId\": \"{{customer_id}}\",\n  \"amount\": 149.99,\n  \"paymentRequestId\": \"pay-req-{{$randomUUID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/payments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('payment_id', pm.response.json().data.id);",
+                      "    pm.test('Payment created', () => pm.expect(pm.response.json().data.status).to.be.a('string'));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Payment",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/payments/{{payment_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{payment_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Refund Payment (ops)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reason\": \"Order cancelled\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/payments/{{payment_id}}/refund",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments",
+                    "{{payment_id}}",
+                    "refund"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Notification",
+          "item": [
+            {
+              "name": "Get Notification History",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/notifications/users/{{user_id}}/history?page=0&size=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "notifications",
+                    "users",
+                    "{{user_id}}",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "20"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Update Channel Preferences",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"optedIn\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/notifications/users/{{user_id}}/preferences/{{channel}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "notifications",
+                    "users",
+                    "{{user_id}}",
+                    "preferences",
+                    "{{channel}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Send Notification (internal)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"channel\": \"EMAIL\",\n  \"templateCode\": \"WELCOME\",\n  \"variables\": {\n    \"firstName\": \"Mehmet\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/notifications",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "notifications"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ticket",
+          "item": [
+            {
+              "name": "Open Ticket",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"subject\": \"Cannot access services\",\n  \"priority\": \"HIGH\",\n  \"category\": \"TECHNICAL\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('ticket_id', pm.response.json().data);",
+                      "    pm.test('Ticket opened', () => pm.expect(pm.response.json().data).to.be.a('string'));",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get Ticket",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Add Comment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"We are investigating this issue.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/comments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "comments"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Assign Ticket (agent)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"team\": \"TECHNICAL_SUPPORT\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/assign",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "assign"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "Resolve Ticket (agent)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/resolve",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "resolve"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Journeys",
+      "description": "End-to-end business flows. Each folder's requests are ordered to be run top-to-bottom. Test scripts chain IDs (customer_id \u2192 order_id \u2192 subscription_id etc.) automatically.",
+      "item": [
+        {
+          "name": "1. Customer Onboarding",
+          "description": "Register \u2192 KYC approve \u2192 list tariffs \u2192 place order \u2192 pay \u2192 verify subscription activated.\nRun requests in order. The collection token auto-refresh handles auth.",
+          "item": [
+            {
+              "name": "1.1 Register Customer",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"type\": \"INDIVIDUAL\",\n  \"firstName\": \"Mehmet\",\n  \"lastName\": \"Demir\",\n  \"identityNumber\": \"12345678950\",\n  \"dateOfBirth\": \"1990-05-15\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const id = pm.response.json().data.id;",
+                      "pm.collectionVariables.set('customer_id', id);",
+                      "console.log('customer_id set to', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.2 Approve KYC (ops)",
+              "request": {
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/customers/{{customer_id}}/kyc/approve",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "customers",
+                    "{{customer_id}}",
+                    "kyc",
+                    "approve"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('KYC approved', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.3 List Tariffs (pick one)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tariffs?page=0&size=5",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tariffs"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "5"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Tariffs returned', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json().data.content;",
+                      "if (items && items.length > 0) {",
+                      "    pm.collectionVariables.set('tariff_id', items[0].id);",
+                      "    pm.collectionVariables.set('tariff_code', items[0].code);",
+                      "    console.log('tariff_id set to', items[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.4 Place Order",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customerId\": \"{{customer_id}}\",\n  \"items\": [\n    { \"tariffId\": \"{{tariff_id}}\", \"quantity\": 1 }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/orders",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const id = pm.response.json().data.id;",
+                      "pm.collectionVariables.set('order_id', id);",
+                      "console.log('order_id set to', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.5 Create Payment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"customerId\": \"{{customer_id}}\",\n  \"amount\": 149.99,\n  \"paymentRequestId\": \"pay-req-{{$randomUUID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/payments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Payment created', () => pm.response.to.have.status(201));",
+                      "const id = pm.response.json().data.id;",
+                      "pm.collectionVariables.set('payment_id', id);",
+                      "console.log('payment_id set to', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.6 Verify Order Status (saga progress)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/orders/{{order_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orders",
+                    "{{order_id}}"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Order fetched', () => pm.response.to.have.status(200));",
+                      "console.log('Order status:', pm.response.json().data.status);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "1.7 List Subscriptions (confirm activation)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/subscriptions?page=0&size=5",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "subscriptions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "5"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json().data.content;",
+                      "if (items && items.length > 0) {",
+                      "    pm.collectionVariables.set('subscription_id', items[0].id);",
+                      "    console.log('subscription_id set to', items[0].id, 'status:', items[0].status);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2. Invoice & Payment",
+          "description": "Admin triggers bill-run \u2192 customer lists invoices \u2192 views invoice \u2192 pays \u2192 downloads PDF.",
+          "item": [
+            {
+              "name": "2.1 Trigger Bill Run (admin)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"periodStart\": \"2026-07-01T00:00:00Z\",\n  \"periodEnd\": \"2026-07-31T23:59:59Z\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/billing/runs",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "billing",
+                    "runs"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Bill run accepted', () => pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.2 List Invoices",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices?customerId={{customer_id}}&page=0&size=10",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices"
+                  ],
+                  "query": [
+                    {
+                      "key": "customerId",
+                      "value": "{{customer_id}}"
+                    },
+                    {
+                      "key": "page",
+                      "value": "0"
+                    },
+                    {
+                      "key": "size",
+                      "value": "10"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const items = pm.response.json().data.content;",
+                      "if (items && items.length > 0) {",
+                      "    pm.collectionVariables.set('invoice_id', items[0].id);",
+                      "    console.log('invoice_id set to', items[0].id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.3 Get Invoice Detail",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices/{{invoice_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    "{{invoice_id}}"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "2.4 Pay Invoice",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  },
+                  {
+                    "key": "Idempotency-Key",
+                    "value": "{{$guid}}"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"{{order_id}}\",\n  \"customerId\": \"{{customer_id}}\",\n  \"amount\": 149.99,\n  \"paymentRequestId\": \"pay-req-{{$randomUUID}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/payments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "payments"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if (pm.response.code === 201) {",
+                      "    pm.collectionVariables.set('payment_id', pm.response.json().data.id);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "2.5 Download Invoice PDF",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/invoices/{{invoice_id}}/pdf",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "invoices",
+                    "{{invoice_id}}",
+                    "pdf"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Usage Monitoring",
+          "description": "Check real-time quota then fetch CDR history with cursor pagination.",
+          "item": [
+            {
+              "name": "3.1 Get Current Quota",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/usage/subscriptions/{{subscription_id}}/quota",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usage",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "quota"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const q = pm.response.json().data;",
+                      "console.log('Quota remaining voice:', q.remainingVoiceMinutes, 'data:', q.remainingDataMb);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.2 Get Usage History (first page)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/usage/subscriptions/{{subscription_id}}/history?from=2026-07-01T00:00:00Z&to=2026-07-31T23:59:59Z&limit=20",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usage",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-07-01T00:00:00Z"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-07-31T23:59:59Z"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                      "const page = pm.response.json().data;",
+                      "if (page.hasNext && page.nextCursor) {",
+                      "    pm.collectionVariables.set('usage_cursor', page.nextCursor);",
+                      "    console.log('Next cursor:', page.nextCursor);",
+                      "}"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "3.3 Get Usage History (next page via cursor)",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/usage/subscriptions/{{subscription_id}}/history?from=2026-07-01T00:00:00Z&to=2026-07-31T23:59:59Z&limit=20&cursor={{usage_cursor}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "usage",
+                    "subscriptions",
+                    "{{subscription_id}}",
+                    "history"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-07-01T00:00:00Z"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-07-31T23:59:59Z"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    },
+                    {
+                      "key": "cursor",
+                      "value": "{{usage_cursor}}"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Support Ticket Flow",
+          "description": "Customer opens ticket \u2192 agent adds comment \u2192 assigns \u2192 resolves.",
+          "item": [
+            {
+              "name": "4.1 Open Ticket",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"subject\": \"Unexpected service interruption\",\n  \"priority\": \"HIGH\",\n  \"category\": \"TECHNICAL\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                      "const id = pm.response.json().data;",
+                      "pm.collectionVariables.set('ticket_id', id);",
+                      "console.log('ticket_id set to', id);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.2 Add Customer Comment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"This started happening yesterday afternoon, around 14:00 local time.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/comments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "comments"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "4.3 Assign to Agent (agent role)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"team\": \"TECHNICAL_SUPPORT\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/assign",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "assign"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "4.4 Add Agent Resolution Comment",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"Root cause identified: quota flag misconfiguration. Fixed and subscription refreshed.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/comments",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "comments"
+                  ]
+                }
+              }
+            },
+            {
+              "name": "4.5 Resolve Ticket (agent role)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}/resolve",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}",
+                    "resolve"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Ticket resolved', () => pm.response.to.have.status(200));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "4.6 Verify Ticket RESOLVED",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{gateway_url}}/api/v1/tickets/{{ticket_id}}",
+                  "host": [
+                    "{{gateway_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tickets",
+                    "{{ticket_id}}"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('Status RESOLVED', () => {",
+                      "    pm.expect(pm.response.json().data.status).to.equal('RESOLVED');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

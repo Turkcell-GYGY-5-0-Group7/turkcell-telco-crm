@@ -23,9 +23,17 @@ init: $(ENV_FILE) ## Create docker/.env from the template if missing
 up: init ## Start core infra (postgres, redis, kafka, schema-registry, kafka-connect)
 	$(COMPOSE) up -d
 
+.PHONY: platform
+platform: init ## Start core infra + Spring platform services (config-server, discovery-server, api-gateway)
+	$(COMPOSE) --profile platform up -d
+
+.PHONY: platform-build
+platform-build: init ## Build Docker images for Spring platform services (run once before 'make platform')
+	$(COMPOSE) --profile platform build
+
 .PHONY: up-all
-up-all: init ## Start everything (core + tools + observability + auth)
-	$(COMPOSE) --profile tools --profile observability --profile auth up -d
+up-all: init ## Start everything (core + platform + tools + observability + auth)
+	$(COMPOSE) --profile platform --profile tools --profile observability --profile auth up -d
 
 .PHONY: observability
 observability: init ## Start core + observability stack

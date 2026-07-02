@@ -4,3 +4,11 @@ spring:
     url: jdbc:postgresql://localhost:5432/identity_db
     username: identity
     password: identity
+
+# Keycloak Admin API: identity-service uses client-credentials via telco-gateway to provision users.
+keycloak:
+  admin:
+    server-url: http://localhost:8085
+    realm: telco-crm
+    client-id: telco-gateway
+    client-secret: local-dev-secret

@@ -5,7 +5,7 @@ spring:
     username: usage
     password: usage
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: localhost:29092
 
 telco:
   clients:
