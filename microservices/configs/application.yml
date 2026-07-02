@@ -16,8 +16,9 @@ management:
         enabled: true
 
 logging:
-  pattern:
-    console: '{"timestamp":"%d{yyyy-MM-dd HH:mm:ss.SSS}","level":"%p","service":"${spring.application.name}","traceId":"%X{traceId}","spanId":"%X{spanId}","correlationId":"%X{correlationId}","message":"%m"}%n'
+  level:
+    root: INFO
+    com.telco: INFO
 
 spring:
   cloud:
@@ -38,3 +39,47 @@ eureka:
     prefer-ip-address: true
     lease-renewal-interval-in-seconds: 10
     lease-expiration-duration-in-seconds: 30
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failure-rate-threshold: 50
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+    instances:
+      keycloak-admin:
+        base-config: default
+      minio:
+        base-config: default
+        wait-duration-in-open-state: 60s
+      product-catalog-service:
+        base-config: default
+      notification-channel:
+        base-config: default
+        failure-rate-threshold: 30
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 500ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+    instances:
+      keycloak-admin:
+        base-config: default
+      minio:
+        base-config: default
+        max-attempts: 2
+  bulkhead:
+    configs:
+      default:
+        max-concurrent-calls: 20
+        max-wait-duration: 0
+    instances:
+      notification-channel:
+        base-config: default
+        max-concurrent-calls: 10

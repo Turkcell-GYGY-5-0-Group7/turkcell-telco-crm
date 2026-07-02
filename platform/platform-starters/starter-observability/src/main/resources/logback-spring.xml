@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Platform-wide structured logging configuration (ADR-012, ADR-021, NFR-07, NFR-08).
+
+  Trace context notes (13.1.2)
+  ============================
+  CorrelationFilter (CorrelationFilter.java) writes traceId and correlationId to MDC on every
+  request (lines 51-52).  Micrometer Tracing with the OTel bridge writes traceId and spanId to
+  MDC before CorrelationFilter executes; CorrelationFilter reads that traceId first and only falls
+  back to correlationId when no tracer is active (resolveTraceId()).  The result is that traceId,
+  spanId, and correlationId are always present in MDC.
+
+  LogstashEncoder serialises the complete MDC map as JSON fields automatically, so no explicit
+  mdcField declarations are required; traceId, spanId, and correlationId appear on every log line.
+
+  PII masking note
+  ================
+  %mask and %maskEx converters apply PII masking to Logback pattern layouts.  LogstashEncoder
+  serialises the raw Logback message via its own JsonProvider chain and does not process pattern
+  conversion words.  The primary masking backstop for JSON output is Layer A (@Sensitive
+  ObjectMapper, ADR-021); the converters below are declared so that services which add their own
+  pattern-based appenders can reference %mask and %maskEx without additional boilerplate.
+-->
+<configuration>
+
+    <!-- PII masking converters (ADR-021 Layer B) registered for any pattern-based appender. -->
+    <conversionRule conversionWord="mask"
+                    class="com.telco.platform.starter.observability.logging.PiiMaskingConverter"/>
+    <conversionRule conversionWord="maskEx"
+                    class="com.telco.platform.starter.observability.logging.PiiMaskingThrowableConverter"/>
+
+    <!-- Spring Boot context properties injected at startup. -->
+    <springProperty scope="context" name="appName"
+                    source="spring.application.name" defaultValue="telco-service"/>
+    <springProperty scope="context" name="lokiUrl"
+                    source="loki.url" defaultValue="http://localhost:3100/loki/api/v1/push"/>
+
+    <!--
+      Console appender: structured JSON via LogstashEncoder.
+      The encoder writes the full MDC map (traceId, spanId, correlationId, plus any other keys)
+      as first-class JSON fields on every log line.
+    -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeContext>false</includeContext>
+        </encoder>
+    </appender>
+
+    <!--
+      Loki appender and root logger configuration for all profiles except "test".
+      Suppressing the Loki appender in tests prevents outbound HTTP calls to Loki
+      during unit and integration test runs.
+    -->
+    <springProfile name="!test">
+
+        <!--
+          Loki4j appender: ships structured JSON log lines to Grafana Loki.
+          Labels enable per-service log filtering in Grafana without parsing the JSON body.
+          batchMaxItems / batchTimeoutMs control Loki push frequency for low-latency dev boxes;
+          tune upward for high-throughput production environments.
+        -->
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <batchMaxItems>100</batchMaxItems>
+            <batchTimeoutMs>4000</batchTimeoutMs>
+            <http>
+                <url>${lokiUrl}</url>
+            </http>
+            <format>
+                <label>
+                    <pattern>job=telco-crm,service=${appName}</pattern>
+                </label>
+                <message>
+                    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                        <includeContext>false</includeContext>
+                    </encoder>
+                </message>
+            </format>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="LOKI"/>
+        </root>
+
+        <logger name="com.telco" level="DEBUG"/>
+
+    </springProfile>
+
+    <!-- Test profile: console only, no outbound Loki connection. -->
+    <springProfile name="test">
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+
+        <logger name="com.telco" level="DEBUG"/>
+
+    </springProfile>
+
+</configuration>

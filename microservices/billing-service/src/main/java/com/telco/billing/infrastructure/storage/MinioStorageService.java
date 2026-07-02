@@ -1,6 +1,7 @@
 package com.telco.billing.infrastructure.storage;
 
 import com.telco.platform.common.exception.DependencyFailureException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -29,6 +30,7 @@ public class MinioStorageService implements StorageService {
     }
 
     @Override
+    @CircuitBreaker(name = "minio", fallbackMethod = "storeFallback")
     public String store(String objectName, byte[] content, String contentType) {
         try {
             minioClient.putObject(PutObjectArgs.builder()
@@ -45,6 +47,7 @@ public class MinioStorageService implements StorageService {
     }
 
     @Override
+    @CircuitBreaker(name = "minio", fallbackMethod = "fetchFallback")
     public byte[] fetch(String objectRef) {
         String objectName = objectRef.replace("minio://" + bucket + "/", "");
         try (InputStream stream = minioClient.getObject(
@@ -53,5 +56,19 @@ public class MinioStorageService implements StorageService {
         } catch (Exception e) {
             throw new DependencyFailureException("Failed to fetch PDF from MinIO: " + objectRef, e);
         }
+    }
+
+    // --- Fallback methods ---
+
+    private String storeFallback(String objectName, byte[] content, String contentType, Throwable t) {
+        LOGGER.warn("MinIO circuit breaker open, cannot store PDF: objectName={}", objectName);
+        throw new DependencyFailureException(
+                "MinIO unavailable: cannot store PDF " + objectName, t);
+    }
+
+    private byte[] fetchFallback(String objectRef, Throwable t) {
+        LOGGER.warn("MinIO circuit breaker open, cannot fetch PDF: objectRef={}", objectRef);
+        throw new DependencyFailureException(
+                "MinIO unavailable: cannot fetch PDF " + objectRef, t);
     }
 }
