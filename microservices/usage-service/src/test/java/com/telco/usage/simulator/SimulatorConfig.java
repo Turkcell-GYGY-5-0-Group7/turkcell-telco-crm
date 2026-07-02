@@ -1,4 +1,4 @@
-package com.telco.usage.config;
+package com.telco.usage.simulator;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Profile;

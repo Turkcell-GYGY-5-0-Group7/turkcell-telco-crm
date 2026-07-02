@@ -9,7 +9,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -129,7 +128,7 @@ class UsageRepositoryTest {
     }
 
     @Test
-    void findBySubscriptionIdAndRecordedAtBetween_returns_records_in_window() {
+    void findForCursor_returns_records_in_window() {
         UUID subscriptionId = UUID.randomUUID();
         Instant start = Instant.now().minus(1, ChronoUnit.DAYS);
         Instant end = Instant.now().plus(29, ChronoUnit.DAYS);
@@ -140,12 +139,11 @@ class UsageRepositoryTest {
 
         Instant from = Instant.now().minus(1, ChronoUnit.HOURS);
         Instant to = Instant.now().plus(1, ChronoUnit.HOURS);
-        Page<UsageRecord> results = usageRecordRepository
-                .findBySubscriptionIdAndRecordedAtBetween(subscriptionId, from, to,
-                        PageRequest.of(0, 10));
+        java.util.List<UsageRecord> results = usageRecordRepository
+                .findForCursor(subscriptionId, from, to, PageRequest.ofSize(10));
 
-        assertThat(results.getContent()).hasSize(1);
-        assertThat(results.getContent().get(0).getCdrRef()).isEqualTo("CDR-HIST-1");
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).getCdrRef()).isEqualTo("CDR-HIST-1");
     }
 
     @Test

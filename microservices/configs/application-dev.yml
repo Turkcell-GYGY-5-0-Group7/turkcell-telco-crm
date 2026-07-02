@@ -1,5 +1,33 @@
 # Shared dev overrides applied to ALL services when SPRING_PROFILES_ACTIVE=dev.
 
+# Local host-facing ports for infrastructure running in Docker.
+# Kafka KRaft: host listener is 29092 (internal cluster port 9092 is Docker-only).
+# Keycloak:    host port 8085 maps to container 8080.
+KAFKA_BOOTSTRAP_SERVERS: "localhost:29092"
+KAFKA_BROKERS: "localhost:29092"
+KEYCLOAK_JWKS_URI: "http://localhost:8085/realms/telco-crm/protocol/openid-connect/certs"
+
+# Platform security: validate Keycloak RS256 tokens directly.
+# Public key is the current Keycloak realm signing key (stable while postgres volume exists).
+# Issuer must match the `iss` claim in tokens issued via http://localhost:8085.
+# If you run `make infra-destroy` and restart, update this key from:
+#   curl http://localhost:8085/realms/telco-crm/protocol/openid-connect/certs
+telco:
+  platform:
+    security:
+      jwt:
+        issuer: "http://localhost:8085/realms/telco-crm"
+        public-key: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAncsTWd5BZp3mLwRZxb7D
+          y2R9qarbsloAx/CA1wV2mNlq5KdnxY2q80hqDV2PAibGiMXfGMd4PWs/sH/3ehfF
+          VTq5c072JRih5fRHKzpaLA7qHz2+Gpb3YHU5l/blkCZ5tdhsKoundNhq3TyzhRtG
+          yJVYwG7O+RoiauTif859aYZHzU+KIgbdnqZSkUFqspQCO1arGxdX9h2OWkLpJ08R
+          KUAkIdqCUZ6P5xlVx3Moa6Xu/CP7d0roVWdVPcj4TDMpxyPL6FiFeSbHYL/2zv+J
+          lVCu0Zimh1ti5hOLz+jtljtRVkXC9NpjqTN+RnJxvb3+gITouq5LfDMI7/3kzQzK
+          ewIDAQAB
+          -----END PUBLIC KEY-----
+
 logging:
   level:
     root: INFO

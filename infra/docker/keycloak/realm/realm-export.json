@@ -59,6 +59,15 @@
             "access.token.claim": "true",
             "id.token.claim": "true"
           }
+        },
+        {
+          "name": "sub-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
         }
       ]
     }
@@ -107,6 +116,8 @@
     {
       "username": "admin@telco.local",
       "email": "admin@telco.local",
+      "firstName": "Telco",
+      "lastName": "Admin",
       "enabled": true,
       "emailVerified": true,
       "credentials": [
@@ -117,6 +128,8 @@
     {
       "username": "agent@telco.local",
       "email": "agent@telco.local",
+      "firstName": "Telco",
+      "lastName": "Agent",
       "enabled": true,
       "emailVerified": true,
       "credentials": [
@@ -127,6 +140,8 @@
     {
       "username": "subscriber@telco.local",
       "email": "subscriber@telco.local",
+      "firstName": "Telco",
+      "lastName": "Subscriber",
       "enabled": true,
       "emailVerified": true,
       "credentials": [

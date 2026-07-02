@@ -2,13 +2,13 @@ package com.telco.usage.infrastructure.persistence;
 
 import com.telco.usage.domain.UsageRecord;
 import com.telco.usage.domain.UsageType;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** Repository for {@link UsageRecord} (ADR-006). */
@@ -17,9 +17,27 @@ public interface UsageRecordRepository extends JpaRepository<UsageRecord, UUID> 
     /** Fast duplicate check using the unique index on cdr_ref (inbox idempotency). */
     boolean existsByCdrRef(String cdrRef);
 
-    /** Paginated usage history for a subscription in a time range. */
-    Page<UsageRecord> findBySubscriptionIdAndRecordedAtBetween(
-            UUID subscriptionId, Instant from, Instant to, Pageable pageable);
+    /** Cursor-based usage history — first page (no cursor). */
+    @Query("SELECT r FROM UsageRecord r "
+            + "WHERE r.subscriptionId = :subId AND r.recordedAt >= :from AND r.recordedAt <= :to "
+            + "ORDER BY r.recordedAt ASC")
+    List<UsageRecord> findForCursor(
+            @Param("subId") UUID subId,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            Pageable pageable);
+
+    /** Cursor-based usage history — subsequent pages (after cursor). */
+    @Query("SELECT r FROM UsageRecord r "
+            + "WHERE r.subscriptionId = :subId AND r.recordedAt >= :from AND r.recordedAt <= :to "
+            + "AND r.recordedAt > :cursor "
+            + "ORDER BY r.recordedAt ASC")
+    List<UsageRecord> findForCursorAfter(
+            @Param("subId") UUID subId,
+            @Param("from") Instant from,
+            @Param("to") Instant to,
+            @Param("cursor") Instant cursor,
+            Pageable pageable);
 
     /**
      * Sums overage quantity for a subscription, usage type, and time window.

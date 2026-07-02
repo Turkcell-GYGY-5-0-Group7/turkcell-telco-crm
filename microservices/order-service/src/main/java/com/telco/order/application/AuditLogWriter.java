@@ -1,0 +1,56 @@
+package com.telco.order.application;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.telco.order.domain.model.AuditLog;
+import com.telco.order.infrastructure.persistence.AuditLogRepository;
+import com.telco.platform.common.context.CorrelationContextHolder;
+import com.telco.platform.common.context.UserContextHolder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.Map;
+import java.util.UUID;
+
+/** Writes one audit_log row per state-changing operation; runs inside the caller's transaction (NFR-12). */
+@Component
+public class AuditLogWriter {
+
+    private static final Logger log = LoggerFactory.getLogger(AuditLogWriter.class);
+
+    private final AuditLogRepository auditLogRepository;
+    private final ObjectMapper objectMapper;
+
+    public AuditLogWriter(AuditLogRepository auditLogRepository, ObjectMapper objectMapper) {
+        this.auditLogRepository = auditLogRepository;
+        this.objectMapper = objectMapper;
+    }
+
+    public void log(String action, String entity, String entityId, Map<String, Object> details) {
+        String rawActorId = UserContextHolder.get().map(u -> u.userId()).orElse(null);
+        UUID actorId = null;
+        if (rawActorId != null) {
+            try {
+                actorId = UUID.fromString(rawActorId);
+            } catch (IllegalArgumentException ignored) {
+                // Non-UUID principal (service accounts, test principals) — actor_id left null
+            }
+        }
+        String correlationId = CorrelationContextHolder.get().map(c -> c.correlationId()).orElse(null);
+
+        String detailsJson = null;
+        if (details != null && !details.isEmpty()) {
+            try {
+                detailsJson = objectMapper.writeValueAsString(details);
+            } catch (JsonProcessingException e) {
+                log.warn("audit details serialization failed for action={} entity={}", action, entity, e);
+            }
+        }
+
+        auditLogRepository.save(new AuditLog(
+                UUID.randomUUID(), actorId, action, entity, entityId,
+                detailsJson, correlationId, Instant.now()));
+    }
+}

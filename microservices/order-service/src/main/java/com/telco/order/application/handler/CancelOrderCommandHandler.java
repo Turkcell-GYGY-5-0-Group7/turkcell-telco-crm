@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.CancelOrderCommand;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.event.OrderCancelledEvent;
@@ -32,13 +33,16 @@ public class CancelOrderCommandHandler implements CommandHandler<CancelOrderComm
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
     private final OutboxService outboxService;
+    private final AuditLogWriter auditLogWriter;
 
     public CancelOrderCommandHandler(OrderRepository orderRepository,
                                      SagaStateRepository sagaStateRepository,
-                                     OutboxService outboxService) {
+                                     OutboxService outboxService,
+                                     AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
         this.outboxService = outboxService;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -74,6 +78,9 @@ public class CancelOrderCommandHandler implements CommandHandler<CancelOrderComm
                         Instant.now().toString()
                 )
         );
+
+        auditLogWriter.log("ORDER_CANCELLED", "Order", order.getId().toString(),
+                command.reason() != null ? Map.of("reason", command.reason()) : Map.of());
 
         return OrderResponse.from(order);
     }

@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.CreateOrderCommand;
 import com.telco.order.application.dto.OrderItemRequest;
 import com.telco.order.application.dto.OrderResponse;
@@ -19,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -42,17 +44,20 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
     private final CustomerServiceClient customerServiceClient;
     private final ProductCatalogServiceClient productCatalogServiceClient;
     private final OutboxService outboxService;
+    private final AuditLogWriter auditLogWriter;
 
     public CreateOrderCommandHandler(OrderRepository orderRepository,
                                      SagaStateRepository sagaStateRepository,
                                      CustomerServiceClient customerServiceClient,
                                      ProductCatalogServiceClient productCatalogServiceClient,
-                                     OutboxService outboxService) {
+                                     OutboxService outboxService,
+                                     AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
         this.customerServiceClient = customerServiceClient;
         this.productCatalogServiceClient = productCatalogServiceClient;
         this.outboxService = outboxService;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -126,6 +131,10 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                         Instant.now().toString()
                 )
         );
+
+        auditLogWriter.log("ORDER_CREATED", "Order", order.getId().toString(),
+                Map.of("customerId", command.customerId().toString(),
+                        "totalAmount", order.getTotalAmount().toPlainString()));
 
         return OrderResponse.from(order);
     }

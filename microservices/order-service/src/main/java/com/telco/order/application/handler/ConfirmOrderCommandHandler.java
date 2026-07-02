@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.ConfirmOrderCommand;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.domain.model.Order;
@@ -31,11 +32,14 @@ public class ConfirmOrderCommandHandler implements CommandHandler<ConfirmOrderCo
 
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
+    private final AuditLogWriter auditLogWriter;
 
     public ConfirmOrderCommandHandler(OrderRepository orderRepository,
-                                      SagaStateRepository sagaStateRepository) {
+                                      SagaStateRepository sagaStateRepository,
+                                      AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -61,6 +65,9 @@ public class ConfirmOrderCommandHandler implements CommandHandler<ConfirmOrderCo
                     command.paymentId() == null ? null : "{\"paymentId\":\"" + command.paymentId() + "\"}");
             sagaStateRepository.save(saga);
         });
+
+        auditLogWriter.log("ORDER_CONFIRMED", "Order", order.getId().toString(),
+                command.paymentId() != null ? Map.of("paymentId", command.paymentId()) : Map.of());
 
         LOGGER.info("Order {} confirmed (saga PAYMENT_COMPLETED/PAID)", order.getId());
         return OrderResponse.from(order);

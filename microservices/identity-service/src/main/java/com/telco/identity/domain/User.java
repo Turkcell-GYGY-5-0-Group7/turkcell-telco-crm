@@ -134,6 +134,14 @@ public class User {
         status = UserStatus.ACTIVE;
     }
 
+    /** Soft-deletes the user. Cannot delete an already-deleted user. */
+    public void delete() {
+        if (status == UserStatus.DELETED) {
+            throw new IllegalStateException("User is already deleted");
+        }
+        status = UserStatus.DELETED;
+    }
+
     public UUID getId() {
         return id;
     }

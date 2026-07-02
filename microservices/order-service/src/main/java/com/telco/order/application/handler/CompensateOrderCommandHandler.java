@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.CompensateOrderCommand;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.event.OrderCancelledEvent;
@@ -38,13 +39,16 @@ public class CompensateOrderCommandHandler implements CommandHandler<CompensateO
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
     private final OutboxService outboxService;
+    private final AuditLogWriter auditLogWriter;
 
     public CompensateOrderCommandHandler(OrderRepository orderRepository,
                                          SagaStateRepository sagaStateRepository,
-                                         OutboxService outboxService) {
+                                         OutboxService outboxService,
+                                         AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
         this.outboxService = outboxService;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -83,6 +87,9 @@ public class CompensateOrderCommandHandler implements CommandHandler<CompensateO
                         Instant.now().toString()
                 )
         );
+
+        auditLogWriter.log("ORDER_COMPENSATED", "Order", order.getId().toString(),
+                command.reason() != null ? Map.of("reason", command.reason()) : Map.of());
 
         LOGGER.info("Order {} compensated (saga COMPENSATED/CANCELLED)", order.getId());
         return OrderResponse.from(order);

@@ -11,6 +11,7 @@ import com.telco.order.infrastructure.client.ProductCatalogServiceClient;
 import com.telco.order.infrastructure.client.TariffClientResponse;
 import com.telco.order.infrastructure.persistence.OrderRepository;
 import com.telco.order.infrastructure.persistence.SagaStateRepository;
+import com.telco.order.application.AuditLogWriter;
 import com.telco.platform.outbox.OutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,7 @@ class CreateOrderCommandHandlerTest {
     @Mock private CustomerServiceClient customerServiceClient;
     @Mock private ProductCatalogServiceClient productCatalogServiceClient;
     @Mock private OutboxService outboxService;
+    @Mock private AuditLogWriter auditLogWriter;
 
     private CreateOrderCommandHandler handler;
 
@@ -51,7 +53,7 @@ class CreateOrderCommandHandlerTest {
         handler = new CreateOrderCommandHandler(
                 orderRepository, sagaStateRepository,
                 customerServiceClient, productCatalogServiceClient,
-                outboxService);
+                outboxService, auditLogWriter);
     }
 
     @Test

@@ -1,0 +1,34 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco.platform</groupId>
+        <artifactId>platform-starters</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>starter-kafka</artifactId>
+    <name>starter-kafka</name>
+    <description>Bundles spring-kafka and spring-boot-kafka together (ADR-018). In Spring Boot 4.x,
+        KafkaAutoConfiguration was extracted into spring-boot-kafka; spring-kafka alone no longer
+        activates it. Services must not declare these two modules separately — use this starter instead.</description>
+
+    <dependencies>
+        <!-- Core Kafka client + template + listener container. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+        </dependency>
+        <!-- Spring Boot 4 extracted KafkaAutoConfiguration into its own module.
+             Without this, KafkaTemplate and @KafkaListener container factories are never registered. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-kafka</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>

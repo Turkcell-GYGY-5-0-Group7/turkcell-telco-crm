@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.FulfillOrderCommand;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.domain.model.Order;
@@ -31,11 +32,14 @@ public class FulfillOrderCommandHandler implements CommandHandler<FulfillOrderCo
 
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
+    private final AuditLogWriter auditLogWriter;
 
     public FulfillOrderCommandHandler(OrderRepository orderRepository,
-                                      SagaStateRepository sagaStateRepository) {
+                                      SagaStateRepository sagaStateRepository,
+                                      AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -62,6 +66,9 @@ public class FulfillOrderCommandHandler implements CommandHandler<FulfillOrderCo
                             : "{\"subscriptionId\":\"" + command.subscriptionId() + "\"}");
             sagaStateRepository.save(saga);
         });
+
+        auditLogWriter.log("ORDER_FULFILLED", "Order", order.getId().toString(),
+                command.subscriptionId() != null ? Map.of("subscriptionId", command.subscriptionId()) : Map.of());
 
         LOGGER.info("Order {} fulfilled (saga SUBSCRIPTION_ACTIVATED/FULFILLED)", order.getId());
         return OrderResponse.from(order);

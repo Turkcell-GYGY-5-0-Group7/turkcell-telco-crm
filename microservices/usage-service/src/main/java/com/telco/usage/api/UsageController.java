@@ -7,13 +7,11 @@ import com.telco.usage.application.dto.UsageHistoryItem;
 import com.telco.usage.application.query.GetQuotaQuery;
 import com.telco.usage.application.query.GetUsageHistoryQuery;
 import com.telco.platform.common.api.ApiResult;
+import com.telco.platform.common.api.CursorPage;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
@@ -54,19 +52,18 @@ public class UsageController {
                 new GetQuotaQuery(subscriptionId, principalId(authentication))));
     }
 
-    /** Returns paginated CDR history for a subscription within a time range. */
+    /** Returns cursor-paginated CDR history for a subscription within a time range (ADR-015). */
     @GetMapping("/subscriptions/{subscriptionId}/history")
     @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
-    public ApiResult<Page<UsageHistoryItem>> getHistory(
+    public ApiResult<CursorPage<UsageHistoryItem>> getHistory(
             @PathVariable UUID subscriptionId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(defaultValue = "50") int limit,
             Authentication authentication) {
-        Pageable pageable = PageRequest.of(page, size);
         return responses.ok(mediator.query(
-                new GetUsageHistoryQuery(subscriptionId, from, to, pageable, principalId(authentication))));
+                new GetUsageHistoryQuery(subscriptionId, from, to, cursor, limit, principalId(authentication))));
     }
 
     /** Triggers period aggregation for a subscription. ADMIN only. */

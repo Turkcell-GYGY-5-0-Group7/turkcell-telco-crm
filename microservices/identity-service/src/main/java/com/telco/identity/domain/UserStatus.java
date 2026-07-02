@@ -10,5 +10,6 @@ package com.telco.identity.domain;
 public enum UserStatus {
     PENDING,
     ACTIVE,
-    LOCKED
+    LOCKED,
+    DELETED
 }
