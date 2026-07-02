@@ -1,0 +1,91 @@
+# Prometheus alert rules for the Telco CRM platform (ADR-012, NFR-01, NFR-09).
+# Referenced from prometheus.yml via rule_files.
+groups:
+  - name: telco-crm-slo
+    rules:
+
+      # NFR-01: API p95 latency must not exceed 300 ms.
+      # http_server_requests_seconds_bucket is the Micrometer timer histogram metric exposed by
+      # Spring Boot via the Prometheus actuator endpoint.
+      - alert: ApiHighP95Latency
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum by(le, job) (
+              rate(http_server_requests_seconds_bucket[5m])
+            )
+          ) > 0.3
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 latency above 300 ms on {{ $labels.job }}"
+          description: >
+            The 95th-percentile HTTP response time for {{ $labels.job }} has exceeded 300 ms
+            for more than 2 minutes.  Current value: {{ $value | humanizeDuration }}.
+
+      # Fires when a scraped target reports itself as down (up == 0) for 1 minute.
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} ({{ $labels.job }}) is down"
+          description: >
+            Prometheus cannot reach {{ $labels.instance }} for job {{ $labels.job }}.
+            The target has been unreachable for more than 1 minute.
+
+      # HTTP 5xx error rate above 5 % of all requests for 2 minutes.
+      - alert: HighErrorRate
+        expr: >
+          sum by(job) (
+            rate(http_server_requests_seconds_count{status=~"5.."}[5m])
+          )
+          /
+          sum by(job) (
+            rate(http_server_requests_seconds_count[5m])
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx error rate on {{ $labels.job }}"
+          description: >
+            More than 5 % of requests to {{ $labels.job }} are returning 5xx responses.
+            Current rate: {{ $value | humanizePercentage }}.
+
+  - name: telco-crm-kafka
+    rules:
+
+      # Kafka consumer lag exceeds 1 000 messages for 5 minutes — risk of processing delay
+      # impacting downstream billing and subscription state machines.
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_fetch_manager_records_lag > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag high for {{ $labels.client_id }} / {{ $labels.topic }}"
+          description: >
+            Consumer group {{ $labels.client_id }} on topic {{ $labels.topic }} has a lag of
+            {{ $value }} records, above the threshold of 1 000 for more than 5 minutes.
+
+  - name: telco-crm-resilience
+    rules:
+
+      # Any Resilience4j circuit breaker stuck in OPEN state for 30 seconds warrants immediate
+      # attention — it indicates a downstream dependency is unavailable and calls are being shed.
+      # The resilience4j_circuitbreaker_state gauge emits separate series per state label
+      # (closed, open, half_open); value 1 means that state is currently active.
+      - alert: CircuitBreakerOpen
+        expr: resilience4j_circuitbreaker_state{state="open"} == 1
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Circuit breaker {{ $labels.name }} is OPEN on {{ $labels.instance }}"
+          description: >
+            The Resilience4j circuit breaker {{ $labels.name }} on {{ $labels.instance }} has
+            been in the OPEN state for more than 30 seconds.  Downstream calls are being
+            rejected; check the dependency health.

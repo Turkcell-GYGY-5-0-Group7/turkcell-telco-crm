@@ -8,3 +8,21 @@ eureka:
   client:
     service-url:
       defaultZone: http://${EUREKA_USERNAME:eureka}:${EUREKA_PASSWORD:eureka}@discovery-server:8761/eureka
+
+# OTel Collector runs in the Docker network; services push OTLP over HTTP (ADR-012).
+management:
+  otlp:
+    tracing:
+      endpoint: http://otel-collector:4318/v1/traces
+
+# Kafka span propagation: each KafkaTemplate send and listener invocation creates a child span.
+spring:
+  kafka:
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
+
+# Loki push URL consumed by <springProperty> in logback-spring.xml (ADR-012).
+loki:
+  url: http://loki:3100/loki/api/v1/push

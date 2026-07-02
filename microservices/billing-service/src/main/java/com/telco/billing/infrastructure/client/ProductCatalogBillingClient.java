@@ -3,6 +3,7 @@ package com.telco.billing.infrastructure.client;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.exception.DependencyFailureException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -23,6 +24,7 @@ public class ProductCatalogBillingClient {
         this.restClient = productCatalogRestClient;
     }
 
+    @CircuitBreaker(name = "product-catalog-service", fallbackMethod = "getTariffPricingFallback")
     public TariffPricingResponse getTariffPricing(String tariffCode) {
         try {
             ApiResult<TariffPricingResponse> result = restClient.get()
@@ -44,5 +46,20 @@ public class ProductCatalogBillingClient {
             throw new DependencyFailureException(
                     "Failed to fetch tariff from product-catalog-service: " + tariffCode, e);
         }
+    }
+
+    // --- Fallback method ---
+
+    private TariffPricingResponse getTariffPricingFallback(String tariffCode, Throwable t) {
+        // A 404 from the downstream service must propagate as ResourceNotFoundException, not
+        // be masked as a dependency failure. Re-throw transparently so callers see the correct
+        // error type and the circuit does not swallow logical errors.
+        if (t instanceof ResourceNotFoundException) {
+            throw (ResourceNotFoundException) t;
+        }
+        LOGGER.warn("product-catalog-service circuit breaker open for tariffCode={}: {}",
+                tariffCode, t.getMessage());
+        throw new DependencyFailureException(
+                "product-catalog-service unavailable for tariffCode: " + tariffCode, t);
     }
 }

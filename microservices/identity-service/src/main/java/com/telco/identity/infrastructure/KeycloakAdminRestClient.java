@@ -1,5 +1,7 @@
 package com.telco.identity.infrastructure;
 
+import com.telco.platform.common.exception.DependencyFailureException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -16,6 +18,11 @@ import java.util.stream.Collectors;
  * Keycloak Admin REST adapter (ADR-011). Provisions users and manages realm-role assignments through
  * the Keycloak Admin API. A fresh admin token is obtained per call using client-credentials grant;
  * no token caching is applied here (the Keycloak server handles token lifetime).
+ *
+ * <p>Every outbound call is guarded by a {@code keycloak-admin} circuit breaker (Resilience4j).
+ * Configuration is driven by the shared {@code application.yml} resilience4j block. When the
+ * circuit is OPEN the fallback throws {@link DependencyFailureException} (HTTP 503 via the
+ * platform GlobalExceptionHandler).
  */
 @Component
 public class KeycloakAdminRestClient implements KeycloakAdminClient {
@@ -37,6 +44,7 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
     }
 
     @Override
+    @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "createUserFallback")
     public String createUser(String username, String email) {
         String token = fetchAdminToken();
 
@@ -70,6 +78,7 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
     }
 
     @Override
+    @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "assignRealmRolesFallback")
     public void assignRealmRoles(String keycloakId, Set<String> roleNames) {
         String token = fetchAdminToken();
         List<Map<String, Object>> roleRepresentations = resolveRoles(token, roleNames);
@@ -89,6 +98,7 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
     }
 
     @Override
+    @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "removeRealmRolesFallback")
     public void removeRealmRoles(String keycloakId, Set<String> roleNames) {
         String token = fetchAdminToken();
         List<Map<String, Object>> roleRepresentations = resolveRoles(token, roleNames);
@@ -108,6 +118,7 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
     }
 
     @Override
+    @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "disableUserFallback")
     public void disableUser(String keycloakId) {
         String token = fetchAdminToken();
         RestClient.create()
@@ -123,6 +134,30 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
                         })
                 .toBodilessEntity();
     }
+
+    // --- Fallback methods ---
+
+    private String createUserFallback(String username, String email, Throwable t) {
+        throw new DependencyFailureException(
+                "Keycloak Admin API unavailable: cannot create user " + username, t);
+    }
+
+    private void assignRealmRolesFallback(String keycloakId, Set<String> roleNames, Throwable t) {
+        throw new DependencyFailureException(
+                "Keycloak Admin API unavailable: cannot assign roles for " + keycloakId, t);
+    }
+
+    private void removeRealmRolesFallback(String keycloakId, Set<String> roleNames, Throwable t) {
+        throw new DependencyFailureException(
+                "Keycloak Admin API unavailable: cannot remove roles for " + keycloakId, t);
+    }
+
+    private void disableUserFallback(String keycloakId, Throwable t) {
+        throw new DependencyFailureException(
+                "Keycloak Admin API unavailable: cannot disable user " + keycloakId, t);
+    }
+
+    // --- Private helpers (called inside circuit-breaker-guarded public methods) ---
 
     @SuppressWarnings("unchecked")
     private String fetchAdminToken() {

@@ -45,6 +45,37 @@
             <artifactId>spring-boot-starter-security</artifactId>
         </dependency>
 
+        <!-- ── Observability: tracing + logging (ADR-012) ──────────────────────── -->
+        <!-- Bridges Micrometer Tracing to the OTel SDK (optional in starter, required here). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <!-- Ships spans/metrics to the OTel Collector via OTLP (runtime only). -->
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Produces structured JSON log events (logstash format). -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+        <!-- Pushes JSON logs from Logback to Loki (runtime only). -->
+        <dependency>
+            <groupId>com.github.loki4j</groupId>
+            <artifactId>loki-logback-appender</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ── Resilience (ADR-005) ──────────────────────────────────────────── -->
+        <!-- Enables @CircuitBreaker / @Retry / @Bulkhead AOP annotations. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+
         <!-- ── Web ──────────────────────────────────────────────────────────────── -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -19,6 +19,8 @@
         <jjwt.version>0.12.6</jjwt.version>
         <avro.version>1.12.0</avro.version>
         <resilience4j.version>2.3.0</resilience4j.version>
+        <logstash-logback.version>8.0</logstash-logback.version>
+        <loki4j.version>1.5.2</loki4j.version>
     </properties>
 
     <dependencyManagement>
@@ -49,6 +51,20 @@
                 <version>${resilience4j.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- Structured JSON logging (ADR-012). -->
+            <dependency>
+                <groupId>net.logstash.logback</groupId>
+                <artifactId>logstash-logback-encoder</artifactId>
+                <version>${logstash-logback.version}</version>
+            </dependency>
+
+            <!-- Loki Logback appender for log ingestion (ADR-012). -->
+            <dependency>
+                <groupId>com.github.loki4j</groupId>
+                <artifactId>loki-logback-appender</artifactId>
+                <version>${loki4j.version}</version>
             </dependency>
 
             <!-- JWT support (opt-in security starter) per ADR-011. -->
