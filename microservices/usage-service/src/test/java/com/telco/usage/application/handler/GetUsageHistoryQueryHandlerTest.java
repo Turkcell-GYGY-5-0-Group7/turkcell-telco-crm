@@ -5,16 +5,14 @@ import com.telco.usage.application.query.GetUsageHistoryQuery;
 import com.telco.usage.domain.Quota;
 import com.telco.usage.infrastructure.persistence.QuotaRepository;
 import com.telco.usage.infrastructure.persistence.UsageRecordRepository;
+import com.telco.platform.common.api.CursorPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Instant;
@@ -44,7 +42,6 @@ class GetUsageHistoryQueryHandlerTest {
     private UUID customerId;
     private Instant from;
     private Instant to;
-    private Pageable pageable;
 
     @BeforeEach
     void setUp() {
@@ -52,7 +49,6 @@ class GetUsageHistoryQueryHandlerTest {
         customerId = UUID.randomUUID();
         from = Instant.parse("2026-06-01T00:00:00Z");
         to = Instant.parse("2026-07-01T00:00:00Z");
-        pageable = PageRequest.of(0, 50);
     }
 
     private Quota quotaFor(UUID custId) {
@@ -63,23 +59,22 @@ class GetUsageHistoryQueryHandlerTest {
     }
 
     private void stubEmptyHistory() {
-        Page<com.telco.usage.domain.UsageRecord> emptyPage =
-                new PageImpl<>(Collections.emptyList());
-        when(usageRecordRepository.findBySubscriptionIdAndRecordedAtBetween(
+        when(usageRecordRepository.findForCursor(
                 eq(subscriptionId), any(), any(), any()))
-                .thenReturn(emptyPage);
+                .thenReturn(Collections.emptyList());
     }
 
     @Test
     void admin_principal_null_returns_history_without_ownership_check() {
         stubEmptyHistory();
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, pageable, null);
+                subscriptionId, from, to, null, 50, null);
 
-        Page<UsageHistoryItem> result = handler.handle(query);
+        CursorPage<UsageHistoryItem> result = handler.handle(query);
 
         assertThat(result).isNotNull();
-        assertThat(result.getTotalElements()).isZero();
+        assertThat(result.content()).isEmpty();
+        assertThat(result.hasNext()).isFalse();
     }
 
     @Test
@@ -88,11 +83,12 @@ class GetUsageHistoryQueryHandlerTest {
                 .thenReturn(Optional.of(quotaFor(customerId)));
         stubEmptyHistory();
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, pageable, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString());
 
-        Page<UsageHistoryItem> result = handler.handle(query);
+        CursorPage<UsageHistoryItem> result = handler.handle(query);
 
         assertThat(result).isNotNull();
+        assertThat(result.content()).isEmpty();
     }
 
     @Test
@@ -100,7 +96,7 @@ class GetUsageHistoryQueryHandlerTest {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.empty());
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, pageable, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString());
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
@@ -111,7 +107,7 @@ class GetUsageHistoryQueryHandlerTest {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.of(quotaFor(null)));
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, pageable, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString());
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
@@ -123,7 +119,7 @@ class GetUsageHistoryQueryHandlerTest {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.of(quotaFor(customerId)));
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, pageable, otherCustomer.toString());
+                subscriptionId, from, to, null, 50, otherCustomer.toString());
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);

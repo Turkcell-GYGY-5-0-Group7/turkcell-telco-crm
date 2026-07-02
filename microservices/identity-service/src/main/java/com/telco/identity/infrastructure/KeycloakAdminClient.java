@@ -28,4 +28,7 @@ public interface KeycloakAdminClient {
 
     /** Removes the given realm roles from the Keycloak user. */
     void removeRealmRoles(String keycloakId, Set<String> roleNames);
+
+    /** Disables the Keycloak user, preventing all logins. */
+    void disableUser(String keycloakId);
 }

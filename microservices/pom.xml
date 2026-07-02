@@ -25,9 +25,20 @@
         <!-- Spring Cloud release train. MUST align with Spring Boot 4.1.0; verify on first build. -->
         <spring-cloud.version>2025.1.0</spring-cloud.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Versions not covered by the Spring Boot BOM — single source of truth for all services. -->
+        <testcontainers.version>1.20.6</testcontainers.version>
+        <springdoc.version>2.8.9</springdoc.version>
+        <rest-assured.version>5.5.0</rest-assured.version>
+        <debezium.version>3.0.8.Final</debezium.version>
+        <kafka-connect.version>4.2.1</kafka-connect.version>
+        <minio.version>8.5.17</minio.version>
+        <openpdf.version>2.0.3</openpdf.version>
     </properties>
 
     <modules>
+        <!-- Shared parent for all domain services -->
+        <module>domain-services-parent</module>
         <!-- Templates and reference -->
         <module>service-template</module>
         <module>reference-service</module>
@@ -67,6 +78,69 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <!-- ── Versions not in the Spring Boot BOM ─────────────────────────── -->
+            <!-- Testcontainers: pinned here so services omit the <version> tag. -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>kafka</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>mongodb</artifactId>
+                <version>${testcontainers.version}</version>
+            </dependency>
+            <!-- Per-service OpenAPI/Swagger UI (ARC-08). -->
+            <dependency>
+                <groupId>org.springdoc</groupId>
+                <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+                <version>${springdoc.version}</version>
+            </dependency>
+            <!-- HTTP-level integration tests. -->
+            <dependency>
+                <groupId>io.rest-assured</groupId>
+                <artifactId>rest-assured</artifactId>
+                <version>${rest-assured.version}</version>
+            </dependency>
+            <!-- Debezium outbox SMT regression tests (test scope only). -->
+            <dependency>
+                <groupId>io.debezium</groupId>
+                <artifactId>debezium-core</artifactId>
+                <version>${debezium.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-api</artifactId>
+                <version>${kafka-connect.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>connect-transforms</artifactId>
+                <version>${kafka-connect.version}</version>
+            </dependency>
+            <!-- MinIO SDK for object storage (customer KYC, billing PDF). -->
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
+            </dependency>
+            <!-- PDF rendering (billing-service). -->
+            <dependency>
+                <groupId>com.github.librepdf</groupId>
+                <artifactId>openpdf</artifactId>
+                <version>${openpdf.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

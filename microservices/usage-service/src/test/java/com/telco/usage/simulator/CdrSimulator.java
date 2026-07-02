@@ -1,7 +1,7 @@
 package com.telco.usage.simulator;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.telco.usage.config.SimulatorConfig;
+import com.telco.usage.simulator.SimulatorConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.CommandLineRunner;

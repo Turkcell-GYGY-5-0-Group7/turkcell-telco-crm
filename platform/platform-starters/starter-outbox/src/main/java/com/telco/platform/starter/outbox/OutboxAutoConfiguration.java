@@ -22,7 +22,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * {@link JdbcTemplate} is available. The optional polling relay is enabled separately via
  * {@code telco.platform.outbox.relay.enabled} (Debezium delivers by default).
  */
-@AutoConfiguration
+@AutoConfiguration(afterName = "org.springframework.boot.jdbc.autoconfigure.JdbcTemplateAutoConfiguration")
 @ConditionalOnClass(JdbcTemplate.class)
 @ConditionalOnProperty(prefix = "telco.platform.outbox", name = "enabled", havingValue = "true", matchIfMissing = true)
 @EnableConfigurationProperties(OutboxProperties.class)

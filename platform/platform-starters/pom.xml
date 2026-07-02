@@ -24,6 +24,7 @@
         <module>starter-inbox</module>
         <module>starter-observability</module>
         <module>starter-log-persistence</module>
+        <module>starter-kafka</module>
     </modules>
 
 </project>

@@ -107,6 +107,23 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
                 .toBodilessEntity();
     }
 
+    @Override
+    public void disableUser(String keycloakId) {
+        String token = fetchAdminToken();
+        RestClient.create()
+                .put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(Map.of("enabled", false))
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> {
+                            throw new RuntimeException("Keycloak Admin API error: " + res.getStatusCode());
+                        })
+                .toBodilessEntity();
+    }
+
     @SuppressWarnings("unchecked")
     private String fetchAdminToken() {
         String formBody = "grant_type=client_credentials"

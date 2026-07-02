@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/6 | 2026-06-22 |
+| DONE | 6/6 | 2026-07-01 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -23,12 +23,12 @@ Covers FR-28, FR-29, FR-30 (notification) and FR-31, FR-32, FR-33 (ticket).
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 12.1 | Notification Service - Scaffold and Schema | TODO | [12.1-notification-service-scaffold-and-schema.md](12.1-notification-service-scaffold-and-schema.md) |
-| 12.2 | Notification Channels and Templates | TODO | [12.2-notification-channels-and-templates.md](12.2-notification-channels-and-templates.md) |
-| 12.3 | Notification Eventing and API | TODO | [12.3-notification-eventing-and-api.md](12.3-notification-eventing-and-api.md) |
-| 12.4 | Ticket Service - Scaffold and Schema | TODO | [12.4-ticket-service-scaffold-and-schema.md](12.4-ticket-service-scaffold-and-schema.md) |
-| 12.5 | Ticket Domain and API | TODO | [12.5-ticket-domain-and-api.md](12.5-ticket-domain-and-api.md) |
-| 12.6 | Tests | TODO | [12.6-tests.md](12.6-tests.md) |
+| 12.1 | Notification Service - Scaffold and Schema | DONE | [12.1-notification-service-scaffold-and-schema.md](12.1-notification-service-scaffold-and-schema.md) |
+| 12.2 | Notification Channels and Templates | DONE | [12.2-notification-channels-and-templates.md](12.2-notification-channels-and-templates.md) |
+| 12.3 | Notification Eventing and API | DONE | [12.3-notification-eventing-and-api.md](12.3-notification-eventing-and-api.md) |
+| 12.4 | Ticket Service - Scaffold and Schema | DONE | [12.4-ticket-service-scaffold-and-schema.md](12.4-ticket-service-scaffold-and-schema.md) |
+| 12.5 | Ticket Domain and API | DONE | [12.5-ticket-domain-and-api.md](12.5-ticket-domain-and-api.md) |
+| 12.6 | Tests | DONE | [12.6-tests.md](12.6-tests.md) |
 
 ## Sprint Deliverables
 

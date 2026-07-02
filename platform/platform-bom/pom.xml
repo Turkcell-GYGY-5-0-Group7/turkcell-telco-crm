@@ -148,6 +148,11 @@
                 <artifactId>starter-log-persistence</artifactId>
                 <version>${platform.version}</version>
             </dependency>
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>starter-kafka</artifactId>
+                <version>${platform.version}</version>
+            </dependency>
 
         </dependencies>
     </dependencyManagement>

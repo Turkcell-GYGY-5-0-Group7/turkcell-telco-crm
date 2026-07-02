@@ -2,6 +2,7 @@ package com.telco.identity.api;
 
 import com.telco.identity.application.command.AssignRolesCommand;
 import com.telco.identity.application.command.CreateUserCommand;
+import com.telco.identity.application.command.DeleteUserCommand;
 import com.telco.identity.application.command.RemoveRolesCommand;
 import com.telco.identity.application.dto.AssignRolesRequest;
 import com.telco.identity.application.dto.RemoveRolesRequest;
@@ -74,5 +75,11 @@ public class UserController {
     public ApiResult<Unit> removeRoles(@PathVariable UUID id,
                                        @Valid @RequestBody RemoveRolesRequest request) {
         return responses.ok(mediator.send(new RemoveRolesCommand(id, request.roleNames())));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResult<Unit> deleteUser(@PathVariable UUID id) {
+        return responses.ok(mediator.send(new DeleteUserCommand(id)));
     }
 }

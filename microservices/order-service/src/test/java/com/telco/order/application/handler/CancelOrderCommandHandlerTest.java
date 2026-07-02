@@ -8,6 +8,7 @@ import com.telco.order.infrastructure.persistence.SagaStateRepository;
 import com.telco.platform.common.exception.AccessDeniedException;
 import com.telco.platform.common.exception.BusinessRuleException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
+import com.telco.order.application.AuditLogWriter;
 import com.telco.platform.outbox.OutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,12 +34,13 @@ class CancelOrderCommandHandlerTest {
     @Mock private OrderRepository orderRepository;
     @Mock private SagaStateRepository sagaStateRepository;
     @Mock private OutboxService outboxService;
+    @Mock private AuditLogWriter auditLogWriter;
 
     private CancelOrderCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new CancelOrderCommandHandler(orderRepository, sagaStateRepository, outboxService);
+        handler = new CancelOrderCommandHandler(orderRepository, sagaStateRepository, outboxService, auditLogWriter);
     }
 
     @Test
