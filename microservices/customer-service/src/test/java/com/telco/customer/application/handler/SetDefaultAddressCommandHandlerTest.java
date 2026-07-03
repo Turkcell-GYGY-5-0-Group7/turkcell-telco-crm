@@ -3,10 +3,13 @@ package com.telco.customer.application.handler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.SetDefaultAddressCommand;
 import com.telco.customer.domain.Address;
 import com.telco.customer.infrastructure.persistence.AddressRepository;
@@ -25,12 +28,14 @@ class SetDefaultAddressCommandHandlerTest {
 
     @Mock
     private AddressRepository addresses;
+    @Mock
+    private AuditLogWriter audit;
 
     private SetDefaultAddressCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new SetDefaultAddressCommandHandler(addresses);
+        handler = new SetDefaultAddressCommandHandler(addresses, audit);
     }
 
     @Test
@@ -51,6 +56,7 @@ class SetDefaultAddressCommandHandlerTest {
         assertThat(target.isDefault()).isTrue();
         verify(addresses).saveAndFlush(previous);
         verify(addresses).save(target);
+        verify(audit).log(eq("ADDRESS_SET_DEFAULT"), eq("Address"), anyString(), any());
     }
 
     @Test

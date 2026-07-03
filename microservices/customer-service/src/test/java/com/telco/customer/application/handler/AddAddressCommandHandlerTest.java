@@ -3,10 +3,13 @@ package com.telco.customer.application.handler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.AddAddressCommand;
 import com.telco.customer.application.dto.AddressResponse;
 import com.telco.customer.domain.Address;
@@ -28,12 +31,14 @@ class AddAddressCommandHandlerTest {
     private CustomerRepository customers;
     @Mock
     private AddressRepository addresses;
+    @Mock
+    private AuditLogWriter audit;
 
     private AddAddressCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new AddAddressCommandHandler(customers, addresses);
+        handler = new AddAddressCommandHandler(customers, addresses, audit);
     }
 
     @Test
@@ -51,6 +56,7 @@ class AddAddressCommandHandlerTest {
         assertThat(response.city()).isEqualTo("Istanbul");
         assertThat(response.isDefault()).isFalse();
         verify(addresses, never()).findByCustomerIdAndIsDefaultTrue(any());
+        verify(audit).log(eq("ADDRESS_ADDED"), eq("Address"), anyString(), any());
     }
 
     @Test

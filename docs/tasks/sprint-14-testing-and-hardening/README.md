@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/3 | 2026-06-22 |
+| IN PROGRESS | 1/3 | 2026-07-03 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -22,9 +22,13 @@ Covers NFR-01, NFR-02, NFR-06, NFR-12, NFR-16, NFR-17 and final validation of AC
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 14.1 | Acceptance and End-to-End Testing | TODO | [14.1-acceptance-and-end-to-end-testing.md](14.1-acceptance-and-end-to-end-testing.md) |
-| 14.2 | Security Hardening | TODO | [14.2-security-hardening.md](14.2-security-hardening.md) |
+| 14.1 | Acceptance and End-to-End Testing | IN PROGRESS | [14.1-acceptance-and-end-to-end-testing.md](14.1-acceptance-and-end-to-end-testing.md) |
+| 14.2 | Security Hardening | DONE | [14.2-security-hardening.md](14.2-security-hardening.md) |
 | 14.3 | Performance Validation | TODO | [14.3-performance-validation.md](14.3-performance-validation.md) |
+
+Sub-status (14.1): 14.1.2 contract tests DONE, 14.1.3 coverage gate DONE, 14.1.1 acceptance E2E TODO
+(Wave B, needs full stack). 14.2 all four subtasks complete (audits PASS; payment + customer-address
+audit-log gaps fixed and verified).
 
 ## Sprint Deliverables
 

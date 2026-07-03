@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "InvoicePaidEvent",
+  "namespace": "com.telco.platform.events.invoice",
+  "doc": "Frozen contract snapshot for invoice.paid.v1 (ADR-019). Producer: billing-service; consumer: notification. Field names must match the InvoicePaidEvent outbox payload emitted by MarkInvoicePaidCommandHandler; the schema-compat test fails the build on any drift (NFR-16).",
+  "fields": [
+    { "name": "invoiceId", "type": "string", "doc": "Unique invoice identifier (UUID)." },
+    { "name": "customerId", "type": "string", "doc": "Identifier of the billed customer (UUID)." },
+    {
+      "name": "paidAt",
+      "type": { "type": "long", "logicalType": "timestamp-millis" },
+      "doc": "Instant the invoice was settled, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 package com.telco.customer.application.handler;
 
+import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.SetDefaultAddressCommand;
 import com.telco.customer.domain.Address;
 import com.telco.customer.infrastructure.persistence.AddressRepository;
@@ -8,15 +9,21 @@ import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.cqrs.Unit;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 /** Makes one address the default, clearing the previous default (FR-03). */
 @Component
 public class SetDefaultAddressCommandHandler
         implements CommandHandler<SetDefaultAddressCommand, Unit> {
 
-    private final AddressRepository addresses;
+    private static final String AGGREGATE_TYPE = "Address";
 
-    public SetDefaultAddressCommandHandler(AddressRepository addresses) {
+    private final AddressRepository addresses;
+    private final AuditLogWriter audit;
+
+    public SetDefaultAddressCommandHandler(AddressRepository addresses, AuditLogWriter audit) {
         this.addresses = addresses;
+        this.audit = audit;
     }
 
     @Override
@@ -38,6 +45,9 @@ public class SetDefaultAddressCommandHandler
 
         target.makeDefault();
         addresses.save(target);
+
+        audit.log("ADDRESS_SET_DEFAULT", AGGREGATE_TYPE, target.getId().toString(),
+                Map.of("customerId", command.customerId().toString()));
 
         return Unit.INSTANCE;
     }

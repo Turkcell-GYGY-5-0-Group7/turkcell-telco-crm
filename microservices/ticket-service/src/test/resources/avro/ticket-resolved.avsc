@@ -1,0 +1,11 @@
+{
+  "type": "record",
+  "name": "TicketResolvedEvent",
+  "namespace": "com.telco.platform.events.ticket",
+  "doc": "Frozen contract snapshot for ticket.resolved.v1 (ADR-019). Producer: ticket-service; consumer: notification. Field names must match the outbox payload emitted by ResolveTicketCommandHandler; the capture-based contract test fails the build on any drift (NFR-16).",
+  "fields": [
+    { "name": "ticketId", "type": "string", "doc": "Unique ticket identifier (UUID)." },
+    { "name": "customerId", "type": "string", "doc": "Identifier of the customer (UUID)." },
+    { "name": "resolvedAt", "type": "string", "doc": "ISO-8601 UTC instant the ticket was resolved." }
+  ]
+}

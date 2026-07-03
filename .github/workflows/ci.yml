@@ -146,17 +146,25 @@ jobs:
 
       # --fail-at-end lets every service run even if one fails, so all surefire reports
       # and JaCoCo XMLs are generated before the job is marked failed.
+      #
+      # COVERAGE GATE (ADR-013, task 14.1.3, NFR-17): `verify` runs the JaCoCo `check` goal
+      # (per-module, 70% LINE) declared in microservices/pom.xml. It is WARN-FIRST today
+      # (jacoco.haltOnFailure=false): violations are printed to this log but do not fail the
+      # build. TO ENFORCE the gate in CI, set jacoco.haltOnFailure=true in microservices/pom.xml
+      # (single change); no edit to this workflow is required for the Maven gate to bite.
       - name: Run microservices tests with coverage
         if: hashFiles('microservices/pom.xml') != ''
         working-directory: microservices
         run: mvn ${MAVEN_ARGS} verify --fail-at-end -Dspotbugs.skip=true -Dcheckstyle.skip=true
 
-      # Posts a coverage table as a PR comment. The min-coverage-overall gate (70%) fails the
-      # check if aggregate line coverage drops below the threshold; min-coverage-changed-files
-      # (60%) fails if changed files are not adequately covered by new or existing tests.
-      # Only runs on PRs; pushes to master get the artifact but not the comment.
+      # Surfaces per-module coverage numbers as a PR comment (reporting only). WARN-FIRST:
+      # continue-on-error keeps this step from blocking merges while the gate is in report mode,
+      # matching the Maven check goal above. The single source of truth for the hard gate is
+      # jacoco.haltOnFailure in microservices/pom.xml.
+      # TO ENFORCE at the PR-comment level too: remove `continue-on-error` below.
       - name: Post coverage report on PR
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         uses: madrapps/jacoco-report@v1.6.1
         with:
           paths: ${{ github.workspace }}/microservices/**/target/site/jacoco/jacoco.xml

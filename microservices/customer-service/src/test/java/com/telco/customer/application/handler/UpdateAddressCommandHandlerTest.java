@@ -3,9 +3,12 @@ package com.telco.customer.application.handler;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.UpdateAddressCommand;
 import com.telco.customer.application.dto.AddressResponse;
 import com.telco.customer.domain.Address;
@@ -24,12 +27,14 @@ class UpdateAddressCommandHandlerTest {
 
     @Mock
     private AddressRepository addresses;
+    @Mock
+    private AuditLogWriter audit;
 
     private UpdateAddressCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new UpdateAddressCommandHandler(addresses);
+        handler = new UpdateAddressCommandHandler(addresses, audit);
     }
 
     @Test
@@ -49,6 +54,7 @@ class UpdateAddressCommandHandlerTest {
         assertThat(response.district()).isEqualTo("Besiktas");
         assertThat(response.postalCode()).isEqualTo("34100");
         verify(addresses).save(address);
+        verify(audit).log(eq("ADDRESS_UPDATED"), eq("Address"), anyString(), any());
     }
 
     @Test

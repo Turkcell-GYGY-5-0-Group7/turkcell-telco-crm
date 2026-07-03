@@ -1,5 +1,6 @@
 package com.telco.payment.application.handler;
 
+import com.telco.payment.application.AuditLogWriter;
 import com.telco.payment.application.command.ChargePaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.event.PaymentCompletedEvent;
@@ -21,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -44,6 +46,7 @@ public class ChargePaymentCommandHandler
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ChargePaymentCommandHandler.class);
     private static final String OUTBOX_AGGREGATE_TYPE = "payment";
+    private static final String AUDIT_ENTITY = "Payment";
     private static final String EVENT_COMPLETED = "payment.completed.v1";
     private static final String EVENT_FAILED = "payment.failed.v1";
 
@@ -51,15 +54,18 @@ public class ChargePaymentCommandHandler
     private final PaymentCreationService paymentCreationService;
     private final PspAdapter pspAdapter;
     private final OutboxService outboxService;
+    private final AuditLogWriter auditLogWriter;
 
     public ChargePaymentCommandHandler(PaymentRepository paymentRepository,
                                        PaymentCreationService paymentCreationService,
                                        PspAdapter pspAdapter,
-                                       OutboxService outboxService) {
+                                       OutboxService outboxService,
+                                       AuditLogWriter auditLogWriter) {
         this.paymentRepository = paymentRepository;
         this.paymentCreationService = paymentCreationService;
         this.pspAdapter = pspAdapter;
         this.outboxService = outboxService;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -107,6 +113,14 @@ public class ChargePaymentCommandHandler
                     PaymentAttempt.create(payment, nextAttemptNumber, AttemptStatus.SUCCESS, null));
             paymentRepository.save(payment);
 
+            auditLogWriter.log(
+                    "PAYMENT_COMPLETED",
+                    AUDIT_ENTITY,
+                    payment.getId().toString(),
+                    Map.of(
+                            "orderId", payment.getOrderId().toString(),
+                            "amount", payment.getAmount().toString()));
+
             outboxService.publish(
                     OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_COMPLETED,
                     new PaymentCompletedEvent(
@@ -126,6 +140,15 @@ public class ChargePaymentCommandHandler
             payment.addAttempt(
                     PaymentAttempt.create(payment, nextAttemptNumber, AttemptStatus.FAILED, e.getMessage()));
             paymentRepository.save(payment);
+
+            auditLogWriter.log(
+                    "PAYMENT_FAILED",
+                    AUDIT_ENTITY,
+                    payment.getId().toString(),
+                    Map.of(
+                            "orderId", payment.getOrderId().toString(),
+                            "amount", payment.getAmount().toString(),
+                            "reason", e.getMessage()));
 
             outboxService.publish(
                     OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_FAILED,

@@ -26,7 +26,8 @@ class UsageEventSchemaCompatTest {
         return Stream.of(
                 new SchemaCase("avro/usage-recorded.avsc", AVRO_PACKAGE + "UsageRecordedEvent"),
                 new SchemaCase("avro/quota-threshold-reached.avsc", AVRO_PACKAGE + "QuotaThresholdReachedEvent"),
-                new SchemaCase("avro/quota-exceeded.avsc", AVRO_PACKAGE + "QuotaExceededEvent")
+                new SchemaCase("avro/quota-exceeded.avsc", AVRO_PACKAGE + "QuotaExceededEvent"),
+                new SchemaCase("avro/usage-aggregated.avsc", AVRO_PACKAGE + "UsageAggregatedEvent")
         );
     }
 
