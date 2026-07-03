@@ -14,7 +14,7 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-01 (Sprint 12 DONE — notification-service and ticket-service unit and integration tests complete. 13 new unit test files: domain tests (Notification, CommunicationPreference, NotificationTemplate, Ticket), NotificationService, DomainEventNotificationConsumer, all 6 ticket handlers (Open, Assign, Resolve, AddComment, DetectSlaBreach, GetTicket), SlaBreachScheduler. notification-service: 39 tests pass. ticket-service: 38 tests pass. BUILD SUCCESS both services.)
+Last updated: 2026-07-02 (Sprint 13 DONE — OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span propagation; platform logback-spring.xml with LogstashEncoder JSON + loki4j appender + PII masking converters; Prometheus scrape targets for all 10 services; 3 Grafana dashboards (platform-overview, kafka-billing-ops, circuit-breakers); 5 Prometheus alert rules; @CircuitBreaker on identity/customer/billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 
 ## Sprint Rollup
 
@@ -32,13 +32,13 @@ Last updated: 2026-07-01 (Sprint 12 DONE — notification-service and ticket-ser
 | [10](sprint-10-usage-metering/README.md) | usage-service, CDR (AC-03) | DONE | 7/7 |
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | DONE | 6/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
-| [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | TODO | 0/4 |
+| [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | TODO | 0/3 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 12 sprints DONE, 0 IN PROGRESS, 3 TODO. Features: 63 DONE / 0 IN PROGRESS
-/ 12 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Totals (MVP, Sprints 01-15): 13 sprints DONE, 0 IN PROGRESS, 2 TODO. Features: 67 DONE / 0 IN PROGRESS
+/ 8 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.

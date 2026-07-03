@@ -1,7 +1,11 @@
-# Prometheus scrape configuration for the local Telco CRM stack (ADR-012).
+# Prometheus scrape configuration for the local Telco CRM stack (ADR-012, NFR-09).
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+
+# Alert rules loaded from the alerts file (NFR-09).
+rule_files:
+  - /etc/prometheus/alerts.yml
 
 scrape_configs:
   - job_name: prometheus
@@ -13,9 +17,66 @@ scrape_configs:
     static_configs:
       - targets: ["otel-collector:8889"]
 
-  # Spring Boot services expose Micrometer metrics at /actuator/prometheus.
-  # Add a target per service as they come online, for example:
-  # - job_name: customer-service
-  #   metrics_path: /actuator/prometheus
-  #   static_configs:
-  #     - targets: ["host.docker.internal:9002"]
+  # Domain services: each exposes /actuator/prometheus on its designated port.
+  # host.docker.internal reaches the host machine from inside Docker — used when services run
+  # on the host (standard dev mode) and the infra stack runs in Docker containers.
+
+  - job_name: identity-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9001"]
+
+  - job_name: customer-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9002"]
+
+  - job_name: product-catalog-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9003"]
+
+  - job_name: order-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9004"]
+
+  - job_name: subscription-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9005"]
+
+  - job_name: usage-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9006"]
+
+  - job_name: billing-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9007"]
+
+  - job_name: payment-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9008"]
+
+  - job_name: notification-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9009"]
+
+  - job_name: ticket-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:9010"]

@@ -1,0 +1,97 @@
+{
+  "id": null,
+  "uid": "telco-kafka-billing-ops",
+  "title": "Kafka & Billing Operations",
+  "description": "Kafka consumer lag, bill-run duration, and invoice generation metrics for the Telco CRM billing domain (ADR-012, NFR-09).",
+  "tags": ["telco-crm", "kafka", "billing"],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Kafka Consumer Lag by Group",
+      "description": "Records lag per consumer client and topic partition. Alert fires when lag exceeds 1 000 for 5 minutes (KafkaConsumerLagHigh). Sourced from kafka_consumer_fetch_manager_records_lag (Spring Kafka / Micrometer Kafka binder).",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "kafka_consumer_fetch_manager_records_lag",
+          "legendFormat": "{{client_id}} / {{topic}} [{{partition}}]",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 500 },
+              { "color": "red", "value": 1000 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "last"] }
+      }
+    },
+    {
+      "id": 2,
+      "type": "text",
+      "title": "Bill-Run Duration",
+      "description": "Placeholder — bill-run duration metric pending implementation.",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": {
+        "mode": "markdown",
+        "content": "## Bill-Run Duration\n\nThis panel will display the end-to-end bill-run duration once the metric `billing_bill_run_duration_seconds` is published by **billing-service**.\n\n**To implement:**\n1. In `BillingService` or the saga coordinator, record a Micrometer `Timer` named `billing.bill_run.duration` (snake_case in Prometheus: `billing_bill_run_duration_seconds`).\n2. Update this panel target to:\n```\nhistogram_quantile(0.95, rate(billing_bill_run_duration_seconds_bucket[5m]))\n```\n3. Remove this text panel and replace it with a `timeseries` panel."
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Invoice Generation Count (total)",
+      "description": "Cumulative invoice generation count. Sourced from billing_invoice_generated_total — a custom Micrometer Counter to be published by billing-service upon each successful invoice creation.",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(billing_invoice_generated_total)",
+          "legendFormat": "Invoices generated",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area"
+      }
+    }
+  ]
+}

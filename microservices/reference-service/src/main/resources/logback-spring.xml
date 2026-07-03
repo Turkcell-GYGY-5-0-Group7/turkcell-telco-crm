@@ -1,29 +1,119 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Reference-service logging (ADR-012) with the ADR-021 PII backstop (Layer B).
+  reference-service structured logging (ADR-012, ADR-021).
 
-  The %mask converter masks Turkish PII (TCKN, MSISDN, IBAN, email, PAN) in the log message and
-  %maskEx does the same for rendered stack traces, so exception messages carrying identifiers do not
-  leak to the log pipeline. This is defense-in-depth on top of the @Sensitive masking ObjectMapper
-  (Layer A); it never touches event payloads or API responses.
+  Two-tier configuration:
 
-  The class attribute (not the deprecated converterClass) is required by logback 1.5.x.
+  1. Bare root (outside <springProfile>): a PatternEncoder CONSOLE appender with %mask / %maskEx
+     active.  This tier is used by any context that does not process Spring Logback extensions
+     (e.g. plain JoranConfigurator in unit tests such as PiiMaskingLogbackConfigTest).
+     It is also the effective fallback for environments where no Spring profile is resolved.
+
+  2. Spring-runtime override (<springProfile>): replaces the pattern console with LogstashEncoder
+     (true structured JSON) and adds the Loki4j push appender.  Logback applies <root> elements
+     in document order and the last definition wins, so the springProfile root supersedes the bare
+     root when Spring Boot initialises the logging system.
+
+  PII masking:
+  - Layer B (%mask / %maskEx): applied by the PatternEncoder CONSOLE appender in tier 1.
+    LogstashEncoder does not process Logback pattern words, so the converters are registered but
+    are not invoked by the JSON appenders.
+  - Layer A (@Sensitive ObjectMapper): masks PII in structured JSON fields (ADR-021).
+
+  Trace context: CorrelationFilter writes traceId, spanId (from Micrometer Tracing OTel bridge),
+  and correlationId to MDC.  Both the %X{} pattern tokens and LogstashEncoder's automatic MDC
+  serialisation surface these fields in every log line.
 -->
 <configuration>
 
+    <!-- PII masking converters (ADR-021 Layer B). -->
     <conversionRule conversionWord="mask"
                     class="com.telco.platform.starter.observability.logging.PiiMaskingConverter"/>
     <conversionRule conversionWord="maskEx"
                     class="com.telco.platform.starter.observability.logging.PiiMaskingThrowableConverter"/>
 
+    <!-- Spring Boot context properties; silently skipped when Spring extensions are absent. -->
+    <springProperty scope="context" name="appName"
+                    source="spring.application.name" defaultValue="reference-service"/>
+    <springProperty scope="context" name="lokiUrl"
+                    source="loki.url" defaultValue="http://localhost:3100/loki/api/v1/push"/>
+
+    <!--
+      Tier 1: pattern-based console appender.
+      %mask converts the log message; %maskEx converts the rendered exception + stack trace.
+      Active via the bare <root> below when Spring logback extensions are not present.
+    -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{correlationId:-}] %logger{36} - %mask%n%maskEx</pattern>
         </encoder>
     </appender>
 
+    <!-- Bare root: active when Spring logback extensions are unavailable (e.g. unit tests). -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
     </root>
+    <logger name="com.telco" level="DEBUG"/>
+
+    <!--
+      Tier 2: Spring runtime, non-test profiles.
+      Overrides the bare root with LogstashEncoder JSON and the Loki4j push appender.
+      The springProfile root is the last <root> Logback sees, so it wins.
+    -->
+    <springProfile name="!test">
+
+        <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeContext>false</includeContext>
+            </encoder>
+        </appender>
+
+        <appender name="LOKI" class="com.github.loki4j.logback.Loki4jAppender">
+            <batchMaxItems>100</batchMaxItems>
+            <batchTimeoutMs>4000</batchTimeoutMs>
+            <http>
+                <url>${lokiUrl}</url>
+            </http>
+            <format>
+                <label>
+                    <pattern>job=telco-crm,service=${appName}</pattern>
+                </label>
+                <!--
+                  loki4j's <message> element expects a Logback Layout<ILoggingEvent>.
+                  LogstashEncoder is an Encoder, not a Layout; nesting it as <encoder> causes
+                  Logback to create a PatternLayout with null pattern (config ERROR). Use a
+                  plain pattern; CONSOLE_JSON handles the structured JSON output.
+                -->
+                <message>
+                    <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{traceId:-},%X{spanId:-},%X{correlationId:-}] %logger{36} - %message%n</pattern>
+                </message>
+            </format>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+            <appender-ref ref="LOKI"/>
+        </root>
+
+        <logger name="com.telco" level="DEBUG"/>
+
+    </springProfile>
+
+    <!-- Spring runtime, test profile: JSON console only, no outbound Loki connection. -->
+    <springProfile name="test">
+
+        <appender name="CONSOLE_JSON" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeContext>false</includeContext>
+            </encoder>
+        </appender>
+
+        <root level="INFO">
+            <appender-ref ref="CONSOLE_JSON"/>
+        </root>
+
+        <logger name="com.telco" level="DEBUG"/>
+
+    </springProfile>
 
 </configuration>
