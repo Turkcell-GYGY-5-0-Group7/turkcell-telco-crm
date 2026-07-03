@@ -1,0 +1,12 @@
+{
+  "type": "record",
+  "name": "NotificationDispatchedEvent",
+  "namespace": "com.telco.platform.events.notification",
+  "doc": "Frozen contract snapshot for notification.dispatched.v1 (ADR-019). Producer: notification-service. Field names must match the outbox payload emitted by NotificationService.dispatch; the capture-based contract test fails the build on any drift (NFR-16).",
+  "fields": [
+    { "name": "notificationId", "type": "string", "doc": "Unique notification identifier (UUID)." },
+    { "name": "userId", "type": "string", "doc": "Recipient user identifier." },
+    { "name": "channel", "type": "string", "doc": "Delivery channel, for example SMS." },
+    { "name": "templateCode", "type": "string", "doc": "Template code used to render the message." }
+  ]
+}

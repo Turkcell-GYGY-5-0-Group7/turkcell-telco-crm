@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "TariffPriceChangedEvent",
+  "namespace": "com.telco.platform.events.tariff",
+  "doc": "Frozen contract snapshot for tariff.price-changed.v1 (ADR-019). Producer: product-catalog-service. Field names must match the com.telco.catalog.domain.event.TariffPriceChangedEvent outbox payload record; the schema-compat test fails the build on any drift (NFR-16).",
+  "fields": [
+    { "name": "tariffId", "type": "string", "doc": "Unique tariff identifier (UUID)." },
+    { "name": "code", "type": "string", "doc": "Business code of the tariff." },
+    {
+      "name": "oldMonthlyFee",
+      "type": { "type": "bytes", "logicalType": "decimal", "precision": 19, "scale": 4 },
+      "doc": "Previous monthly fee as an exact decimal."
+    },
+    {
+      "name": "newMonthlyFee",
+      "type": { "type": "bytes", "logicalType": "decimal", "precision": 19, "scale": 4 },
+      "doc": "New monthly fee as an exact decimal."
+    },
+    { "name": "currency", "type": "string", "doc": "ISO 4217 currency code, for example TRY." },
+    { "name": "newVersion", "type": "int", "doc": "Version number after the price change." },
+    { "name": "changedAt", "type": "string", "doc": "ISO-8601 UTC instant the price changed." }
+  ]
+}

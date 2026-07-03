@@ -1,5 +1,6 @@
 package com.telco.payment.application.handler;
 
+import com.telco.payment.application.AuditLogWriter;
 import com.telco.payment.application.command.ChargePaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.service.PaymentCreationService;
@@ -35,13 +36,14 @@ class ChargePaymentCommandHandlerTest {
     @Mock private PaymentCreationService paymentCreationService;
     @Mock private PspAdapter pspAdapter;
     @Mock private OutboxService outboxService;
+    @Mock private AuditLogWriter auditLogWriter;
 
     private ChargePaymentCommandHandler handler;
 
     @BeforeEach
     void setUp() {
         handler = new ChargePaymentCommandHandler(
-                paymentRepository, paymentCreationService, pspAdapter, outboxService);
+                paymentRepository, paymentCreationService, pspAdapter, outboxService, auditLogWriter);
     }
 
     private ChargePaymentCommand command(String requestId) {
@@ -63,6 +65,7 @@ class ChargePaymentCommandHandlerTest {
 
         assertThat(response.status()).isEqualTo("COMPLETED");
         verify(outboxService).publish(eq("payment"), anyString(), eq("payment.completed.v1"), any());
+        verify(auditLogWriter).log(eq("PAYMENT_COMPLETED"), eq("Payment"), anyString(), any());
     }
 
     @Test
@@ -79,6 +82,7 @@ class ChargePaymentCommandHandlerTest {
 
         assertThat(response.status()).isEqualTo("FAILED");
         verify(outboxService).publish(eq("payment"), anyString(), eq("payment.failed.v1"), any());
+        verify(auditLogWriter).log(eq("PAYMENT_FAILED"), eq("Payment"), anyString(), any());
     }
 
     @Test
@@ -93,6 +97,7 @@ class ChargePaymentCommandHandlerTest {
         assertThat(response.status()).isEqualTo("COMPLETED");
         verify(pspAdapter, never()).charge(any(), any(), any());
         verify(outboxService, never()).publish(any(), any(), any(), any());
+        verify(auditLogWriter, never()).log(any(), any(), any(), any());
     }
 
     @Test

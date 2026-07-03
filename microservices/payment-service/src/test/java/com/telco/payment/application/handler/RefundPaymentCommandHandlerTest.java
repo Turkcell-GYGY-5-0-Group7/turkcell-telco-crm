@@ -1,5 +1,6 @@
 package com.telco.payment.application.handler;
 
+import com.telco.payment.application.AuditLogWriter;
 import com.telco.payment.application.command.RefundPaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.domain.Payment;
@@ -34,12 +35,13 @@ class RefundPaymentCommandHandlerTest {
     @Mock private PaymentRepository paymentRepository;
     @Mock private PspAdapter pspAdapter;
     @Mock private OutboxService outboxService;
+    @Mock private AuditLogWriter auditLogWriter;
 
     private RefundPaymentCommandHandler handler;
 
     @BeforeEach
     void setUp() {
-        handler = new RefundPaymentCommandHandler(paymentRepository, pspAdapter, outboxService);
+        handler = new RefundPaymentCommandHandler(paymentRepository, pspAdapter, outboxService, auditLogWriter);
     }
 
     @Test
@@ -55,6 +57,7 @@ class RefundPaymentCommandHandlerTest {
 
         assertThat(response.status()).isEqualTo("REFUNDED");
         verify(outboxService).publish(eq("payment"), anyString(), eq("payment.refunded.v1"), any());
+        verify(auditLogWriter).log(eq("PAYMENT_REFUNDED"), eq("Payment"), anyString(), any());
     }
 
     @Test

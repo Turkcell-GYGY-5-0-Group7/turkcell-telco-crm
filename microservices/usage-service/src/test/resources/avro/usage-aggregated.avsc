@@ -1,0 +1,15 @@
+{
+  "type": "record",
+  "name": "UsageAggregatedEvent",
+  "namespace": "com.telco.platform.events.usage",
+  "doc": "Frozen contract snapshot for usage.aggregated.v1 (ADR-019). Producer: usage-service; consumer: billing-service. Field names must match the com.telco.usage.application.event.UsageAggregatedEvent outbox payload record; the schema-compat test fails the build on any drift (NFR-16).",
+  "fields": [
+    { "name": "subscriptionId", "type": "string", "doc": "Subscription the usage belongs to (UUID)." },
+    { "name": "periodStart", "type": "string", "doc": "ISO-8601 UTC start of the aggregation period." },
+    { "name": "periodEnd", "type": "string", "doc": "ISO-8601 UTC end of the aggregation period." },
+    { "name": "voiceOverageSeconds", "type": "long", "doc": "Voice usage beyond the quota, in seconds." },
+    { "name": "smsOverageCount", "type": "long", "doc": "SMS usage beyond the quota, in messages." },
+    { "name": "dataOverageKb", "type": "long", "doc": "Data usage beyond the quota, in kilobytes." },
+    { "name": "aggregatedAt", "type": "string", "doc": "ISO-8601 UTC instant the aggregation ran." }
+  ]
+}

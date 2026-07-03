@@ -14,7 +14,7 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-02 (Sprint 13 DONE — OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span propagation; platform logback-spring.xml with LogstashEncoder JSON + loki4j appender + PII masking converters; Prometheus scrape targets for all 10 services; 3 Grafana dashboards (platform-overview, kafka-billing-ops, circuit-breakers); 5 Prometheus alert rules; @CircuitBreaker on identity/customer/billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
+Last updated: 2026-07-03 (Sprint 14 Wave A: 14.1.2 contract tests DONE (avsc-snapshot + provider API guards across all produced events), 14.1.3 coverage gate DONE (JaCoCo 70% line/module, warn-first), 14.2 Security Hardening DONE — PII-at-rest/masking/mTLS audits PASS; audit-log gaps fixed: payment-service audit stack added (V3 + AuditLog/Repository/Writer wired into charge/refund) and customer address handlers now audited; payment 8/8 + customer address 10/10 tests green. Remaining Sprint 14: 14.1.1 acceptance E2E + 14.3 performance (Wave B, need full Docker stack). Prior: Sprint 13 DONE — OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span propagation; platform logback-spring.xml with LogstashEncoder JSON + loki4j appender + PII masking converters; Prometheus scrape targets for all 10 services; 3 Grafana dashboards (platform-overview, kafka-billing-ops, circuit-breakers); 5 Prometheus alert rules; @CircuitBreaker on identity/customer/billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 
 ## Sprint Rollup
 
@@ -33,12 +33,12 @@ Last updated: 2026-07-02 (Sprint 13 DONE — OTel tracing wired (micrometer-trac
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | DONE | 6/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
-| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | TODO | 0/3 |
+| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | IN PROGRESS | 1/3 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 13 sprints DONE, 0 IN PROGRESS, 2 TODO. Features: 67 DONE / 0 IN PROGRESS
-/ 8 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Totals (MVP, Sprints 01-15): 13 sprints DONE, 1 IN PROGRESS, 1 TODO. Features: 68 DONE / 1 IN PROGRESS
+/ 6 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.

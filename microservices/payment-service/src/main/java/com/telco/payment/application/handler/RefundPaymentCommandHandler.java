@@ -1,5 +1,6 @@
 package com.telco.payment.application.handler;
 
+import com.telco.payment.application.AuditLogWriter;
 import com.telco.payment.application.command.RefundPaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.event.PaymentRefundedEvent;
@@ -30,18 +31,22 @@ public class RefundPaymentCommandHandler
 
     private static final Logger LOGGER = LoggerFactory.getLogger(RefundPaymentCommandHandler.class);
     private static final String OUTBOX_AGGREGATE_TYPE = "payment";
+    private static final String AUDIT_ENTITY = "Payment";
     private static final String EVENT_REFUNDED = "payment.refunded.v1";
 
     private final PaymentRepository paymentRepository;
     private final PspAdapter pspAdapter;
     private final OutboxService outboxService;
+    private final AuditLogWriter auditLogWriter;
 
     public RefundPaymentCommandHandler(PaymentRepository paymentRepository,
                                        PspAdapter pspAdapter,
-                                       OutboxService outboxService) {
+                                       OutboxService outboxService,
+                                       AuditLogWriter auditLogWriter) {
         this.paymentRepository = paymentRepository;
         this.pspAdapter = pspAdapter;
         this.outboxService = outboxService;
+        this.auditLogWriter = auditLogWriter;
     }
 
     @Override
@@ -62,6 +67,15 @@ public class RefundPaymentCommandHandler
                 payment.getCustomerId().toString());
 
         paymentRepository.save(payment);
+
+        auditLogWriter.log(
+                "PAYMENT_REFUNDED",
+                AUDIT_ENTITY,
+                payment.getId().toString(),
+                Map.of(
+                        "orderId", payment.getOrderId().toString(),
+                        "amount", payment.getAmount().toString(),
+                        "reason", command.reason()));
 
         outboxService.publish(
                 OUTBOX_AGGREGATE_TYPE, payment.getId().toString(), EVENT_REFUNDED,
