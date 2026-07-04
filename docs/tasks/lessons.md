@@ -104,3 +104,35 @@ Format:
 - Rule: the `@ActiveProfiles("test")` profile resolves to `application-test.yml`; it must disable
   config-server (`spring.cloud.config.enabled=false`, `spring.config.import=""`), Eureka, and
   Spring Cloud compatibility verifier to allow a standalone context boot.
+
+## 2026-07-04 - a real gateway-driven acceptance suite finds bugs that unit/integration tests cannot
+- Mistake: nothing. Building `microservices/acceptance-tests` (task 14.1.1) by actually authenticating
+  through Keycloak and calling every API as a real caller would, instead of trusting each service's own
+  mocked/self-issued-JWT test suite, surfaced 8+ real cross-service bugs that had shipped clean through
+  every prior sprint's per-service tests: a tariff lookup that routed by `code` when the caller passed a
+  UUID `id`; a payment event missing the `invoiceId` field needed to close the AC-02 pay-invoice loop; a
+  quota event missing `customerId` so notifications always went to `"unknown"`; 6 services missing
+  `application-docker.yml` entirely; a role check for `CUSTOMER`, a role that never existed anywhere in
+  Keycloak (the real role is `SUBSCRIBER`) - baked into 6 controllers, 7 test fixtures, and a Flyway seed
+  migration; and a deeper one that the role fix then exposed - `customer-service` never links a
+  self-registered `customerId` to the caller's Keycloak subject, so no ownership check anywhere in the
+  platform can ever be satisfied by a real end-user token.
+- Rule: an acceptance suite that calls through the real gateway with a real IdP token, exercising each
+  documented business scenario end-to-end, is not redundant with per-service unit/integration tests -
+  it is the only test type that catches drift *between* services (one side of a contract changes,
+  the other doesn't) and identity/authz gaps that only manifest when a real, non-admin, non-test-fixture
+  principal is used. Budget for it early, not as a final Sprint-14 checkbox once everything else is "done".
+
+## 2026-07-04 - copy-pasted platform-pattern code drifts silently across services
+- Mistake: `AuditLogWriter.log()` was copy-pasted into 5 services (identity, customer, subscription,
+  payment, order) as a stopgap ahead of a planned platform-starter extraction
+  (`docs/architecture/platform-capabilities.md`). `order-service`'s copy was fixed at some point to
+  guard `UUID.fromString(rawActorId)` in a try/catch (non-UUID principals, e.g. service accounts or
+  test fixtures, fall back to a null `actor_id`); the other 4 copies were never updated to match and
+  would throw `IllegalArgumentException` and 500 the entire business transaction whenever the caller's
+  JWT subject wasn't UUID-shaped.
+- Rule: when N services carry a duplicated, not-yet-platformized helper class (flagged in each
+  service's CLAUDE.md as "locally-built, isolated for easy extraction"), a fix landed in one copy must
+  be diffed against all N copies before the sprint is called done - a duplicated-by-design class is a
+  single logical unit for bugfix purposes even though it lives in N files. Grep for the class name across
+  the whole `microservices/` tree, not just the one service you're touching.

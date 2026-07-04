@@ -1,0 +1,23 @@
+# billing-service Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the localhost values in application-dev.yml with Docker service names.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/billing_db
+    username: billing
+    password: billing
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+telco:
+  clients:
+    product-catalog-service:
+      url: http://product-catalog-service:9003
+
+minio:
+  endpoint: http://minio:9000

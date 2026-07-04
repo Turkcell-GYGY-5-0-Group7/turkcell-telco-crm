@@ -9,7 +9,7 @@ COPY microservices/pom.xml                microservices/pom.xml
 COPY --parents microservices/*/pom.xml ./
 COPY microservices/api-gateway/src              microservices/api-gateway/src
 
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     mvn -f platform/pom.xml install -DskipTests -Dschema.registry.skip=true --no-transfer-progress -q && \
     mvn -f microservices/pom.xml -pl api-gateway package -DskipTests --no-transfer-progress -q
 

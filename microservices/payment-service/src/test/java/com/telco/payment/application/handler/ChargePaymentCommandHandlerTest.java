@@ -3,6 +3,7 @@ package com.telco.payment.application.handler;
 import com.telco.payment.application.AuditLogWriter;
 import com.telco.payment.application.command.ChargePaymentCommand;
 import com.telco.payment.application.dto.PaymentResponse;
+import com.telco.payment.application.event.PaymentCompletedEvent;
 import com.telco.payment.application.service.PaymentCreationService;
 import com.telco.payment.domain.Payment;
 import com.telco.payment.domain.PaymentStatus;
@@ -14,6 +15,7 @@ import com.telco.platform.outbox.OutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -48,7 +50,7 @@ class ChargePaymentCommandHandlerTest {
 
     private ChargePaymentCommand command(String requestId) {
         return new ChargePaymentCommand(UUID.randomUUID(), UUID.randomUUID(),
-                new BigDecimal("49.99"), requestId, "msg-" + requestId);
+                new BigDecimal("49.99"), null, requestId, "msg-" + requestId);
     }
 
     @Test
@@ -112,6 +114,31 @@ class ChargePaymentCommandHandlerTest {
 
         assertThat(response.status()).isEqualTo("REFUNDED");
         verify(pspAdapter, never()).charge(any(), any(), any());
+    }
+
+    @Test
+    void psp_success_with_invoice_id_carries_it_onto_completed_event() throws PspException {
+        String reqId = "REQ-INV-001";
+        UUID invoiceId = UUID.randomUUID();
+        when(paymentRepository.findByPaymentRequestId(reqId)).thenReturn(Optional.empty());
+        Payment newPayment = Payment.create(UUID.randomUUID(), UUID.randomUUID(),
+                new BigDecimal("49.99"), reqId, invoiceId);
+        when(paymentCreationService.saveNewPayment(any())).thenReturn(newPayment);
+        when(pspAdapter.charge(anyString(), any(), anyString()))
+                .thenReturn(new ChargeResult("TXN-INV-001"));
+        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        ChargePaymentCommand command = new ChargePaymentCommand(newPayment.getOrderId(),
+                newPayment.getCustomerId(), new BigDecimal("49.99"), invoiceId, reqId, "msg-" + reqId);
+
+        PaymentResponse response = handler.handle(command);
+
+        assertThat(response.status()).isEqualTo("COMPLETED");
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("payment"), anyString(), eq("payment.completed.v1"),
+                payloadCaptor.capture());
+        PaymentCompletedEvent event = (PaymentCompletedEvent) payloadCaptor.getValue();
+        assertThat(event.invoiceId()).isEqualTo(invoiceId.toString());
     }
 
     @Test

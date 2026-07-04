@@ -48,6 +48,16 @@ public class Payment {
     @Column(name = "payment_request_id", nullable = false, unique = true, length = 64)
     private String paymentRequestId;
 
+    /**
+     * Invoice this payment settles, when the charge originates from an invoice payment rather
+     * than the order saga. Nullable: most payments in the MVP are order-driven (FR-25, FR-26);
+     * this is set only when the caller supplies an {@code invoiceId} on the charge request, which
+     * lets {@code payment.completed.v1}/{@code payment.failed.v1} carry it through to
+     * billing-service's {@code PaymentCompletedBillingConsumer} (Section 14.2 pay-invoice flow).
+     */
+    @Column(name = "invoice_id")
+    private UUID invoiceId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -61,12 +71,14 @@ public class Payment {
     protected Payment() {
     }
 
-    private Payment(UUID id, UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId) {
+    private Payment(UUID id, UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
+                     UUID invoiceId) {
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.amount = Objects.requireNonNull(amount, "amount");
         this.paymentRequestId = Objects.requireNonNull(paymentRequestId, "paymentRequestId");
+        this.invoiceId = invoiceId;
         this.status = PaymentStatus.PENDING;
         this.createdAt = Instant.now();
     }
@@ -80,10 +92,25 @@ public class Payment {
      * @param paymentRequestId idempotency key derived from the upstream command
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId) {
+        return create(orderId, customerId, amount, paymentRequestId, null);
+    }
+
+    /**
+     * Factory: creates a new payment in {@link PaymentStatus#PENDING} state, optionally linked to
+     * the invoice it settles.
+     *
+     * @param orderId          the order this payment covers
+     * @param customerId       the paying customer
+     * @param amount           the amount to charge (must be positive)
+     * @param paymentRequestId idempotency key derived from the upstream command
+     * @param invoiceId        the invoice this payment settles, or {@code null} for an order-only charge
+     */
+    public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
+                                  UUID invoiceId) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessRuleException("Payment amount must be positive");
         }
-        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId);
+        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId);
     }
 
     /** Transitions to {@link PaymentStatus#COMPLETED}. */
@@ -158,6 +185,11 @@ public class Payment {
 
     public String getPaymentRequestId() {
         return paymentRequestId;
+    }
+
+    /** Invoice this payment settles, or {@code null} for an order-only (non-invoice) charge. */
+    public UUID getInvoiceId() {
+        return invoiceId;
     }
 
     public Instant getCreatedAt() {

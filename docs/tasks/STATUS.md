@@ -14,7 +14,43 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-03 (Sprint 14 Wave A: 14.1.2 contract tests DONE (avsc-snapshot + provider API guards across all produced events), 14.1.3 coverage gate DONE (JaCoCo 70% line/module, warn-first), 14.2 Security Hardening DONE — PII-at-rest/masking/mTLS audits PASS; audit-log gaps fixed: payment-service audit stack added (V3 + AuditLog/Repository/Writer wired into charge/refund) and customer address handlers now audited; payment 8/8 + customer address 10/10 tests green. Remaining Sprint 14: 14.1.1 acceptance E2E + 14.3 performance (Wave B, need full Docker stack). Prior: Sprint 13 DONE — OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span propagation; platform logback-spring.xml with LogstashEncoder JSON + loki4j appender + PII masking converters; Prometheus scrape targets for all 10 services; 3 Grafana dashboards (platform-overview, kafka-billing-ops, circuit-breakers); 5 Prometheus alert rules; @CircuitBreaker on identity/customer/billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
+Last updated: 2026-07-04 (Sprint 14, task 14.1.1 acceptance E2E moved from TODO to IN PROGRESS: Docker
+Compose `apps` profile for all 10 domain services (incl. new `mongo` service for notification-service),
+Makefile targets, 10 real Debezium outbox connectors, new `acceptance.yml` CI workflow, and the new
+`microservices/acceptance-tests` suite (AC-01 incl. compensation, AC-02, AC-03, gateway-driven via a
+real Keycloak `SUBSCRIBER` user) all built and compiling clean; `docker compose config` validated for
+both the `apps` and full `auth+platform+apps` profile combinations. NOT yet run against a live stack
+(no one has booted Docker this session) — that run, plus CI wiring verification, is what remains before
+14.1.1 is DONE. Building the suite honestly (real IdP token, real gateway calls, not mocked JWTs)
+surfaced and fixed 8 real cross-service bugs: a tariff lookup routing by `code` when callers passed a
+UUID `id`; payment events missing `invoiceId` (blocked the AC-02 pay-invoice loop); quota events missing
+`customerId` (notifications always went to `"unknown"`); 6 services missing `application-docker.yml`
+(would have failed to boot in Docker); mock PSP had no deterministic override; an order-service API-doc
+mismatch; a `CUSTOMER` role that never existed in Keycloak baked into 6 controllers, 7 test fixtures,
+and a Flyway seed migration (real role is `SUBSCRIBER`, tech-lead ruled); and an `AuditLogWriter` crash
+on non-UUID actor IDs present in 4 of the 5 services carrying that duplicated class (fixed to match the
+one correct copy). One systemic gap found and ruled on by tech-lead but NOT yet implemented:
+`customer-service` never links a self-registered `customerId` to the caller's Keycloak subject, so no
+"view my own resource" ownership check anywhere in the platform (subscription/billing/usage/ticket/
+notification-service) can be satisfied by a real end-user token yet. Full ruling + execution order:
+`docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md`. That ruling also
+surfaced an independently urgent finding, FIXED the same session: `customer-service`'s
+`CustomerController` had no `@PreAuthorize`/ownership check at all on `GET`/`PUT`/`DELETE
+/api/v1/customers/{id}` — broken access control, any authenticated caller could read/overwrite any
+other customer's profile by ID. Now staff-gated (`ADMIN`/`CALL_CENTER_AGENT` for read/update, `ADMIN`
+for delete) as an interim measure until the linkage work resolves real ownership; 14/14
+`CustomerIntegrationTest` cases pass incl. a new test proving the closure. See
+`docs/tasks/lessons.md` (2026-07-04 entries) and `sprint-14-testing-and-hardening/README.md` for full
+detail. Prior: Sprint 14 Wave A (2026-07-03) — 14.1.2 contract tests DONE (avsc-snapshot +
+provider API guards across all produced events), 14.1.3 coverage gate DONE (JaCoCo 70% line/module,
+warn-first), 14.2 Security Hardening DONE — PII-at-rest/masking/mTLS audits PASS; audit-log gaps fixed:
+payment-service audit stack added (V3 + AuditLog/Repository/Writer wired into charge/refund) and
+customer address handlers now audited; payment 8/8 + customer address 10/10 tests green. Sprint 13 DONE
+— OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span
+propagation; platform logback-spring.xml with LogstashEncoder JSON + loki4j appender + PII masking
+converters; Prometheus scrape targets for all 10 services; 3 Grafana dashboards (platform-overview,
+kafka-billing-ops, circuit-breakers); 5 Prometheus alert rules; @CircuitBreaker on identity/customer/
+billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 
 ## Sprint Rollup
 

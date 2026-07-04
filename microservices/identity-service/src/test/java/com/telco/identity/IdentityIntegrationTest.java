@@ -88,7 +88,7 @@ class IdentityIntegrationTest {
                 .build();
 
         adminToken = jwtService.issue(ACTOR_ID.toString(), Set.of("ADMIN"));
-        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
+        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
 
         when(keycloakAdminClient.createUser(anyString(), anyString()))
                 .thenReturn(UUID.randomUUID().toString());
@@ -226,7 +226,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"roleNames": ["CUSTOMER"]}
+                        {"roleNames": ["SUBSCRIBER"]}
                         """)
                 .retrieve()
                 .toEntity(Map.class);

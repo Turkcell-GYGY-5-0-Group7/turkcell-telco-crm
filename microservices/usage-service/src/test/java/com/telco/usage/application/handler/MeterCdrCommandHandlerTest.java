@@ -255,6 +255,7 @@ class MeterCdrCommandHandlerTest {
         assertThat(event.subscriptionId()).isEqualTo(subscriptionId.toString());
         assertThat(event.quotaId()).isEqualTo(quota.getId().toString());
         assertThat(event.usageType()).isEqualTo("VOICE");
+        assertThat(event.customerId()).isEqualTo(customerId.toString());
     }
 
     @Test
@@ -282,6 +283,31 @@ class MeterCdrCommandHandlerTest {
         assertThat(event.subscriptionId()).isEqualTo(subscriptionId.toString());
         assertThat(event.quotaId()).isEqualTo(quota.getId().toString());
         assertThat(event.usageType()).isEqualTo("VOICE");
+        assertThat(event.customerId()).isEqualTo(customerId.toString());
+    }
+
+    @Test
+    void threshold_event_customer_id_is_null_when_quota_has_no_customer_id() {
+        // Quota provisioned without a customerId (pre-existing data before this field existed):
+        // the event must still publish, with a null customerId (backward-compatible fallback).
+        Quota quota = Quota.create(subscriptionId, null, periodStart, periodEnd, 100, 50, 200);
+        MeterCdrCommand command = new MeterCdrCommand(
+                subscriptionId, UsageType.VOICE, 81, Instant.now(), "CDR-THR-NOCUST");
+
+        when(usageRecordRepository.existsByCdrRef("CDR-THR-NOCUST")).thenReturn(false);
+        when(quotaRepository.findActiveForUpdateBySubscriptionId(eq(subscriptionId), any()))
+                .thenReturn(Optional.of(quota));
+
+        handler.handle(command);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        ArgumentCaptor<String> eventTypeCaptor = ArgumentCaptor.forClass(String.class);
+        verify(outboxService, times(2)).publish(
+                any(), anyString(), eventTypeCaptor.capture(), payloadCaptor.capture());
+
+        int idx = eventTypeCaptor.getAllValues().indexOf(EVENT_THRESHOLD_REACHED);
+        QuotaThresholdReachedEvent event = (QuotaThresholdReachedEvent) payloadCaptor.getAllValues().get(idx);
+        assertThat(event.customerId()).isNull();
     }
 
     /**

@@ -235,4 +235,22 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!--
+            Gateway-driven acceptance suite (task 14.1.1, ADR-013). The acceptance-tests module is
+            registered in the reactor ONLY under this profile, so it never joins a default
+            `mvn install` / `mvn verify` - it requires the full docker compose stack (gateway,
+            Keycloak, Kafka, and all ten domain services) already running, unlike every other module.
+
+            CI/local invocation (matches the acceptance workflow contract exactly):
+                mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify
+        -->
+        <profile>
+            <id>acceptance</id>
+            <modules>
+                <module>acceptance-tests</module>
+            </modules>
+        </profile>
+    </profiles>
+
 </project>

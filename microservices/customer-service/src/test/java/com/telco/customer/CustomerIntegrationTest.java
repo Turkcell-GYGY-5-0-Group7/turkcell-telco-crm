@@ -94,7 +94,7 @@ class CustomerIntegrationTest {
         jdbc.execute("DELETE FROM addresses");
         jdbc.execute("DELETE FROM customers");
 
-        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
+        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
         adminToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("ADMIN"));
 
         client = RestClient.builder()
@@ -155,6 +155,11 @@ class CustomerIntegrationTest {
     }
 
     // --- FR-03 (GET + PUT) ---
+    // GET/PUT/DELETE by id are staff-only (ADMIN, CALL_CENTER_AGENT) until the customerId-to-
+    // Keycloak-subject linkage lands - see
+    // docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md. A SUBSCRIBER
+    // token cannot yet be verified as the owner of a given customer record, so these are admin-token
+    // calls; see subscriber_cannot_get_customer_by_id_returns_403 for the boundary itself.
 
     @Test
     void get_customer_returns_masked_pii() {
@@ -162,7 +167,7 @@ class CustomerIntegrationTest {
 
         ResponseEntity<Map<String, Object>> response = client.get()
                 .uri("/api/v1/customers/{id}", id)
-                .header("Authorization", "Bearer " + customerToken)
+                .header("Authorization", "Bearer " + adminToken)
                 .retrieve()
                 .toEntity(MAP_TYPE);
 
@@ -179,11 +184,24 @@ class CustomerIntegrationTest {
     void get_unknown_customer_returns_404() {
         ResponseEntity<String> response = client.get()
                 .uri("/api/v1/customers/{id}", UUID.randomUUID())
-                .header("Authorization", "Bearer " + customerToken)
+                .header("Authorization", "Bearer " + adminToken)
                 .retrieve()
                 .toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void subscriber_cannot_get_customer_by_id_returns_403() {
+        String id = doRegister("Ada", "Lovelace", VALID_TCKN);
+
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/customers/{id}", id)
+                .header("Authorization", "Bearer " + customerToken)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
     @Test
@@ -192,7 +210,7 @@ class CustomerIntegrationTest {
 
         ResponseEntity<Map<String, Object>> response = client.put()
                 .uri("/api/v1/customers/{id}", id)
-                .header("Authorization", "Bearer " + customerToken)
+                .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
                         {"firstName": "Grace", "lastName": "Hopper", "dateOfBirth": "1985-12-09"}
@@ -229,14 +247,14 @@ class CustomerIntegrationTest {
 
         ResponseEntity<String> deleteResponse = client.delete()
                 .uri("/api/v1/customers/{id}", id)
-                .header("Authorization", "Bearer " + customerToken)
+                .header("Authorization", "Bearer " + adminToken)
                 .retrieve()
                 .toEntity(String.class);
         assertThat(deleteResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
 
         ResponseEntity<String> getResponse = client.get()
                 .uri("/api/v1/customers/{id}", id)
-                .header("Authorization", "Bearer " + customerToken)
+                .header("Authorization", "Bearer " + adminToken)
                 .retrieve()
                 .toEntity(String.class);
         assertThat(getResponse.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);

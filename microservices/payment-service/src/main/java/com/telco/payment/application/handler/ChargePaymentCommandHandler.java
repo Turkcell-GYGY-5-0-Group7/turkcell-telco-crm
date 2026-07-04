@@ -93,7 +93,8 @@ public class ChargePaymentCommandHandler
                     command.orderId(),
                     command.customerId(),
                     command.amount(),
-                    command.paymentRequestId());
+                    command.paymentRequestId(),
+                    command.invoiceId());
             paymentCreationService.saveNewPayment(payment);
             LOGGER.info("Created new payment id={} for orderId={}", payment.getId(), command.orderId());
         }
@@ -128,6 +129,7 @@ public class ChargePaymentCommandHandler
                             payment.getOrderId().toString(),
                             payment.getCustomerId().toString(),
                             payment.getAmount(),
+                            payment.getInvoiceId() != null ? payment.getInvoiceId().toString() : null,
                             Instant.now().toString()));
 
             LOGGER.info("Payment completed paymentId={} transactionId={}",
@@ -157,6 +159,7 @@ public class ChargePaymentCommandHandler
                             payment.getOrderId().toString(),
                             payment.getCustomerId().toString(),
                             payment.getAmount(),
+                            payment.getInvoiceId() != null ? payment.getInvoiceId().toString() : null,
                             e.getMessage(),
                             Instant.now().toString()));
 

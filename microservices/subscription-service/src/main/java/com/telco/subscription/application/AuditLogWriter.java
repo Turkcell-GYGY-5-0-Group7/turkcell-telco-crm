@@ -39,7 +39,14 @@ public class AuditLogWriter {
      */
     public void log(String action, String entity, String entityId, Map<String, Object> details) {
         String rawActorId = UserContextHolder.get().map(u -> u.userId()).orElse(null);
-        UUID actorId = rawActorId != null ? UUID.fromString(rawActorId) : null;
+        UUID actorId = null;
+        if (rawActorId != null) {
+            try {
+                actorId = UUID.fromString(rawActorId);
+            } catch (IllegalArgumentException ignored) {
+                // Non-UUID principal (service accounts, test principals) — actor_id left null
+            }
+        }
 
         String correlationId = CorrelationContextHolder.get().map(c -> c.correlationId()).orElse(null);
 

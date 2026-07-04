@@ -8,7 +8,7 @@
 | Version | 1.0 |
 | Parent | [../product/BRD.md](../product/BRD.md) |
 | Technical authority | ADR-009 (event-driven architecture), ADR-019 (event contract and schema governance) |
-| Last updated | 2026-06-19 |
+| Last updated | 2026-07-04 |
 
 All events are immutable, versioned (`domain.event.v1`), Avro-encoded, and registered in the
 Schema Registry. Events are published through the transactional outbox and consumed
@@ -55,7 +55,7 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `quota.threshold-reached.v1` | usage-service | notification | 80% usage threshold reached. |
 | `quota.exceeded.v1` | usage-service | billing, notification | 100% usage reached; overage begins. |
 | `usage.aggregated.v1` | usage-service | billing | Period usage aggregated for billing. |
-| `invoice.generated.v1` | billing-service | notification, payment | Invoice created and PDF rendered. |
+| `invoice.generated.v1` | billing-service | notification | Invoice created and PDF rendered. Not consumed by payment-service in the MVP - paying an invoice is a customer/admin-initiated `POST /api/v1/payments` call (Section 14.2), not an auto-pay reaction to this event. |
 | `invoice.paid.v1` | billing-service | notification | Invoice settled. |
 | `invoice.overdue.v1` | billing-service | notification, ticket | Invoice overdue. |
 | `ticket.opened.v1` | ticket-service | notification | Ticket created. |
@@ -88,6 +88,18 @@ Compensation on activation failure:
 - Compatibility mode: backward (consumers can read older producer schemas).
 - Schemas are versioned alongside the producing service.
 - Consumers MUST tolerate unknown optional fields.
+
+---
+
+## 5. Schema Evolution Log
+
+Additive, backward-compatible field changes (ADR-019). Each entry is a new nullable/optional
+field only; no field was renamed, removed, or retyped.
+
+| Date | Event | Field added | Reason |
+| --- | --- | --- | --- |
+| 2026-07-04 | `payment.completed.v1`, `payment.failed.v1` | `invoiceId` (nullable string) | Carries the invoice being settled so billing-service's `PaymentCompletedBillingConsumer` can mark the invoice paid when a customer pays via `POST /api/v1/payments` with an `invoiceId` (Section 14.2). Null for order-only charges. |
+| 2026-07-04 | `quota.threshold-reached.v1`, `quota.exceeded.v1` | `customerId` (nullable string) | Lets notification-service route the 80%/100% quota SMS to the real customer instead of falling back to the literal `unknown`. Resolved by usage-service from the `Quota` aggregate's locally stored `customer_id` (set at provisioning time from `subscription.activated.v1`). Null only for events emitted before this field existed (rolling-upgrade compatibility). |
 
 ---
 

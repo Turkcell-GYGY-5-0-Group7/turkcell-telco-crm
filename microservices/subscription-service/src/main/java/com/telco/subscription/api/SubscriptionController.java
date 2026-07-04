@@ -29,8 +29,8 @@ import java.util.UUID;
  * (ADR-004, ADR-008, ADR-015). No business logic here; the state machine and event emission live in
  * the aggregate and the command handlers.
  *
- * <p>All lifecycle and read endpoints require CUSTOMER or ADMIN. Ownership is enforced in the
- * command/query handlers: a CUSTOMER caller may only operate on their own subscriptions. Saga-driven
+ * <p>All lifecycle and read endpoints require SUBSCRIBER or ADMIN. Ownership is enforced in the
+ * command/query handlers: a SUBSCRIBER caller may only operate on their own subscriptions. Saga-driven
  * activation is served by {@link SubscriptionInternalController} under {@code /internal/subscriptions},
  * which the gateway blocks from external traffic (ADR-011).
  */
@@ -47,7 +47,7 @@ public class SubscriptionController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<SubscriptionResponse> get(
             Authentication authentication,
             @PathVariable UUID id) {
@@ -56,7 +56,7 @@ public class SubscriptionController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<PageResult<SubscriptionResponse>> getByCustomer(
             Authentication authentication,
             @RequestParam UUID customerId,
@@ -68,7 +68,7 @@ public class SubscriptionController {
     }
 
     @PostMapping("/{id}/suspend")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<UUID> suspend(
             Authentication authentication,
             @PathVariable UUID id,
@@ -79,7 +79,7 @@ public class SubscriptionController {
     }
 
     @PostMapping("/{id}/reactivate")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<UUID> reactivate(
             Authentication authentication,
             @PathVariable UUID id) {
@@ -88,7 +88,7 @@ public class SubscriptionController {
     }
 
     @PostMapping("/{id}/terminate")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<UUID> terminate(
             Authentication authentication,
             @PathVariable UUID id) {

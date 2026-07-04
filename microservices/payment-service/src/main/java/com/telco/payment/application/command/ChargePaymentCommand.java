@@ -44,6 +44,15 @@ public record ChargePaymentCommand(
         BigDecimal amount,
 
         /**
+         * Invoice this payment settles, when the charge originates from an invoice payment
+         * (Section 14.2 pay-invoice flow) rather than the order saga. Nullable: most charges are
+         * order-driven. Populated onto the new {@link com.telco.payment.domain.Payment} and carried
+         * through to {@code payment.completed.v1}/{@code payment.failed.v1} so billing-service's
+         * {@code PaymentCompletedBillingConsumer} can mark the invoice paid.
+         */
+        UUID invoiceId,
+
+        /**
          * Idempotency key, typically derived from {@code orderId}. A stable key ensures that
          * duplicate Kafka deliveries of {@code order.created.v1} do not double-charge the customer.
          */

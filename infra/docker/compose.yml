@@ -3,12 +3,16 @@
 #
 # Profiles:
 #   (none)        core data + event backbone: postgres, redis, kafka,
-#                 schema-registry, kafka-connect (Debezium), minio (object store)
+#                 schema-registry, kafka-connect (Debezium), minio (object store),
+#                 mongo (notification-service document store, ADR-006)
 #   platform      Spring Boot infra services: config-server, discovery-server,
 #                 api-gateway (built from source; requires ENCRYPT_KEY in .env)
 #   tools         kafka-ui
 #   observability prometheus, grafana, loki, tempo, otel-collector
 #   auth          keycloak
+#   apps          the 10 domain services (identity, customer, product-catalog,
+#                 order, subscription, usage, billing, payment, notification,
+#                 ticket) - built from source, ports 9001-9010
 #
 # Usage (run from infra/docker, after `cp .env.example .env`):
 #   docker compose up -d                                      # core only
@@ -16,14 +20,49 @@
 #   docker compose --profile platform --profile auth up -d    # + Keycloak
 #   docker compose --profile observability up -d              # core + observability
 #   docker compose --profile tools --profile auth up -d
+#   docker compose --profile auth --profile platform --profile apps up -d  # full stack
 #
 # First-time platform build (images are cached after first run):
 #   docker compose --profile platform build
+#   docker compose --profile apps build
 # ---------------------------------------------------------------------------
 
 name: ${COMPOSE_PROJECT_NAME:-telco-crm}
 
 x-restart: &restart unless-stopped
+
+# ---------------------------------------------------------------------------
+# Shared config for the 10 domain services (apps profile). Mirrors the
+# api-gateway block above: same config-server bootstrap, same Eureka/Redis
+# placeholders, same dependency graph on config-server/discovery-server/
+# kafka/postgres. Kept as anchors so the 10 per-service blocks only need to
+# vary name/dockerfile/image/container_name/port.
+# ---------------------------------------------------------------------------
+x-app-env: &app-env
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: ${CONFIG_SERVER_USER:-config}
+  CONFIG_SERVER_PASSWORD: ${CONFIG_SERVER_PASSWORD:-config}
+  SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev},docker
+  EUREKA_USERNAME: ${EUREKA_USERNAME:-eureka}
+  EUREKA_PASSWORD: ${EUREKA_PASSWORD:-eureka}
+  REDIS_PASSWORD: ${REDIS_PASSWORD:-telco}
+
+x-app-depends: &app-depends
+  config-server:
+    condition: service_healthy
+  discovery-server:
+    condition: service_healthy
+  kafka:
+    condition: service_healthy
+  postgres:
+    condition: service_healthy
+
+x-app: &app-common
+  restart: *restart
+  profiles: [apps]
+  environment: *app-env
+  depends_on: *app-depends
+  networks: [telco]
 
 networks:
   telco:
@@ -36,6 +75,7 @@ volumes:
   grafana-data:
   prometheus-data:
   minio-data:
+  mongo-data:
 
 services:
 
@@ -83,6 +123,26 @@ services:
       - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-telco}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [telco]
+
+  # -------------------------------------------------------------------- MongoDB
+  # Document store for notification-service only (ADR-006 approved MongoDB
+  # pilot; all other services are Postgres-backed). No auth configured: matches
+  # the unauthenticated mongodb://mongo:27017/notification_db URI used across
+  # every notification-service profile (dev/docker/test), local dev only.
+  mongo:
+    image: mongo:${MONGO_VERSION:-7}
+    container_name: telco-mongo
+    restart: *restart
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -175,6 +235,10 @@ services:
   # ----------------------------------------------- Config Server (platform)
   # Build context is repo root (telco-crm/); run `docker compose --profile platform build` first.
   # Configs are mounted live from microservices/configs/ so edits take effect without rebuilding.
+  # Also tagged with the "apps" profile: the 10 domain services depend_on this
+  # service, and Compose does not auto-activate a dependency's profile across a
+  # differing profile boundary, so `--profile apps` alone must still bring this
+  # up (verified: `docker compose --profile apps config`).
   config-server:
     build:
       context: ../../
@@ -182,7 +246,7 @@ services:
     image: telco-config-server:local
     container_name: telco-config-server
     restart: *restart
-    profiles: [platform]
+    profiles: [platform, apps]
     ports:
       - "${CONFIG_SERVER_PORT:-8888}:8888"
     environment:
@@ -210,6 +274,9 @@ services:
     networks: [telco]
 
   # -------------------------------------------- Discovery Server (platform)
+  # Also tagged with the "apps" profile for the same reason as config-server
+  # above: the 10 domain services depend_on it, and `--profile apps` alone
+  # must still resolve it.
   discovery-server:
     build:
       context: ../../
@@ -217,7 +284,7 @@ services:
     image: telco-discovery-server:local
     container_name: telco-discovery-server
     restart: *restart
-    profiles: [platform]
+    profiles: [platform, apps]
     ports:
       - "${EUREKA_PORT:-8761}:8761"
     environment:
@@ -468,3 +535,175 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana-data:/var/lib/grafana
     networks: [telco]
+
+  # ---------------------------------------------------------------------------
+  # Domain services (apps profile). Each mirrors api-gateway: built from source,
+  # bootstraps against config-server, registers with discovery-server. Config
+  # (DB/Redis/Kafka hosts, Keycloak JWKS) comes from configs/<svc>/application-
+  # docker.yml served by config-server, NOT from container env (see api-gateway
+  # comment above) - matches x-app-env exactly.
+  # ---------------------------------------------------------------------------
+
+  identity-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/identity-service/Dockerfile
+    image: telco-identity-service:local
+    container_name: telco-identity-service
+    ports:
+      - "${IDENTITY_SERVICE_PORT:-9001}:9001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9001/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  customer-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/customer-service/Dockerfile
+    image: telco-customer-service:local
+    container_name: telco-customer-service
+    ports:
+      - "${CUSTOMER_SERVICE_PORT:-9002}:9002"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9002/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  product-catalog-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/product-catalog-service/Dockerfile
+    image: telco-product-catalog-service:local
+    container_name: telco-product-catalog-service
+    ports:
+      - "${PRODUCT_CATALOG_SERVICE_PORT:-9003}:9003"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9003/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  order-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/order-service/Dockerfile
+    image: telco-order-service:local
+    container_name: telco-order-service
+    ports:
+      - "${ORDER_SERVICE_PORT:-9004}:9004"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9004/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  subscription-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/subscription-service/Dockerfile
+    image: telco-subscription-service:local
+    container_name: telco-subscription-service
+    ports:
+      - "${SUBSCRIPTION_SERVICE_PORT:-9005}:9005"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9005/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  usage-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/usage-service/Dockerfile
+    image: telco-usage-service:local
+    container_name: telco-usage-service
+    ports:
+      - "${USAGE_SERVICE_PORT:-9006}:9006"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9006/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  billing-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/billing-service/Dockerfile
+    image: telco-billing-service:local
+    container_name: telco-billing-service
+    ports:
+      - "${BILLING_SERVICE_PORT:-9007}:9007"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9007/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  payment-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/payment-service/Dockerfile
+    image: telco-payment-service:local
+    container_name: telco-payment-service
+    ports:
+      - "${PAYMENT_SERVICE_PORT:-9008}:9008"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9008/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  notification-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/notification-service/Dockerfile
+    image: telco-notification-service:local
+    container_name: telco-notification-service
+    depends_on:
+      <<: *app-depends
+      mongo:
+        condition: service_healthy
+    ports:
+      - "${NOTIFICATION_SERVICE_PORT:-9009}:9009"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9009/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  ticket-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/ticket-service/Dockerfile
+    image: telco-ticket-service:local
+    container_name: telco-ticket-service
+    ports:
+      - "${TICKET_SERVICE_PORT:-9010}:9010"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9010/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s

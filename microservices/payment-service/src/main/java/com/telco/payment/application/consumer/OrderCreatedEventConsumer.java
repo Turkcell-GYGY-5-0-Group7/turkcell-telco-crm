@@ -81,10 +81,12 @@ public class OrderCreatedEventConsumer {
             // is the inbox key. Inbox dedup happens atomically inside the handler transaction.
             String paymentRequestId = payload.orderId();
 
+            // order.created.v1 is an order-only saga step; it never targets an invoice.
             ChargePaymentCommand command = new ChargePaymentCommand(
                     UUID.fromString(payload.orderId()),
                     UUID.fromString(payload.customerId()),
                     payload.totalAmount(),
+                    null,
                     paymentRequestId,
                     messageId);
 

@@ -1,5 +1,6 @@
 package com.telco.payment;
 
+import com.telco.payment.application.event.PaymentCompletedEvent;
 import com.telco.payment.application.scheduler.PaymentRetryScheduler;
 import com.telco.payment.infrastructure.psp.ChargeResult;
 import com.telco.payment.infrastructure.psp.PspAdapter;
@@ -8,6 +9,7 @@ import com.telco.platform.outbox.OutboxService;
 import com.telco.platform.starter.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -32,6 +34,9 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -97,7 +102,7 @@ class PaymentServiceIntegrationTest {
                 .build();
 
         adminToken = jwtService.issue("admin-user", Set.of("ADMIN"));
-        customerToken = jwtService.issue("customer-user", Set.of("CUSTOMER"));
+        customerToken = jwtService.issue("customer-user", Set.of("SUBSCRIBER"));
 
         when(pspAdapter.charge(any(), any(), any()))
                 .thenReturn(new ChargeResult("TXN-" + UUID.randomUUID()));
@@ -143,6 +148,57 @@ class PaymentServiceIntegrationTest {
         assertThat(data.get("status")).isEqualTo("COMPLETED");
         assertThat(data.get("orderId")).isEqualTo(orderId.toString());
         assertThat(data.get("id")).isNotNull();
+    }
+
+    @Test
+    void admin_charges_payment_with_invoice_id_propagates_it_to_completed_event() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        UUID invoiceId = UUID.randomUUID();
+        String paymentRequestId = UUID.randomUUID().toString();
+
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/payments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                          "orderId": "%s",
+                          "customerId": "%s",
+                          "amount": 49.99,
+                          "paymentRequestId": "%s",
+                          "invoiceId": "%s"
+                        }
+                        """.formatted(orderId, customerId, paymentRequestId, invoiceId))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(response).get("status")).isEqualTo("COMPLETED");
+
+        // The billing-service PaymentCompletedBillingConsumer only fires MarkInvoicePaidCommand when
+        // payment.completed.v1 carries a non-null invoiceId - verify the outbox payload has it.
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("payment"), anyString(), eq("payment.completed.v1"),
+                payloadCaptor.capture());
+        assertThat(payloadCaptor.getValue()).isInstanceOf(PaymentCompletedEvent.class);
+        PaymentCompletedEvent event = (PaymentCompletedEvent) payloadCaptor.getValue();
+        assertThat(event.invoiceId()).isEqualTo(invoiceId.toString());
+    }
+
+    @Test
+    void admin_charges_payment_without_invoice_id_leaves_it_null_on_completed_event() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        String paymentRequestId = UUID.randomUUID().toString();
+
+        chargePayment(orderId, customerId, "49.99", paymentRequestId);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("payment"), anyString(), eq("payment.completed.v1"),
+                payloadCaptor.capture());
+        PaymentCompletedEvent event = (PaymentCompletedEvent) payloadCaptor.getValue();
+        assertThat(event.invoiceId()).isNull();
     }
 
     @Test

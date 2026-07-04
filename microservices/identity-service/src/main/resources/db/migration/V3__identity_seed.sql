@@ -32,7 +32,7 @@ INSERT INTO roles (id, name) VALUES
     ('849f2936-140e-4d71-bb79-cde3fe9ec677', 'AGENT'),
     ('6afe0205-c857-4416-88bc-e78609d966d9', 'DEALER'),
     ('a64eeb31-7e02-45a3-bcc5-41d62ee83284', 'BILLING_OPERATOR'),
-    ('db571967-4b22-4451-b9c2-e136b8050000', 'CUSTOMER')
+    ('db571967-4b22-4451-b9c2-e136b8050000', 'SUBSCRIBER')
 ON CONFLICT DO NOTHING;
 
 -- ADMIN permissions: full platform administration
@@ -70,7 +70,7 @@ INSERT INTO role_permissions (role_id, permission_id) VALUES
     ('a64eeb31-7e02-45a3-bcc5-41d62ee83284', 'ef678d2e-a634-4e47-9120-46bb9d31695a')
 ON CONFLICT DO NOTHING;
 
--- CUSTOMER permissions: self-service access to own data
+-- SUBSCRIBER permissions: self-service access to own data
 
 INSERT INTO role_permissions (role_id, permission_id) VALUES
     ('db571967-4b22-4451-b9c2-e136b8050000', 'f4c56523-9f8f-45e0-8eb8-26dff3a5dbd5'),

@@ -11,7 +11,7 @@ COPY microservices/notification-service/src              microservices/notificat
 
 # BuildKit cache mount keeps .m2 across rebuilds without baking deps into layers.
 # Cache is busted only when platform source or service pom changes.
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     mvn -f platform/pom.xml install -DskipTests -Dschema.registry.skip=true --no-transfer-progress -q && \
     mvn -f microservices/pom.xml -pl notification-service package -DskipTests --no-transfer-progress -q
 

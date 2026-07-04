@@ -47,6 +47,11 @@ telco:
       enabled: true
     inbox:
       enabled: true
+  psp:
+    mock:
+      # Deterministic override for MockPspAdapter.charge, for CI/acceptance reproducibility.
+      # Unset (default): original ~10% random failure rate. SUCCESS/FAILURE: force every charge.
+      force-outcome: ${PSP_MOCK_FORCE_OUTCOME:}
 
 # Retry scheduler enabled (see PaymentRetryScheduler).
 scheduling:

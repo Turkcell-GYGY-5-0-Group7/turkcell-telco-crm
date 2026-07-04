@@ -23,7 +23,7 @@ All endpoints require a valid JWT.
 | POST | `/api/v1/orders` | JWT | **mandatory** | Place an order (PENDING_PAYMENT); validates customer + price snapshot. |
 | GET | `/api/v1/orders/{id}` | JWT | - | Fetch an order with saga/status. |
 | GET | `/api/v1/orders` | JWT | - | List a customer's orders (paged). |
-| POST | `/api/v1/orders/{id}/cancel` | JWT | - | Cancel an order; triggers compensation. |
+| DELETE | `/api/v1/orders/{id}` | JWT | - | Cancel an order (soft delete/status transition, not a physical delete); triggers compensation. |
 
 ## Events
 

@@ -1,0 +1,20 @@
+# subscription-service Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the localhost values in application-dev.yml with Docker service names.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/subscription_db
+    username: subscription
+    password: subscription
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+telco:
+  clients:
+    order:
+      url: http://order-service:9004

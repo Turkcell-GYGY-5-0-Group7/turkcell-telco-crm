@@ -48,16 +48,14 @@ spring:
       observation-enabled: true
     listener:
       observation-enabled: true
-
-# Loki push URL consumed by <springProperty> in logback-spring.xml (ADR-012).
-loki:
-  url: http://localhost:3100/loki/api/v1/push
-
-spring:
   jpa:
     show-sql: false
     hibernate:
       ddl-auto: validate
+
+# Loki push URL consumed by <springProperty> in logback-spring.xml (ADR-012).
+loki:
+  url: http://localhost:3100/loki/api/v1/push
 
 eureka:
   instance:

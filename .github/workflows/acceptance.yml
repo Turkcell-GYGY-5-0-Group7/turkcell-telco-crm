@@ -1,0 +1,145 @@
+name: Acceptance
+
+# Full-stack, gateway-driven acceptance suite (Sprint 14, task 14.1.1).
+# Builds every platform + domain-service image, brings up the whole local stack
+# (core + auth + platform + apps profiles) via infra/docker/compose.yml, registers
+# the Debezium outbox connectors, waits for the gateway and all 10 domain services
+# to report healthy, then runs the acceptance-tests module through the gateway at
+# http://localhost:8080. Teardown always runs so the stack never leaks between runs
+# (golden rule: every deploy is reproducible and reversible).
+#
+# This is a heavy job (10+ image builds and a full compose stack), so it is NOT
+# wired to run on every push - only on demand and on PRs that touch the paths that
+# affect the full-stack contract.
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "microservices/**"
+      - "platform/**"
+      - "infra/docker/**"
+      - ".github/workflows/acceptance.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  MAVEN_ARGS: "-B -ntp"
+  COMPOSE_FILE: infra/docker/compose.yml
+  ENV_FILE: infra/docker/.env
+
+jobs:
+  acceptance:
+    name: Full-stack acceptance suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+
+      # ENCRYPT_KEY is required by config-server (AES-256 key for encrypted
+      # properties, see infra/docker/.env.example). Generated fresh per run and
+      # exported to $GITHUB_ENV so every later step (compose + make) sees it -
+      # never committed, never baked into an image.
+      - name: Generate ENCRYPT_KEY and create infra .env
+        run: |
+          echo "ENCRYPT_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          cp infra/docker/.env.example infra/docker/.env
+
+      - name: Build platform + domain-service images
+        run: |
+          docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+            --profile platform --profile apps build
+
+      - name: Bring up full stack (core + auth + platform + apps)
+        run: |
+          docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+            --profile auth --profile platform --profile apps up -d
+
+      # Compose healthchecks already gate config-server/discovery-server/api-gateway
+      # and each domain service's dependency chain (see x-app-depends in compose.yml),
+      # but we also poll the externally reachable ports here as a second, independent
+      # confirmation before handing off to the acceptance suite.
+      - name: Wait for gateway and all domain services to be healthy
+        run: |
+          set -euo pipefail
+          urls="http://localhost:8080/actuator/health"
+          for port in 9001 9002 9003 9004 9005 9006 9007 9008 9009 9010; do
+            urls="$urls http://localhost:${port}/actuator/health"
+          done
+          for url in $urls; do
+            echo "Waiting for $url ..."
+            for _ in $(seq 1 60); do
+              if curl -fsS "$url" | grep -q '"status":"UP"'; then
+                echo "$url is UP"
+                break
+              fi
+              sleep 5
+            done
+          done
+
+      - name: Register Debezium outbox connectors
+        run: |
+          make -C infra register-connectors
+
+      - name: Install platform to local Maven repo
+        working-directory: platform
+        run: mvn ${MAVEN_ARGS} install -DskipTests -Dspotbugs.skip=true -Dschema.registry.skip=true
+
+      # CONTRACT WITH QA AGENT (owns microservices/acceptance-tests):
+      # the acceptance module is assumed to expose a Maven profile named
+      # "acceptance" bound to the "verify" phase, activated via:
+      #   mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify
+      # and to read its target base URLs / Keycloak token endpoint from environment
+      # variables with localhost defaults, matching the stable contract:
+      #   GATEWAY_BASE_URL      -> http://localhost:8080
+      #   KEYCLOAK_TOKEN_URI    -> http://localhost:8085/realms/telco-crm/protocol/openid-connect/token
+      # If the qa agent lands on a different profile name, module id, or env var
+      # names, this step (and the two env vars below) must be reconciled - the
+      # compose/CI infrastructure half owned by devops does not otherwise depend
+      # on the internals of that module.
+      - name: Run acceptance suite against the gateway
+        env:
+          GATEWAY_BASE_URL: http://localhost:8080
+          KEYCLOAK_TOKEN_URI: http://localhost:8085/realms/telco-crm/protocol/openid-connect/token
+        run: |
+          mvn -f microservices/pom.xml ${MAVEN_ARGS} -pl acceptance-tests -am -Pacceptance verify
+
+      - name: Upload acceptance test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acceptance-test-reports
+          path: |
+            microservices/acceptance-tests/target/surefire-reports/**
+            microservices/acceptance-tests/target/failsafe-reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Dump container logs on failure
+        if: failure()
+        run: |
+          docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" \
+            --profile auth --profile platform --profile apps logs --no-color --tail=200
+
+      # Rollback path: full teardown (stop + remove containers and volumes) always
+      # runs, so a bad run never leaves the stack (or its data) behind. This is the
+      # verified rollback for this deploy path (ADR-014 golden rule).
+      - name: Tear down the stack
+        if: always()
+        run: |
+          make -C infra destroy

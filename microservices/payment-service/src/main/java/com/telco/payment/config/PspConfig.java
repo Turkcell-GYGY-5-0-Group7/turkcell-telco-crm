@@ -2,6 +2,7 @@ package com.telco.payment.config;
 
 import com.telco.payment.infrastructure.psp.ChargeResult;
 import com.telco.payment.infrastructure.psp.MockPspAdapter;
+import com.telco.payment.infrastructure.psp.MockPspAdapter.ForcedOutcome;
 import com.telco.payment.infrastructure.psp.PspAdapter;
 import com.telco.payment.infrastructure.psp.PspException;
 import com.telco.platform.common.exception.DependencyFailureException;
@@ -9,6 +10,7 @@ import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -39,9 +41,18 @@ public class PspConfig {
 
     private static final String PSP_CIRCUIT_BREAKER_NAME = "psp";
 
+    /**
+     * Deterministic override for {@link MockPspAdapter#charge}, read from
+     * {@code telco.psp.mock.force-outcome} ({@code SUCCESS}/{@code FAILURE}). Unset (default)
+     * preserves the mock's original ~10% random failure rate; CI/acceptance runs can set this
+     * env-backed property for reproducible outcomes.
+     */
+    @Value("${telco.psp.mock.force-outcome:}")
+    private String forceOutcome;
+
     @Bean
     public PspAdapter pspAdapter() {
-        MockPspAdapter mock = new MockPspAdapter();
+        MockPspAdapter mock = new MockPspAdapter(resolveForcedOutcome());
         CircuitBreaker circuitBreaker = buildCircuitBreaker();
 
         return new PspAdapter() {
@@ -89,5 +100,21 @@ public class PspConfig {
                 .recordExceptions(PspException.class)
                 .build();
         return CircuitBreakerRegistry.of(config).circuitBreaker(PSP_CIRCUIT_BREAKER_NAME);
+    }
+
+    /**
+     * Parses {@code telco.psp.mock.force-outcome} into a {@link ForcedOutcome}, or {@code null}
+     * when unset/blank so {@link MockPspAdapter} falls back to its random behaviour. An
+     * unrecognized value is treated as unset rather than failing startup.
+     */
+    private ForcedOutcome resolveForcedOutcome() {
+        if (forceOutcome == null || forceOutcome.isBlank()) {
+            return null;
+        }
+        try {
+            return ForcedOutcome.valueOf(forceOutcome.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 }

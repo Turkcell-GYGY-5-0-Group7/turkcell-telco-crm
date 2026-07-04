@@ -11,7 +11,7 @@ COPY microservices/ticket-service/src              microservices/ticket-service/
 
 # BuildKit cache mount keeps .m2 across rebuilds without baking deps into layers.
 # Cache is busted only when platform source or service pom changes.
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     mvn -f platform/pom.xml install -DskipTests -Dschema.registry.skip=true --no-transfer-progress -q && \
     mvn -f microservices/pom.xml -pl ticket-service package -DskipTests --no-transfer-progress -q
 

@@ -22,7 +22,8 @@ Reads require a valid JWT. Authoring (create/update/version) requires an admin r
 | Method | Path | Auth | Idempotency | Summary |
 | --- | --- | --- | --- | --- |
 | GET | `/api/v1/tariffs` | JWT | - | List tariffs (paged, cache-served). |
-| GET | `/api/v1/tariffs/{code}` | JWT | - | Fetch a tariff (current version). |
+| GET | `/api/v1/tariffs/{code}` | JWT | - | Fetch a tariff by its code (current version). |
+| GET | `/api/v1/tariffs/by-id/{id}` | JWT | - | Fetch a tariff by its UUID primary key. Used by cross-service callers (e.g. order-service) that hold the tariff's id rather than its code. |
 | GET | `/api/v1/tariffs/{code}/price` | JWT | - | Price snapshot for order capture. |
 | POST | `/api/v1/tariffs` | RBAC admin | optional | Create a tariff. |
 | PUT | `/api/v1/tariffs/{code}` | RBAC admin | - | New version on price/attribute change. |
