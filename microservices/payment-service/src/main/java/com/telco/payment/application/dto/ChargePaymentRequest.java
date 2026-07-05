@@ -21,6 +21,14 @@ public record ChargePaymentRequest(
         BigDecimal amount,
 
         @NotBlank @Size(max = 64)
-        String paymentRequestId
+        String paymentRequestId,
+
+        /**
+         * Invoice this charge settles, when paying a specific invoice (Section 14.2 pay-invoice
+         * flow). Optional: omit for a plain order charge. When present, the resulting
+         * {@code payment.completed.v1}/{@code payment.failed.v1} event carries it so
+         * billing-service can mark the invoice paid.
+         */
+        UUID invoiceId
 ) {
 }

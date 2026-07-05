@@ -67,7 +67,7 @@ class UsageServiceIntegrationTest {
                 .defaultStatusHandler(HttpStatusCode::isError, (req, res) -> { /* never throw */ })
                 .build();
 
-        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
+        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
     }
 
     @Test
@@ -97,7 +97,7 @@ class UsageServiceIntegrationTest {
     void aggregate_usage_requires_admin_role() {
         UUID subscriptionId = UUID.randomUUID();
         // Send a valid body so argument resolution succeeds and @PreAuthorize("hasRole('ADMIN')")
-        // runs — a CUSTOMER-role JWT must be rejected with 403.
+        // runs — a SUBSCRIBER-role JWT must be rejected with 403.
         ResponseEntity<String> response = client.post()
                 .uri("/api/v1/usage/subscriptions/{subscriptionId}/aggregate", subscriptionId)
                 .header("Authorization", "Bearer " + customerToken)

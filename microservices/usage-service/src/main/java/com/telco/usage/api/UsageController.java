@@ -44,7 +44,7 @@ public class UsageController {
 
     /** Returns the active quota for a subscription. */
     @GetMapping("/subscriptions/{subscriptionId}/quota")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUBSCRIBER')")
     public ApiResult<QuotaResponse> getQuota(
             @PathVariable UUID subscriptionId,
             Authentication authentication) {
@@ -54,7 +54,7 @@ public class UsageController {
 
     /** Returns cursor-paginated CDR history for a subscription within a time range (ADR-015). */
     @GetMapping("/subscriptions/{subscriptionId}/history")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUBSCRIBER')")
     public ApiResult<CursorPage<UsageHistoryItem>> getHistory(
             @PathVariable UUID subscriptionId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
@@ -85,7 +85,7 @@ public class UsageController {
     }
 
     /**
-     * Returns the JWT sub (= X-User-Id forwarded by gateway) for CUSTOMER callers,
+     * Returns the JWT sub (= X-User-Id forwarded by gateway) for SUBSCRIBER callers,
      * or null for ADMIN callers (ownership check bypassed).
      */
     private String principalId(Authentication authentication) {

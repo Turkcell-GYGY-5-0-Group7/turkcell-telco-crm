@@ -43,7 +43,7 @@ public class ProductCatalogServiceClient {
         try {
             return CircuitBreaker.decorateCallable(circuitBreaker, () -> {
                 ApiResult<TariffClientResponse> result = restClient.get()
-                        .uri("/api/v1/tariffs/{tariffId}", tariffId)
+                        .uri("/api/v1/tariffs/by-id/{tariffId}", tariffId)
                         .retrieve()
                         .body(RESPONSE_TYPE);
                 if (result == null || !result.success()) {

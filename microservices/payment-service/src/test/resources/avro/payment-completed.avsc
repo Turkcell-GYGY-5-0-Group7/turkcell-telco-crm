@@ -12,6 +12,12 @@
       "type": { "type": "bytes", "logicalType": "decimal", "precision": 19, "scale": 4 },
       "doc": "Paid amount as an exact decimal. Always paired with the order currency."
     },
+    {
+      "name": "invoiceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Invoice this payment settles, when the payment originates from an invoice. Nullable for order-driven payments."
+    },
     { "name": "occurredAt", "type": "string", "doc": "ISO-8601 UTC instant the payment completed." }
   ]
 }

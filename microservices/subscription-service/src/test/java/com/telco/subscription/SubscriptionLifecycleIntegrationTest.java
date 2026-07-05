@@ -92,8 +92,8 @@ class SubscriptionLifecycleIntegrationTest {
         // Subject is a UUID matching Keycloak's sub claim. The same UUID is used as customerId
         // so that ownership checks pass for this customer's own subscriptions.
         customerId = UUID.randomUUID();
-        customerToken = jwtService.issue(customerId.toString(), Set.of("CUSTOMER"));
-        otherCustomerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CUSTOMER"));
+        customerToken = jwtService.issue(customerId.toString(), Set.of("SUBSCRIBER"));
+        otherCustomerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
     }
 
     /** Activates a subscription directly via the mediator (bypassing the internal HTTP endpoint). */

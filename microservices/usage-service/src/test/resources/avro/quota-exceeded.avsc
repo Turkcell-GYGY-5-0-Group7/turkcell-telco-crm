@@ -7,6 +7,12 @@
     { "name": "subscriptionId", "type": "string" },
     { "name": "quotaId", "type": "string" },
     { "name": "usageType", "type": "string" },
+    {
+      "name": "customerId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Owning customer, resolved from the Quota aggregate. Nullable for events emitted before this field existed."
+    },
     { "name": "exceededAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
   ]
 }

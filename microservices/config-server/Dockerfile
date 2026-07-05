@@ -10,7 +10,7 @@ COPY --parents microservices/*/pom.xml ./
 COPY microservices/configs                      microservices/configs
 COPY microservices/config-server/src            microservices/config-server/src
 
-RUN --mount=type=cache,target=/root/.m2 \
+RUN --mount=type=cache,target=/root/.m2,sharing=locked \
     mvn -f platform/pom.xml install -DskipTests -Dschema.registry.skip=true --no-transfer-progress -q && \
     mvn -f microservices/pom.xml -pl config-server package -DskipTests --no-transfer-progress -q
 

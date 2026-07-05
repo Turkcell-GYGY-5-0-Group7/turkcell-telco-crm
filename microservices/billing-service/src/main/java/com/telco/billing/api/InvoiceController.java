@@ -34,7 +34,7 @@ class InvoiceController {
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     ApiResult<PageResult<InvoiceResponse>> listInvoices(
             @RequestParam UUID customerId,
             @RequestParam(defaultValue = "0") int page,
@@ -45,7 +45,7 @@ class InvoiceController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     ApiResult<InvoiceResponse> getInvoice(@PathVariable UUID id, Authentication authentication) {
         return responses.ok(mediator.query(new GetInvoiceByIdQuery(
                 id, authentication.getName(), isAdmin(authentication))));
@@ -54,7 +54,7 @@ class InvoiceController {
     // Binary PDF download: ResponseEntity<byte[]> is the correct return type for file streams;
     // wrapping binary in ApiResult<T> is not meaningful for octet-stream responses.
     @GetMapping("/{id}/pdf")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     ResponseEntity<byte[]> getInvoicePdf(@PathVariable UUID id, Authentication authentication) {
         byte[] pdf = mediator.query(new GetInvoicePdfQuery(
                 id, authentication.getName(), isAdmin(authentication)));

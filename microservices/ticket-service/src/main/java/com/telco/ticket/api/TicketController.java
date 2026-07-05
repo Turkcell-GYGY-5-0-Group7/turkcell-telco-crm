@@ -36,7 +36,7 @@ public class TicketController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<UUID> openTicket(@Valid @RequestBody OpenTicketRequest request,
                                       Authentication auth) {
         return apiResponseFactory.ok(mediator.send(new OpenTicketCommand(
@@ -45,7 +45,7 @@ public class TicketController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<TicketResponse> getTicket(@PathVariable UUID id, Authentication auth) {
         boolean isAdmin = auth.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
@@ -54,7 +54,7 @@ public class TicketController {
     }
 
     @PostMapping("/{id}/comments")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<UUID> addComment(@PathVariable UUID id,
                                       @Valid @RequestBody CommentRequest request,
                                       Authentication auth) {

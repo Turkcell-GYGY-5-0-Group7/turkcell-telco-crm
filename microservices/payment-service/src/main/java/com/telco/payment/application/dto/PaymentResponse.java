@@ -14,6 +14,7 @@ public record PaymentResponse(
         BigDecimal amount,
         String status,
         String paymentRequestId,
+        UUID invoiceId,
         Instant createdAt,
         Instant updatedAt,
         int attemptCount
@@ -27,6 +28,7 @@ public record PaymentResponse(
                 payment.getAmount(),
                 payment.getStatus().name(),
                 payment.getPaymentRequestId(),
+                payment.getInvoiceId(),
                 payment.getCreatedAt(),
                 payment.getUpdatedAt(),
                 payment.getAttempts().size()

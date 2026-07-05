@@ -13,7 +13,7 @@ import java.util.Map;
 
 /**
  * System read of a single order by its ID, with NO ownership guard. Distinct from
- * {@link GetOrderQueryHandler} (which enforces CUSTOMER ownership): this path is exclusively for the
+ * {@link GetOrderQueryHandler} (which enforces SUBSCRIBER ownership): this path is exclusively for the
  * trusted internal endpoint used by the onboarding saga and must never weaken the guarded path
  * (tech-lead ruling 1a).
  */

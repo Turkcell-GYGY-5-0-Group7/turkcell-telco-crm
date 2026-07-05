@@ -56,21 +56,22 @@ public class PaymentController {
                 request.orderId(),
                 request.customerId(),
                 request.amount(),
+                request.invoiceId(),
                 request.paymentRequestId(),
                 messageId);
         return responses.ok(mediator.send(command));
     }
 
-    /** Returns a payment by its internal ID. ADMIN or CUSTOMER role required. */
+    /** Returns a payment by its internal ID. ADMIN or SUBSCRIBER role required. */
     @GetMapping("/{paymentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUBSCRIBER')")
     public ApiResult<PaymentResponse> getPayment(@PathVariable UUID paymentId) {
         return responses.ok(mediator.query(new GetPaymentQuery(paymentId)));
     }
 
-    /** Returns the payment for the given order. ADMIN or CUSTOMER role required. */
+    /** Returns the payment for the given order. ADMIN or SUBSCRIBER role required. */
     @GetMapping("/order/{orderId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CUSTOMER')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUBSCRIBER')")
     public ApiResult<PaymentResponse> getPaymentByOrder(@PathVariable UUID orderId) {
         return responses.ok(mediator.query(new GetPaymentByOrderQuery(orderId)));
     }

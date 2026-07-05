@@ -15,6 +15,7 @@ import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,18 +47,24 @@ public class CustomerController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAnyRole('SUBSCRIBER', 'CALL_CENTER_AGENT', 'DEALER', 'ADMIN')")
     public ApiResult<CustomerResponse> register(@Valid @RequestBody RegisterCustomerRequest request) {
         return responses.ok(mediator.send(new RegisterCustomerCommand(
                 request.type(), request.firstName(), request.lastName(),
                 request.identityNumber(), request.dateOfBirth())));
     }
 
+    // Staff-only until the customerId-to-Keycloak-subject linkage lands (see
+    // docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md); a
+    // SUBSCRIBER caller cannot yet be verified as the owner of a given customer record.
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
     public ApiResult<CustomerResponse> get(@PathVariable UUID id) {
         return responses.ok(mediator.query(new GetCustomerQuery(id)));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
     public ApiResult<PageResult<CustomerResponse>> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -65,6 +72,7 @@ public class CustomerController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
     public ApiResult<CustomerResponse> update(@PathVariable UUID id,
                                               @Valid @RequestBody UpdateCustomerRequest request) {
         return responses.ok(mediator.send(new UpdateCustomerCommand(
@@ -72,6 +80,7 @@ public class CustomerController {
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public ApiResult<Unit> delete(@PathVariable UUID id) {
         return responses.ok(mediator.send(new DeleteCustomerCommand(id)));
     }

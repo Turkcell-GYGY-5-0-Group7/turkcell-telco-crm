@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Map;
 
-/** Returns a single order by its ID. Enforces ownership: CUSTOMER callers may only see their own orders. */
+/** Returns a single order by its ID. Enforces ownership: SUBSCRIBER callers may only see their own orders. */
 @Component
 public class GetOrderQueryHandler implements QueryHandler<GetOrderQuery, OrderResponse> {
 

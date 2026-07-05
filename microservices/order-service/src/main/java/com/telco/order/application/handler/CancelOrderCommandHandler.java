@@ -18,7 +18,7 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Cancels an order. Enforces ownership: CUSTOMER callers may only cancel their own orders; system
+ * Cancels an order. Enforces ownership: SUBSCRIBER callers may only cancel their own orders; system
  * callers ({@code callerIsAdmin=true}) bypass the guard for saga compensation. The legal source
  * states (PENDING or CONFIRMED -> CANCELLED) are enforced by {@link Order#cancel()}; illegal
  * transitions raise {@link com.telco.platform.common.exception.BusinessRuleException} (-> 422).

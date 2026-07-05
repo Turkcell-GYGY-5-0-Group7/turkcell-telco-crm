@@ -42,7 +42,7 @@ public class OrderController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<OrderResponse> createOrder(
             Authentication authentication,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
@@ -74,7 +74,7 @@ public class OrderController {
     }
 
     @DeleteMapping("/{orderId}")
-    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     public ApiResult<OrderResponse> cancelOrder(
             Authentication authentication,
             @PathVariable UUID orderId,

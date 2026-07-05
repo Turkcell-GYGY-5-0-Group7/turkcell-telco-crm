@@ -104,6 +104,10 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
                         result.overage(),
                         now.toString()));
 
+        // customerId is resolved from the Quota aggregate (stored at provisioning time from
+        // subscription.activated.v1, see ProvisionQuotaCommandHandler) - no extra cross-service call.
+        String customerId = quota.getCustomerId() != null ? quota.getCustomerId().toString() : null;
+
         if (result.thresholdCrossed()) {
             outboxService.publish(
                     QUOTA_AGGREGATE_TYPE, quota.getId().toString(), EVENT_THRESHOLD_REACHED,
@@ -111,6 +115,7 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
                             command.subscriptionId().toString(),
                             quota.getId().toString(),
                             command.usageType().name(),
+                            customerId,
                             now.toString()));
             LOGGER.info("Quota threshold reached subscriptionId={} quotaId={} usageType={}",
                     command.subscriptionId(), quota.getId(), command.usageType());
@@ -123,6 +128,7 @@ public class MeterCdrCommandHandler implements CommandHandler<MeterCdrCommand, V
                             command.subscriptionId().toString(),
                             quota.getId().toString(),
                             command.usageType().name(),
+                            customerId,
                             now.toString()));
             LOGGER.info("Quota exceeded subscriptionId={} quotaId={} usageType={}",
                     command.subscriptionId(), quota.getId(), command.usageType());

@@ -1,0 +1,119 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco</groupId>
+        <artifactId>microservices</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>acceptance-tests</artifactId>
+    <packaging>jar</packaging>
+    <name>acceptance-tests</name>
+    <description>Cross-service, gateway-driven acceptance suite (task 14.1.1, ADR-013). Proves AC-01
+        (new subscriber onboarding, including the activation-failure compensation path), AC-02
+        (monthly invoice), and AC-03 (quota exhaustion) end to end against the full compose stack.
+        This module intentionally has NO src/main: it is a pure HTTP/Kafka test client against
+        already-running services, not a deployable service. It is registered in the reactor only
+        under the "acceptance" Maven profile (see ../pom.xml) so a default `mvn install` never
+        attempts to run it - it requires the full docker compose stack (gateway, Keycloak, Kafka,
+        and all ten domain services) to already be up.</description>
+
+    <properties>
+        <!-- This module has no production code to instrument; skip JaCoCo (inherited from the
+             microservices root build) rather than let it evaluate an empty bundle. -->
+        <jacoco.skip>true</jacoco.skip>
+        <!-- Standard Failsafe integration-test naming convention; see class names ending "AcceptanceIT". -->
+        <maven.install.skip>true</maven.install.skip>
+        <maven.deploy.skip>true</maven.deploy.skip>
+    </properties>
+
+    <dependencies>
+        <!-- ── Test framework ───────────────────────────────────────────────────── -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Polls for eventually-consistent, event-driven state across services (saga propagation,
+             Kafka consumer lag) instead of fixed sleeps. -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ── HTTP: drives every scenario through the gateway (ADR-015, ApiResult<T>) ───────── -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>json-path</artifactId>
+            <version>${rest-assured.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- ── Kafka: AC-03 has no public "record a CDR" HTTP endpoint (usage-service ingests CDRs
+             only via the cdr.events topic; the CDR simulator is itself a Kafka producer). This
+             module is standalone (no cross-module test-jar dependency on usage-service's internal
+             simulator), so it produces directly with a raw client against the compose Kafka broker. -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- This module ships no unit tests: Surefire must not run in the default `test` phase
+                 (Failsafe below owns the integration-test/verify phases instead, per task contract). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <skipTests>true</skipTests>
+                </configuration>
+            </plugin>
+            <!-- Acceptance classes are integration tests (require the live compose stack), so they
+                 are named *AcceptanceIT and run only through Failsafe's integration-test/verify
+                 goals - never Surefire's test goal (ADR-013: Testcontainers/integration layer,
+                 task 14.1.1 contract). spring-boot-starter-parent's pluginManagement already binds
+                 a default (unnamed) Failsafe execution with those two goals to every module that
+                 declares this plugin - so this module intentionally adds NO <executions> of its
+                 own (a second, explicitly-id'd execution would duplicate the test run). Only the
+                 include pattern and timeout are overridden here; they merge into that inherited
+                 default execution. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*AcceptanceIT.java</include>
+                    </includes>
+                    <!-- A saga can take several seconds to fully settle across ten services;
+                         fail fast on genuine hangs rather than never. -->
+                    <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

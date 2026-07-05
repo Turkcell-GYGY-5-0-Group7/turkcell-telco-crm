@@ -25,6 +25,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -91,7 +92,7 @@ class ProductCatalogServiceIntegrationTest {
                 .build();
 
         adminToken = jwtService.issue("admin-user-id", Set.of("ADMIN"));
-        customerToken = jwtService.issue("customer-user-id", Set.of("CUSTOMER"));
+        customerToken = jwtService.issue("customer-user-id", Set.of("SUBSCRIBER"));
 
         redisTemplate.getConnectionFactory().getConnection().serverCommands().flushAll();
     }
@@ -257,6 +258,43 @@ class ProductCatalogServiceIntegrationTest {
                 .toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void draft_tariff_not_returned_by_get_by_id_returns_404() {
+        ResponseEntity<Map<String, Object>> created = createTariff("DRAFT-BY-ID-404");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> data = (Map<String, Object>) created.getBody().get("data");
+        String id = (String) data.get("id");
+
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/tariffs/by-id/{id}", id)
+                .header("Authorization", "Bearer " + customerToken)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void unknown_tariff_id_returns_404() {
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/tariffs/by-id/{id}", UUID.randomUUID())
+                .header("Authorization", "Bearer " + customerToken)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void get_by_id_endpoint_requires_authentication() {
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/tariffs/by-id/{id}", UUID.randomUUID())
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     // --- helpers ---

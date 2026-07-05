@@ -6,6 +6,7 @@ import com.telco.catalog.application.dto.ChangeTariffPriceRequest;
 import com.telco.catalog.application.dto.CreateTariffRequest;
 import com.telco.catalog.application.dto.PriceSnapshotResponse;
 import com.telco.catalog.application.dto.TariffResponse;
+import com.telco.catalog.application.query.GetTariffByIdQuery;
 import com.telco.catalog.application.query.GetTariffPriceSnapshotQuery;
 import com.telco.catalog.application.query.GetTariffQuery;
 import com.telco.catalog.application.query.ListTariffsQuery;
@@ -25,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.UUID;
 
 /**
  * Product catalog tariff API. Thin edge: HTTP -> command/query via {@link Mediator} -> {@link ApiResult}
@@ -74,6 +77,16 @@ public class TariffController {
     @GetMapping("/{code}")
     public ApiResult<TariffResponse> getTariff(@PathVariable String code) {
         return responses.ok(mediator.query(new GetTariffQuery(code)));
+    }
+
+    /**
+     * Returns a single active tariff by its primary key. Internal lookup for callers (e.g.
+     * order-service) that hold the tariff's UUID rather than its human-readable code. Returns 404
+     * if not found or not active.
+     */
+    @GetMapping("/by-id/{id}")
+    public ApiResult<TariffResponse> getTariffById(@PathVariable UUID id) {
+        return responses.ok(mediator.query(new GetTariffByIdQuery(id)));
     }
 
     @PatchMapping("/{code}/price")

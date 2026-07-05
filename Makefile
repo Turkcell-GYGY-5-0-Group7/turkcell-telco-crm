@@ -80,6 +80,18 @@ infra-tools: ## Start core infra + Kafka UI
 infra-up-all: ## Start everything: core + platform + auth + observability + tools
 	$(INFRA) up-all
 
+.PHONY: infra-apps-build
+infra-apps-build: ## Build Docker images for all 10 domain services
+	$(INFRA) apps-build
+
+.PHONY: infra-apps
+infra-apps: ## Start core + platform + all 10 domain services
+	$(INFRA) apps
+
+.PHONY: infra-up-full-stack
+infra-up-full-stack: ## Start the full acceptance stack (core + auth + platform + apps)
+	$(INFRA) up-full-stack
+
 .PHONY: infra-down
 infra-down: ## Stop all infra containers (keeps data volumes)
 	$(INFRA) down

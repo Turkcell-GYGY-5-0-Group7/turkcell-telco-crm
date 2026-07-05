@@ -145,6 +145,18 @@ class DomainEventNotificationConsumerTest {
     }
 
     @Test
+    void quota_threshold_reached_without_customer_id_falls_back_to_unknown() throws Exception {
+        // Simulates an in-flight quota.threshold-reached.v1 message produced before the customerId
+        // field existed (rolling-upgrade compatibility, ADR-019): must not throw, falls back safely.
+        var record = record("quota.events", "evt-5b", "quota.threshold-reached.v1",
+                Map.of("eventId", "evt-5b", "subscriptionId", "sub-5b"));
+
+        consumer.onQuotaEvent(record);
+
+        verify(notificationService).dispatch(eq("unknown"), eq("QUOTA_80_PERCENT"), eq("SMS"), any(), eq("en"));
+    }
+
+    @Test
     void ticket_opened_dispatches_ticket_opened_sms_to_customer() throws Exception {
         var record = record("ticket.events", "evt-7", "ticket.opened.v1",
                 Map.of("eventId", "evt-7", "customerId", "cust-7",

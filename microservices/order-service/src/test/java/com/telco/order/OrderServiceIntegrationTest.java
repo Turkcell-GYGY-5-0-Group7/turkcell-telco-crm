@@ -102,8 +102,8 @@ class OrderServiceIntegrationTest {
                 .build();
 
         adminToken = jwtService.issue("admin-user", Set.of("ADMIN"));
-        customerAlphaToken = jwtService.issue("user-alpha", Set.of("CUSTOMER"));
-        customerBetaToken = jwtService.issue("user-beta", Set.of("CUSTOMER"));
+        customerAlphaToken = jwtService.issue("user-alpha", Set.of("SUBSCRIBER"));
+        customerBetaToken = jwtService.issue("user-beta", Set.of("SUBSCRIBER"));
 
         when(customerServiceClient.getCustomer(any()))
                 .thenReturn(new CustomerClientResponse(CUSTOMER_ID, "ACTIVE"));

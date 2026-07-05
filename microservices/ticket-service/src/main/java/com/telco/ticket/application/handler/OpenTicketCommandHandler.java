@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,8 +38,8 @@ public class OpenTicketCommandHandler implements CommandHandler<OpenTicketComman
     @Override
     @Transactional
     public UUID handle(OpenTicketCommand command) {
-        String cat = command.category().toUpperCase();
-        String pri = command.priority().toUpperCase();
+        String cat = command.category().toUpperCase(Locale.ROOT);
+        String pri = command.priority().toUpperCase(Locale.ROOT);
 
         String team = slaPolicyRepository.findByCategoryAndPriority(cat, pri)
                 .map(SlaPolicy::getTeam).orElse("customer-care");

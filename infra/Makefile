@@ -35,6 +35,21 @@ platform-build: init ## Build Docker images for Spring platform services (run on
 up-all: init ## Start everything (core + platform + tools + observability + auth)
 	$(COMPOSE) --profile platform --profile tools --profile observability --profile auth up -d
 
+.PHONY: apps-build
+apps-build: init ## Build Docker images for all 10 domain services (apps profile)
+	$(COMPOSE) --profile apps build
+
+.PHONY: apps
+apps: init ## Start core + platform + all 10 domain services (apps profile)
+	$(COMPOSE) --profile platform --profile apps up -d
+
+.PHONY: up-apps
+up-apps: apps ## Alias for 'apps'
+
+.PHONY: up-full-stack
+up-full-stack: init ## Start core + auth + platform + all domain services (full acceptance stack)
+	$(COMPOSE) --profile auth --profile platform --profile apps up -d
+
 .PHONY: observability
 observability: init ## Start core + observability stack
 	$(COMPOSE) --profile observability up -d
@@ -61,8 +76,8 @@ register-connectors: ## Register Debezium connectors from docker/kafka-connect/c
 
 .PHONY: down
 down: ## Stop and remove containers (keeps data volumes)
-	$(COMPOSE) --profile tools --profile observability --profile auth down
+	$(COMPOSE) --profile tools --profile observability --profile auth --profile platform --profile apps down
 
 .PHONY: destroy
 destroy: ## Stop and remove containers AND data volumes (full reset)
-	$(COMPOSE) --profile tools --profile observability --profile auth down -v
+	$(COMPOSE) --profile tools --profile observability --profile auth --profile platform --profile apps down -v

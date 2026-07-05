@@ -10,7 +10,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 /**
- * Returns orders for a customer. ADMIN callers filter by the requested customerId; CUSTOMER callers
+ * Returns orders for a customer. ADMIN callers filter by the requested customerId; SUBSCRIBER callers
  * always receive only their own orders (filtered by their Keycloak userId), preventing IDOR
  * regardless of what customerId was supplied in the request path.
  */
