@@ -1,0 +1,24 @@
+telco-dependencies {{ .Chart.Version }} installed into namespace "{{ .Values.namespace }}".
+
+Dependency Services (name : in-cluster port) - address these by short DNS name from
+the same namespace, exactly as the Spring 'docker' profile already expects:
+
+  postgres          : {{ .Values.postgres.port }}      (headless: postgres-headless)
+  redis             : {{ .Values.redis.port }}
+  mongo             : {{ .Values.mongo.port }}
+  kafka             : {{ .Values.kafka.port }} (broker) / {{ .Values.kafka.controllerPort }} (controller)
+  schema-registry   : {{ .Values.schemaRegistry.port }}
+  kafka-connect     : {{ .Values.kafkaConnect.port }}
+  minio             : {{ .Values.minio.apiPort }} (S3) / {{ .Values.minio.consolePort }} (console)
+  keycloak          : {{ .Values.keycloak.httpPort }} (http) / {{ .Values.keycloak.managementPort }} (management)
+  otel-collector    : {{ .Values.observability.otelCollector.grpcPort }} (grpc) / {{ .Values.observability.otelCollector.httpPort }} (http) / {{ .Values.observability.otelCollector.metricsPort }} (metrics)
+  tempo             : {{ .Values.observability.tempo.httpPort }}
+  loki              : {{ .Values.observability.loki.httpPort }}
+  prometheus        : {{ .Values.observability.prometheus.port }}
+  grafana           : {{ .Values.observability.grafana.port }}
+
+Credentials live in Secrets (dev defaults; override for non-dev clusters):
+  postgres-credentials, redis-credentials, minio-credentials,
+  keycloak-credentials, grafana-credentials.
+
+Check rollout:  kubectl -n {{ .Values.namespace }} get pods

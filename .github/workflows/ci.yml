@@ -202,3 +202,150 @@ jobs:
             microservices/**/target/failsafe-reports/**
           if-no-files-found: ignore
           retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # Image build + push (task 15.1.2, ADR-014).
+  #
+  # These jobs turn a green master build into deployable, versioned container
+  # images in GHCR. They ONLY run on real merges (push to master), never on
+  # pull_request, so a PR can never publish an image. The push job also `needs`
+  # the two test jobs, so a red build never publishes: the gate is preserved.
+  # -------------------------------------------------------------------------
+
+  # Decide which of the 13 in-scope MVP services actually changed in this merge.
+  # Emits a JSON matrix consumed by build-push-images ("for changed services").
+  #
+  # Rule (services share the platform reactor + centralized config):
+  #   - platform/**, microservices/configs/**, or microservices/pom.xml changed
+  #     => every service is rebuilt (the shared foundation moved).
+  #   - microservices/<svc>/** changed => only <svc> is rebuilt.
+  # reference-service, service-template (ADR-017 templates) and web-bff
+  # (Sprint 16, post-MVP) are intentionally excluded from SERVICES below.
+  changes:
+    name: Detect changed services
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      any: ${{ steps.detect.outputs.any }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # Full history so we can diff the pushed range (before..after).
+          fetch-depth: 0
+
+      - name: Compute changed services
+        id: detect
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SERVICES="api-gateway discovery-server config-server identity-service \
+            customer-service product-catalog-service order-service subscription-service \
+            usage-service billing-service payment-service notification-service ticket-service"
+          ZERO="0000000000000000000000000000000000000000"
+
+          rebuild_all() {
+            echo "$*" >&2
+            CHANGED="$SERVICES"
+          }
+
+          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "$ZERO" ] \
+             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            rebuild_all "No usable base commit (new branch / force-push / shallow); rebuilding all services."
+          else
+            FILES="$(git diff --name-only "$BEFORE" "$AFTER")"
+            echo "Changed files in ${BEFORE}..${AFTER}:" >&2
+            echo "$FILES" >&2
+            if echo "$FILES" | grep -qE '^(platform/|microservices/configs/|microservices/pom\.xml$)'; then
+              rebuild_all "Shared foundation changed (platform / configs / reactor pom); rebuilding all services."
+            else
+              CHANGED=""
+              for svc in $SERVICES; do
+                if echo "$FILES" | grep -qE "^microservices/${svc}/"; then
+                  CHANGED="$CHANGED $svc"
+                fi
+              done
+            fi
+          fi
+
+          # Trim and emit a JSON matrix. Empty => build-push-images is skipped cleanly.
+          CHANGED="$(echo "$CHANGED" | xargs || true)"
+          if [ -z "$CHANGED" ]; then
+            echo "No in-scope service changed; image build will be skipped." >&2
+            echo 'matrix={"service":[]}' >> "$GITHUB_OUTPUT"
+            echo 'any=false' >> "$GITHUB_OUTPUT"
+          else
+            echo "Services to build: $CHANGED" >&2
+            MATRIX="$(printf '%s\n' $CHANGED | jq -R . | jq -sc '{service: .}')"
+            echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+            echo 'any=true' >> "$GITHUB_OUTPUT"
+          fi
+
+  # Build and push one image per changed service. Gated on the test jobs so a
+  # red build never publishes; matrix keeps services independent (fail-fast off).
+  build-push-images:
+    name: Build & Push Image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs: [build-test, microservices-test, changes]
+    if: needs.changes.outputs.any == 'true'
+    permissions:
+      contents: read
+      packages: write   # least-privilege: only this job may push to GHCR
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.changes.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tags/labels are computed here rather than via docker/metadata-action
+      # because the version tag is the Maven reactor version read from the pom
+      # at runtime (metadata-action cannot read arbitrary file contents).
+      - name: Compute image tags
+        id: meta
+        run: |
+          set -euo pipefail
+          OWNER="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${OWNER}/telco-${{ matrix.service }}"
+          SHA_TAG="sha-$(echo "${{ github.sha }}" | cut -c1-12)"
+          # Reactor project version = first <version> after </parent> in the pom
+          # (the parent <version> above it is Spring Boot's, not ours). Uses sed
+          # (BRE) rather than grep -P so it is locale-independent on any runner.
+          VERSION="$(sed -n '/<\/parent>/,$p' microservices/pom.xml \
+            | sed -n 's/.*<version>\([^<]*\)<\/version>.*/\1/p' | head -1)"
+          # Docker tags allow [A-Za-z0-9._-]; sanitize just in case.
+          VERSION_TAG="$(echo "$VERSION" | sed 's/[^A-Za-z0-9._-]/-/g')"
+          echo "image=$IMAGE"             >> "$GITHUB_OUTPUT"
+          echo "sha_tag=$SHA_TAG"         >> "$GITHUB_OUTPUT"
+          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
+          echo "Tagging $IMAGE with: $SHA_TAG, $VERSION_TAG, latest" >&2
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .                                         # build context = repo root
+          file: microservices/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version_tag }}
+            ${{ steps.meta.outputs.image }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.meta.outputs.version_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

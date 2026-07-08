@@ -1,0 +1,86 @@
+# Prometheus scrape configuration for the in-cluster Telco CRM stack (ADR-012, NFR-09).
+# Derived from infra/docker/observability/prometheus/prometheus.yml, with the compose
+# host.docker.internal targets rewritten to in-cluster Kubernetes Service DNS names.
+# The dependency Services live in the same namespace as the app services, so short
+# names (identity-service, otel-collector, ...) resolve without an FQDN suffix.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alert rules loaded from the alerts file (NFR-09).
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Metrics exported by the OpenTelemetry Collector (from services via OTLP).
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+
+  # Domain services: each exposes /actuator/prometheus on its designated port.
+  # In-cluster these resolve to the per-service Kubernetes Services authored by the
+  # app charts (15.2.1), whose names match the compose service names.
+
+  - job_name: identity-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["identity-service:9001"]
+
+  - job_name: customer-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["customer-service:9002"]
+
+  - job_name: product-catalog-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["product-catalog-service:9003"]
+
+  - job_name: order-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["order-service:9004"]
+
+  - job_name: subscription-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["subscription-service:9005"]
+
+  - job_name: usage-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["usage-service:9006"]
+
+  - job_name: billing-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["billing-service:9007"]
+
+  - job_name: payment-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["payment-service:9008"]
+
+  - job_name: notification-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["notification-service:9009"]
+
+  - job_name: ticket-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["ticket-service:9010"]

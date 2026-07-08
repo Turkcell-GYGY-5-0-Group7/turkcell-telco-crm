@@ -1,0 +1,26 @@
+# customer-service (port 9002). Domain service. Handles PII, so it additionally
+# reads the AES-GCM PII-at-rest key (NFR-06) which compose does NOT set (it falls
+# back to the committed dev default in customer-service/application.yml). Here it
+# is supplied from the Secret, matching that file's "staging/prod inject
+# CUSTOMER_AES_KEY from a Kubernetes Secret / Vault" contract.
+serviceName: customer-service
+containerPort: 9002
+service:
+  port: 9002
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco
+  # DEV-ONLY base64 AES-256 key (matches the application.yml dev default).
+  # Prod supplies a real key via --set-file / external Secret. NFR-06.
+  CUSTOMER_AES_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=

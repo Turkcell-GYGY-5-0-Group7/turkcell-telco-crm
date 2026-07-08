@@ -1,0 +1,16 @@
+{{- if .Values.pdb.enabled }}
+# PodDisruptionBudget. Shipped DISABLED; switched on in Wave 3 / 15.3.2 to keep
+# availability during voluntary disruptions (NFR-04).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "telco-service.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "telco-service.selectorLabels" . | nindent 6 }}
+{{- end }}

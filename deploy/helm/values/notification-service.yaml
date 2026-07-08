@@ -1,0 +1,21 @@
+# notification-service (port 9009). Domain service. Uses MongoDB (mongo:27017)
+# in addition to the shared backbone; the mongo URI comes from the served docker
+# config, so no extra container env is required beyond the shared bootstrap set.
+serviceName: notification-service
+containerPort: 9009
+service:
+  port: 9009
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

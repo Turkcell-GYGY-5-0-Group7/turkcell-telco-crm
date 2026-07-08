@@ -1,0 +1,261 @@
+name: Deploy
+
+# ---------------------------------------------------------------------------
+# Sprint 15.4 - CI/CD deploy stage + smoke tests + rollback (ADR-014).
+#
+# This workflow deploys the whole platform to an EPHEMERAL Kind cluster created
+# fresh for each run (throwaway; deleted when the job ends). It is the gated
+# "docker push -> kubectl/helm apply -> smoke -> (rollback on failure)" tail of
+# the ADR-014 pipeline. The image build+push itself lives in ci.yml (task 15.1.2).
+#
+# ORDER GUARANTEE (deploy runs only AFTER images exist):
+#   * workflow_run on the "CI" workflow, gated to conclusion == success, so the
+#     images for the changed services have already been pushed to GHCR before a
+#     deploy can start. `github.event.workflow_run.head_sha` is the exact commit
+#     CI built, so the sha-<12> tag we deploy matches what CI published.
+#   * workflow_dispatch lets an operator redeploy a chosen tag on demand.
+#
+# APPROVAL GATE:
+#   The job binds to the `ephemeral-kind` GitHub Environment. Configure that
+#   Environment with "Required reviewers" in repo settings so every deploy waits
+#   for a human approval before it runs (ADR-014 gated delivery). No approval
+#   rule on the Environment => it runs unattended (still only after a green CI).
+# ---------------------------------------------------------------------------
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - master
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (default: sha-<12> of the target commit)"
+        required: false
+        default: ""
+
+# Least privilege: read source + pull the private GHCR images. No write anywhere.
+permissions:
+  contents: read
+  packages: read
+
+# Never run two deploys against the (conceptual) same target at once, and never
+# cancel a deploy mid-flight - a half-applied rollout is worse than a queued one.
+concurrency:
+  group: deploy-master
+  cancel-in-progress: false
+
+env:
+  NAMESPACE: telco
+  # ingress-nginx "kind" provider manifest, pinned for reproducibility.
+  INGRESS_NGINX_REF: controller-v1.11.3
+  # metrics-server, pinned; patched with --kubelet-insecure-tls for Kind.
+  METRICS_SERVER_REF: v0.7.2
+  PULL_SECRET: ghcr-pull
+
+jobs:
+  deploy:
+    name: Deploy to ephemeral Kind
+    runs-on: ubuntu-latest
+    # Deploy ONLY after a successful CI run (images pushed) or an explicit dispatch.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    environment: ephemeral-kind
+    steps:
+      - name: Resolve target commit
+        id: target
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Target commit: $SHA" >&2
+
+      - name: Checkout target commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+
+      - name: Compute image coordinates
+        id: img
+        run: |
+          set -euo pipefail
+          OWNER="$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')"
+          INPUT_TAG="${{ github.event.inputs.image_tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="sha-$(echo "${{ steps.target.outputs.sha }}" | cut -c1-12)"
+          fi
+          echo "owner=$OWNER" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "Deploying ghcr.io/$OWNER/telco-<service>:$TAG" >&2
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Create ephemeral Kind cluster
+        uses: helm/kind-action@v1
+        with:
+          config: deploy/kind/kind-cluster.yaml
+          cluster_name: telco-ci
+
+      - name: Install ingress-nginx (Kind provider)
+        run: |
+          set -euo pipefail
+          kubectl apply -f \
+            "https://raw.githubusercontent.com/kubernetes/ingress-nginx/${INGRESS_NGINX_REF}/deploy/static/provider/kind/deploy.yaml"
+          kubectl -n ingress-nginx rollout status deploy/ingress-nginx-controller --timeout=300s
+          kubectl -n ingress-nginx wait --for=condition=Ready pod \
+            -l app.kubernetes.io/component=controller --timeout=300s
+
+      - name: Install metrics-server (HPA metrics; --kubelet-insecure-tls for Kind)
+        run: |
+          set -euo pipefail
+          kubectl apply -f \
+            "https://github.com/kubernetes-sigs/metrics-server/releases/download/${METRICS_SERVER_REF}/components.yaml"
+          # Kind's kubelet serves a self-signed cert; allow metrics-server to trust it.
+          kubectl -n kube-system patch deployment metrics-server --type=json -p \
+            '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+          kubectl -n kube-system rollout status deploy/metrics-server --timeout=300s
+
+      - name: Create namespace and GHCR image pull secret
+        run: |
+          set -euo pipefail
+          kubectl create namespace "$NAMESPACE"
+          # Kind must authenticate to GHCR to pull the private telco-* images.
+          # GITHUB_TOKEN carries packages:read for images owned by this repo/org.
+          kubectl -n "$NAMESPACE" create secret docker-registry "$PULL_SECRET" \
+            --docker-server=ghcr.io \
+            --docker-username='${{ github.actor }}' \
+            --docker-password='${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Deploy stateful dependencies
+        run: |
+          set -euo pipefail
+          # NOTE: no --wait here. The chart has a MinIO bucket-create POST-INSTALL
+          # HOOK (Job) that helm always blocks on, so the long --timeout covers it.
+          # We deliberately do NOT --wait on every workload: schema-registry is a
+          # tracked follow-up (it currently exits 1 at the Confluent "Configuring"
+          # stage), and --wait would hang on it. We wait explicitly on the CORE
+          # deps the services actually need, below.
+          helm upgrade --install telco-deps deploy/helm/dependencies \
+            -n "$NAMESPACE" \
+            --set createNamespace=false \
+            --timeout 20m
+
+      - name: Wait for core dependencies
+        run: |
+          set -euo pipefail
+          # schema-registry is intentionally excluded (tracked follow-up). Every
+          # dep pod carries app.kubernetes.io/name=<component>, so one selector
+          # covers both StatefulSet and Deployment backed deps.
+          for dep in postgres redis mongo kafka keycloak minio; do
+            echo "Waiting for dependency: $dep" >&2
+            kubectl -n "$NAMESPACE" wait --for=condition=Ready pod \
+              -l "app.kubernetes.io/name=${dep}" --timeout=600s
+          done
+
+      - name: Deploy platform services
+        env:
+          OWNER: ${{ steps.img.outputs.owner }}
+          TAG: ${{ steps.img.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          install_service() {
+            svc="$1"
+            echo "==> helm upgrade --install $svc (tag $TAG)" >&2
+            helm upgrade --install "$svc" deploy/helm/telco-service \
+              -n "$NAMESPACE" \
+              -f "deploy/helm/values/${svc}.yaml" \
+              --set image.registry=ghcr.io \
+              --set "image.owner=${OWNER}" \
+              --set "image.tag=${TAG}" \
+              --set "imagePullSecrets[0].name=${PULL_SECRET}"
+          }
+
+          # config-server first (every other service bootstraps its config from it),
+          # then discovery-server (Eureka), then the domain services + the gateway.
+          install_service config-server
+          kubectl -n "$NAMESPACE" rollout status deploy/config-server --timeout=600s
+
+          install_service discovery-server
+          kubectl -n "$NAMESPACE" rollout status deploy/discovery-server --timeout=600s
+
+          REST="api-gateway identity-service customer-service product-catalog-service \
+                order-service subscription-service usage-service billing-service \
+                payment-service notification-service ticket-service"
+          for svc in $REST; do
+            install_service "$svc"
+          done
+
+          # Rolling deploys use maxUnavailable:0, so rollout status only goes green
+          # once the new pods are Ready. A bad image => this blocks then fails, which
+          # (like a smoke failure) drops into the rollback step below.
+          for svc in $REST; do
+            echo "==> rollout status $svc" >&2
+            kubectl -n "$NAMESPACE" rollout status deploy/"$svc" --timeout=600s
+          done
+
+      - name: Smoke tests
+        env:
+          NAMESPACE: ${{ env.NAMESPACE }}
+          GATEWAY_URL: http://localhost:18080
+          INGRESS_HOST: telco.local
+        run: |
+          set -euo pipefail
+          chmod +x deploy/smoke/smoke-test.sh
+          ./deploy/smoke/smoke-test.sh
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          set -uo pipefail
+          echo "::group::Deploy/smoke failed - attempting rollback" >&2
+          RELEASES="config-server discovery-server api-gateway identity-service \
+            customer-service product-catalog-service order-service subscription-service \
+            usage-service billing-service payment-service notification-service ticket-service"
+          for rel in $RELEASES; do
+            # Only a release with a prior revision can be rolled back. On this
+            # EPHEMERAL cluster the first deploy is revision 1, so there is nothing
+            # to revert to; the failing release is left in place for diagnostics
+            # (the cluster is torn down at job end anyway). On a PERSISTENT target
+            # this reverts each release to its last good revision - see
+            # deploy/ROLLBACK.md for the live-proven procedure and evidence.
+            REVS="$(helm -n "$NAMESPACE" history "$rel" -o json 2>/dev/null \
+                    | jq 'length' 2>/dev/null || echo 0)"
+            if [ "${REVS:-0}" -ge 2 ]; then
+              echo "Rolling back $rel (had $REVS revisions)" >&2
+              helm -n "$NAMESPACE" rollback "$rel" || \
+                echo "WARN: helm rollback $rel failed" >&2
+            else
+              echo "No prior revision for $rel (revision ${REVS:-0}); nothing to roll back" >&2
+            fi
+          done
+          echo "::endgroup::" >&2
+
+      - name: Cluster diagnostics
+        if: always()
+        run: |
+          set +e
+          echo "::group::Pods"
+          kubectl -n "$NAMESPACE" get pods -o wide
+          echo "::endgroup::"
+          echo "::group::Helm releases"
+          helm -n "$NAMESPACE" list -a
+          echo "::endgroup::"
+          echo "::group::Recent events"
+          kubectl -n "$NAMESPACE" get events --sort-by=.lastTimestamp | tail -50
+          echo "::endgroup::"

@@ -1,0 +1,39 @@
+# api-gateway (port 8080). The single externally exposed entry point: Ingress is
+# enabled here and ONLY here; all domain services stay ClusterIP-only and are
+# reached through the gateway (lb:// routes resolved via Eureka). Its actuator
+# /actuator/health is unauthenticated (the compose healthcheck curls it without
+# credentials), so it uses the standard liveness/readiness probe groups.
+serviceName: api-gateway
+containerPort: 8080
+service:
+  port: 8080
+
+image:
+  tag: latest
+
+# Gateway fans out to every service; give it a little more headroom.
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  host: telco.local
+  path: /
+  pathType: Prefix
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

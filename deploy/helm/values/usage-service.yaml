@@ -1,0 +1,19 @@
+# usage-service (port 9006). Domain service.
+serviceName: usage-service
+containerPort: 9006
+service:
+  port: 9006
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

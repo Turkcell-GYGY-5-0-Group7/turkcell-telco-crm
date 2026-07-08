@@ -1,0 +1,22 @@
+# identity-service (port 9001). Domain service; bootstraps against config-server
+# and registers with discovery-server, exactly like its compose block.
+serviceName: identity-service
+containerPort: 9001
+service:
+  port: 9001
+
+image:
+  tag: latest
+
+# Non-secret env -> ConfigMap. Mirrors the compose x-app-env NON-secret keys.
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+# Secret env -> Secret. DEV-ONLY defaults (compose ${VAR:-default} fallbacks).
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

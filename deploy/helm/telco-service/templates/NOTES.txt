@@ -1,0 +1,16 @@
+{{ .Values.serviceName }} deployed as release "{{ .Release.Name }}" in namespace {{ .Values.namespace }}.
+
+Image:      {{ include "telco-service.image" . }}
+Replicas:   {{ .Values.replicaCount }}{{ if .Values.autoscaling.enabled }} (HPA {{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }}){{ end }}
+Service:    {{ include "telco-service.fullname" . }}.{{ .Values.namespace }}.svc.cluster.local:{{ .Values.service.port }} ({{ .Values.service.type }})
+ConfigMap:  {{ if .Values.config }}{{ include "telco-service.configMapName" . }}{{ else }}(none){{ end }}
+Secret:     {{ if .Values.secrets }}{{ include "telco-service.secretName" . }}{{ else }}(none){{ end }}
+{{- if .Values.ingress.enabled }}
+Ingress:    http://{{ .Values.ingress.host }}{{ .Values.ingress.path }}  (class {{ .Values.ingress.className }})
+{{- end }}
+
+Check rollout:
+  kubectl -n {{ .Values.namespace }} rollout status deploy/{{ include "telco-service.fullname" . }}
+
+Roll back (15.4.2):
+  helm -n {{ .Values.namespace }} rollback {{ .Release.Name }}

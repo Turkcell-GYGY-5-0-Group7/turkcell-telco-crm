@@ -1,0 +1,19 @@
+# subscription-service (port 9005). Domain service.
+serviceName: subscription-service
+containerPort: 9005
+service:
+  port: 9005
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

@@ -1,0 +1,154 @@
+# ---------------------------------------------------------------------------
+# telco-service - sane defaults for one Spring Boot service.
+#
+# Every field here is overridable by a per-service values file under
+# deploy/helm/values/<service>.yaml. The only REQUIRED override is
+# `serviceName`, which drives the workload name, the Service DNS name (kept
+# identical to the compose service name so the Spring 'docker' profile resolves
+# it), the ConfigMap/Secret names, and the container image repository suffix.
+#
+# Secrets carry DEV-ONLY defaults in the per-service values files (mirroring the
+# compose ${VAR:-default} fallbacks). NEVER commit a real/production secret:
+# prod supplies these via `helm --set` / `--set-file` or a pre-created Secret.
+# ---------------------------------------------------------------------------
+
+# REQUIRED. e.g. "customer-service", "api-gateway", "config-server".
+serviceName: ""
+
+# Namespace the workload lands in. Matches the dependency chart so short-name
+# DNS (postgres, kafka, config-server, ...) resolves in-cluster.
+namespace: telco
+
+replicaCount: 1
+
+# Container image. Final ref is:
+#   {registry}/{owner}/telco-{serviceName}:{tag}
+# `owner` is set by the installer (GHCR org/user). `repository` may be set
+# explicitly to override the derived "telco-<serviceName>" suffix.
+image:
+  registry: ghcr.io
+  owner: OWNER
+  repository: ""          # empty => telco-<serviceName>
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+serviceAccount:
+  create: true
+  name: ""                # empty => serviceName
+
+# The service's HTTP port (Spring server.port). Also the Service port.
+containerPort: 8080
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Pod security context. runAsUser/runAsGroup/fsGroup are NUMERIC (K8s cannot
+# verify a non-numeric image USER against runAsNonRoot). Matches the numeric UID
+# baked into the service Dockerfiles.
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+
+# Modest by default; heavier services (gateway, config-server) override.
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+podAnnotations: {}
+podLabels: {}
+
+# Non-secret environment -> rendered into the per-service ConfigMap (15.2.2).
+# Keys are used verbatim as env var names (hosts, ports, profiles, usernames,
+# URIs, feature flags).
+config: {}
+
+# Secret environment -> rendered into the per-service Secret (15.2.2).
+# Keys are used verbatim as env var names (passwords, encryption/PII keys,
+# tokens). Values here are DEV-ONLY defaults; override in prod.
+secrets: {}
+
+# Probes. All three target /actuator/health, NOT the /actuator/health/liveness
+# and /actuator/health/readiness sub-groups: every service's SecurityConfig
+# permits exactly "/actuator/health" + "/actuator/info" but NOT the sub-group
+# paths, so probing the sub-groups returns 401 and the kubelet kills the pod
+# (liveness) - which crash-loops every domain service in-cluster. Using the
+# permitted /actuator/health (which returns overall UP) keeps probes working and
+# matches how config-server/discovery-server are already configured.
+# FOLLOW-UP (security agent): permit "/actuator/health/**" in the 10 service
+# SecurityConfigs to restore proper liveness/readiness separation, then repoint
+# liveness->/actuator/health/liveness and readiness->/actuator/health/readiness.
+# `httpHeaders` (list of {name,value}) covers services whose actuator is behind
+# basic auth (config-server, discovery-server).
+probes:
+  httpHeaders: []
+  startup:
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  liveness:
+    path: /actuator/health
+    initialDelaySeconds: 0
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    path: /actuator/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+# Ingress. Enabled ONLY for api-gateway (the single externally exposed entry
+# point); all other services stay ClusterIP-only and are reached through it.
+ingress:
+  enabled: false
+  className: nginx
+  host: telco.local
+  path: /
+  pathType: Prefix
+  annotations: {}
+
+# HPA (NFR-03). Enabled by default for stateless services (Wave 3 / 15.3); the
+# two singleton infra services (config-server, discovery-server) override this
+# OFF in their values files. minReplicas 2 gives the PDB something to protect.
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 75
+  targetMemoryUtilizationPercentage: 0   # 0 => omit the memory metric
+  # Fast scale-up, deliberate scale-down (short window so scale-in is observable
+  # without flapping). autoscaling/v2 behavior.
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 30
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+      selectPolicy: Max
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 30
+
+# PodDisruptionBudget (NFR-04). Enabled by default (safe because autoscaled
+# services keep minReplicas 2); the singleton infra services override it OFF.
+pdb:
+  enabled: true
+  minAvailable: 1

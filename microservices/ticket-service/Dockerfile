@@ -18,6 +18,10 @@ RUN --mount=type=cache,target=/root/.m2,sharing=locked \
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN apk add --no-cache curl
+RUN addgroup -S -g 10001 app && adduser -S -u 10001 -G app app
 COPY --from=builder /workspace/microservices/ticket-service/target/*.jar app.jar
 EXPOSE 9010
+HEALTHCHECK --interval=15s --timeout=10s --start-period=60s --retries=12 \
+  CMD curl -fsS http://localhost:9010/actuator/health | grep -q UP || exit 1
+USER 10001
 ENTRYPOINT ["java", "-jar", "app.jar"]

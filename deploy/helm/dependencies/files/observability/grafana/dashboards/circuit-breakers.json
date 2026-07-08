@@ -1,0 +1,107 @@
+{
+  "id": null,
+  "uid": "telco-circuit-breakers",
+  "title": "Circuit Breakers & Resilience",
+  "description": "Resilience4j circuit breaker state, call outcomes, and retry attempts across all Telco CRM domain services (ADR-012, NFR-09).",
+  "tags": ["telco-crm", "resilience4j", "circuit-breaker"],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Circuit Breaker State per Instance",
+      "description": "Resilience4j circuit breaker state gauge.  The metric emits a separate series per state label (closed, open, half_open); value=1 means that state is currently active.  Alert (CircuitBreakerOpen) fires when state=open holds for 30 seconds.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "resilience4j_circuitbreaker_state",
+          "legendFormat": "{{name}} / {{state}} ({{instance}})",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "inactive" }, "1": { "text": "ACTIVE" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["last"] }
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Circuit Breaker Calls (success / failed / not-permitted)",
+      "description": "Rate of circuit breaker call outcomes per second.  kind label values: successful, failed, not_permitted (shed when OPEN).",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by(name, kind) (rate(resilience4j_circuitbreaker_calls_total[5m]))",
+          "legendFormat": "{{name}} / {{kind}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Retry Attempts per Name",
+      "description": "Rate of Resilience4j retry attempts per second grouped by retry name and kind (successful_without_retry, successful_with_retry, failed_with_retry, failed_without_retry).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by(name, kind) (rate(resilience4j_retry_calls_total[5m]))",
+          "legendFormat": "{{name}} / {{kind}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }
+      }
+    }
+  ]
+}

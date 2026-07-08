@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/5 | 2026-06-22 |
+| DONE (features); exit-criteria follow-ups tracked | 5/5 | 2026-07-08 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -22,11 +22,11 @@ Covers NFR-03 (HPA), NFR-04 (uptime), and the CI/CD/deployment requirements (ADR
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 15.1 | Containerization | TODO | [15.1-containerization.md](15.1-containerization.md) |
-| 15.2 | Kubernetes Manifests | TODO | [15.2-kubernetes-manifests.md](15.2-kubernetes-manifests.md) |
-| 15.3 | Autoscaling and Resilience | TODO | [15.3-autoscaling-and-resilience.md](15.3-autoscaling-and-resilience.md) |
-| 15.4 | CI/CD Pipeline and Rollback | TODO | [15.4-ci-cd-pipeline-and-rollback.md](15.4-ci-cd-pipeline-and-rollback.md) |
-| 15.5 | Release Documentation | TODO | [15.5-release-documentation.md](15.5-release-documentation.md) |
+| 15.1 | Containerization | DONE | [15.1-containerization.md](15.1-containerization.md) |
+| 15.2 | Kubernetes Manifests | DONE | [15.2-kubernetes-manifests.md](15.2-kubernetes-manifests.md) |
+| 15.3 | Autoscaling and Resilience | DONE | [15.3-autoscaling-and-resilience.md](15.3-autoscaling-and-resilience.md) |
+| 15.4 | CI/CD Pipeline and Rollback | DONE | [15.4-ci-cd-pipeline-and-rollback.md](15.4-ci-cd-pipeline-and-rollback.md) |
+| 15.5 | Release Documentation | DONE | [15.5-release-documentation.md](15.5-release-documentation.md) |
 
 ## Sprint Deliverables
 

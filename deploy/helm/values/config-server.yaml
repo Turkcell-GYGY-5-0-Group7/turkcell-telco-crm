@@ -1,0 +1,79 @@
+# config-server (port 8888). It IS the config source and cannot import from
+# itself (ADR-010): its own image bakes microservices/configs into /configs and
+# runs the 'native' backend (spring.profiles.active=native is set in the image's
+# application.yml, so no SPRING_PROFILES_ACTIVE is passed here). We do NOT mount
+# the nested per-service configs tree as a ConfigMap (a ConfigMap is flat and
+# cannot represent the per-service subdirectories) - the baked configs are used.
+#
+# ENCRYPT_KEY is mandatory (the app refuses to start without it) and is supplied
+# from the Secret. The remaining env mirrors the compose config-server block:
+# config-server substitutes ${...} placeholders in the YAML it serves using its
+# own environment, so it carries the same host/credential values as the clients.
+#
+# Its /actuator/health sits behind basic auth (the compose + Dockerfile
+# healthchecks curl it with -u config:config), so the probes send a dev-default
+# Authorization header. Override probes.httpHeaders if the basic-auth creds change.
+serviceName: config-server
+containerPort: 8888
+service:
+  port: 8888
+
+image:
+  tag: latest
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    cpu: 500m
+    memory: 768Mi
+
+probes:
+  # DEV-ONLY basic-auth header: base64("config:config"). Prod overrides this to
+  # match the real CONFIG_SERVER_USER/PASSWORD (or fronts a permitted probe path).
+  httpHeaders:
+    - name: Authorization
+      value: "Basic Y29uZmlnOmNvbmZpZw=="
+  startup:
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  liveness:
+    path: /actuator/health
+    initialDelaySeconds: 0
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    path: /actuator/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+config:
+  CONFIG_SERVER_USER: config
+  REDIS_HOST: redis
+  EUREKA_HOST: discovery-server
+  EUREKA_PORT: "8761"
+  EUREKA_USERNAME: eureka
+  KEYCLOAK_URI: http://keycloak:8080
+  KEYCLOAK_JWKS_URI: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  # DEV-ONLY symmetric encrypt key (compose expects `openssl rand -hex 32`).
+  # Prod MUST override via --set-file / external Secret. Never commit a real key.
+  ENCRYPT_KEY: "0f8a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c0e2b4d6f8a"
+
+# Singleton config source: do not autoscale, and no PDB (single replica would
+# otherwise block node drains). Overrides the chart defaults (15.3).
+replicaCount: 1
+autoscaling:
+  enabled: false
+pdb:
+  enabled: false

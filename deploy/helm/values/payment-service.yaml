@@ -1,0 +1,22 @@
+# payment-service (port 9008). Domain service. Adds the non-secret PSP mock
+# outcome flag (compose PSP_MOCK_FORCE_OUTCOME); empty preserves the MockPsp
+# ~10% random failure for local dev, non-empty (e.g. SUCCESS) forces an outcome.
+serviceName: payment-service
+containerPort: 9008
+service:
+  port: 9008
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+  PSP_MOCK_FORCE_OUTCOME: ""
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco
