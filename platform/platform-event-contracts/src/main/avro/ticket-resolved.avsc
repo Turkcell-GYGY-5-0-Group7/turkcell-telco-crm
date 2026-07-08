@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "TicketResolvedV1",
+  "namespace": "com.telco.platform.events.ticket",
+  "doc": "Emitted when a support ticket is resolved (ticket.resolved.v1). Producer: ticket-service.",
+  "fields": [
+    {
+      "name": "ticketId",
+      "type": "string",
+      "doc": "Unique ticket identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who owns the ticket."
+    },
+    {
+      "name": "resolvedAt",
+      "type": "string",
+      "doc": "Instant the ticket was resolved, ISO-8601 (UTC)."
+    }
+  ]
+}

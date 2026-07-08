@@ -3,6 +3,7 @@ package com.telco.acceptance.ac01;
 import com.telco.acceptance.support.AcceptanceConfig;
 import com.telco.acceptance.support.GatewayApi;
 import com.telco.acceptance.support.OnboardingSteps;
+import com.telco.acceptance.support.SelfServiceSubscriber;
 import com.telco.acceptance.support.TokenProvider;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
@@ -47,16 +48,17 @@ import static org.awaitility.Awaitility.await;
  * compose profile).
  *
  * <p><b>Authentication:</b> the customer-facing steps (register, KYC document upload, place order,
- * view own order, view payment by order) authenticate as the real seeded SUBSCRIBER user
- * ({@code subscriber@telco.local}), not ADMIN - see {@link TokenProvider#subscriberToken()} and
- * {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME}. KYC approval and tariff creation remain
- * ADMIN because they are genuinely back-office actions ({@code CustomerKycController},
- * {@code TariffController}, both {@code hasRole('ADMIN')}). Subscription, quota, and notification
- * history reads also remain ADMIN in this suite - not because they are admin-only by design, but
- * because of a confirmed identity-linkage gap (see {@link GatewayApi#getSubscriptionsByCustomer}
- * javadoc): nothing links the subscriber's Keycloak subject to the randomly generated
- * {@code customerId} their profile receives at registration, so those ownership checks
- * (`customerId == JWT sub`) can never pass for a SUBSCRIBER token here.
+ * view own order, view payment by order) authenticate as a real, freshly provisioned SUBSCRIBER
+ * ({@link SelfServiceSubscriber}), not the permanently-unlinkable seeded
+ * {@code subscriber@telco.local} (see {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME}) and
+ * not ADMIN. KYC approval and tariff creation remain ADMIN because they are genuinely back-office
+ * actions ({@code CustomerKycController}, {@code TariffController}, both {@code hasRole('ADMIN')}).
+ * Subscription, quota, and notification history reads use the subscriber's own <em>fresh, linked</em>
+ * token ({@link SelfServiceSubscriber#awaitLinkedToken}) - the identity-to-customer linkage gap
+ * (Section 14.1.1 ruling) that used to force these onto an ADMIN token is closed (Feature 14.4):
+ * identity-service links {@code users.customer_id} from {@code customer.registered.v1} and pushes it
+ * to Keycloak as a {@code customerId} claim, which every one of these ownership checks now resolves
+ * against instead of the raw JWT subject.
  */
 @DisplayName("AC-01: New subscriber onboarding (happy path)")
 class NewSubscriberOnboardingAcceptanceIT {
@@ -67,56 +69,85 @@ class NewSubscriberOnboardingAcceptanceIT {
     @Test
     @DisplayName("customer onboards, pays, is activated with an MSISDN, and receives a welcome SMS")
     void newSubscriberOnboardingSucceedsEndToEnd() {
-        String subscriberToken = TokenProvider.subscriberToken();
         String adminToken = TokenProvider.adminToken();
+        SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
 
         OnboardingSteps.ActiveSubscription result =
-                OnboardingSteps.onboardActiveSubscription(subscriberToken, adminToken, MONTHLY_FEE, DATA_MB_INCLUDED);
+                OnboardingSteps.onboardActiveSubscription(subscriber, adminToken, MONTHLY_FEE, DATA_MB_INCLUDED);
+
+        // The subscriber's own fresh, linked token (resolved customerId claim, Feature 14.4) - used
+        // for every "view my own resource" read below, proving real ownership instead of falling
+        // back to ADMIN.
+        String linkedToken = result.subscriberToken();
 
         // Order reached FULFILLED (asserted inside onboardActiveSubscription); re-fetch once more
         // here so this test's failure message is self-contained if the precondition regresses. The
         // real subscriber who placed the order fetches it themselves (OrderController ownership:
         // caller must be the order's creator).
-        Response order = GatewayApi.getOrder(subscriberToken, result.orderId());
+        Response order = GatewayApi.getOrder(linkedToken, result.orderId());
         order.then().statusCode(200);
         assertThat(order.jsonPath().getString("data.status")).isEqualTo("FULFILLED");
         assertThat(order.jsonPath().getString("data.customerId")).isEqualTo(result.customerId().toString());
 
         // Payment succeeded via the mock PSP (FR-25/26). GetPaymentByOrderQueryHandler has no
         // ownership check, so the subscriber can view it directly.
-        Response payment = GatewayApi.getPaymentByOrder(subscriberToken, result.orderId());
+        Response payment = GatewayApi.getPaymentByOrder(linkedToken, result.orderId());
         payment.then().statusCode(200);
         assertThat(payment.jsonPath().getString("data.status")).isEqualTo("COMPLETED");
         assertThat(new BigDecimal(payment.jsonPath().getString("data.amount")))
                 .isEqualByComparingTo(MONTHLY_FEE);
 
         // Subscription is ACTIVE with an allocated Turkish MSISDN (FR-13, subscription-service
-        // MsisdnAllocationService / V2__msisdn_pool_seed.sql: the 90532xxxxxxx block). Fetched with
-        // ADMIN - see class javadoc for the ownership-linkage gap blocking the SUBSCRIBER token here.
-        Response subscription = GatewayApi.getSubscription(adminToken, result.subscriptionId());
+        // MsisdnAllocationService). Fetched with the subscriber's own linked token - resolved
+        // customerId claim now satisfies ownership.
+        //
+        // Asserts the general Turkish mobile-number shape (90 + 10 digits), not a specific block:
+        // MsisdnAllocationService.allocate() only guarantees a FREE pool row, not which numeric block
+        // it comes from - V2__msisdn_pool_seed.sql seeds the 0532 block, but on a long-lived local/CI
+        // environment that block is a finite, shared resource that cumulative test runs eventually
+        // exhaust (confirmed live: this environment's 0532 block was already fully ALLOCATED to
+        // still-ACTIVE subscriptions from prior runs before this session even started, and a
+        // secondary block had already been provisioned). Hardcoding the 0532 prefix here asserted an
+        // implementation/environment detail, not a real behavioral contract, and was already stale
+        // independent of Feature 14.4.
+        Response subscription = GatewayApi.getSubscription(linkedToken, result.subscriptionId());
         subscription.then().statusCode(200);
         assertThat(subscription.jsonPath().getString("data.status")).isEqualTo("ACTIVE");
-        assertThat(subscription.jsonPath().getString("data.msisdn")).matches("90532\\d{7}");
+        assertThat(subscription.jsonPath().getString("data.msisdn")).matches("90\\d{10}");
         assertThat(subscription.jsonPath().getString("data.tariffCode")).isEqualTo(result.tariffCode());
 
         // Quota was provisioned from the tariff's dataMbIncluded allowance (usage-service
-        // SubscriptionActivatedEventConsumer / ProvisionQuotaCommandHandler). Same ownership-linkage
-        // gap as above - ADMIN token used.
-        Response quota = GatewayApi.getQuota(adminToken, result.subscriptionId());
-        quota.then().statusCode(200);
-        assertThat(quota.jsonPath().getLong("data.mbTotal")).isEqualTo(DATA_MB_INCLUDED);
-        assertThat(quota.jsonPath().getLong("data.mbRemaining")).isEqualTo(DATA_MB_INCLUDED);
+        // SubscriptionActivatedEventConsumer / ProvisionQuotaCommandHandler). Own linked token used.
+        //
+        // order-service (order FULFILLED, awaited above) and usage-service (quota provisioning) are
+        // two independent consumer groups reacting to the same subscription.activated.v1 event with
+        // no ordering guarantee between them (the same class of gap documented on
+        // FulfillOrderCommandHandler's own TRANSIENT/TERMINAL split); usage-service's handler also
+        // makes its own synchronous, potentially slower, outbound call (product-catalog-service's
+        // allowance-snapshot lookup). Reaching FULFILLED first does not guarantee quota provisioning
+        // has completed yet, so this must poll rather than assert once - matching the welcome-SMS
+        // check below, which already polls for the same reason.
+        await("quota provisioned from the tariff's allowance")
+                .atMost(AcceptanceConfig.SAGA_TIMEOUT)
+                .pollInterval(AcceptanceConfig.POLL_INTERVAL)
+                .untilAsserted(() -> {
+                    Response quota = GatewayApi.getQuota(linkedToken, result.subscriptionId());
+                    quota.then().statusCode(200);
+                    assertThat(quota.jsonPath().getLong("data.mbTotal")).isEqualTo(DATA_MB_INCLUDED);
+                    assertThat(quota.jsonPath().getLong("data.mbRemaining")).isEqualTo(DATA_MB_INCLUDED);
+                });
 
         // A WELCOME/SMS notification was dispatched to the customer
         // (notification-service DomainEventNotificationConsumer.onSubscriptionEvent, userId =
-        // customerId from the subscription.activated.v1 payload's customerId field). ADMIN token:
-        // NotificationController.history requires #userId == authentication.name otherwise, and
-        // userId here is the business customerId, not the subscriber's JWT sub.
+        // customerId from the subscription.activated.v1 payload's customerId field).
+        // NotificationController.history allows hasRole('ADMIN') or
+        // #userId == @currentUserProvider.currentUser().customerId() - the subscriber's own linked
+        // token now satisfies the latter directly.
         await("welcome SMS notification recorded")
                 .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
-                    Response history = GatewayApi.getNotificationHistory(adminToken, result.customerId().toString());
+                    Response history = GatewayApi.getNotificationHistory(linkedToken, result.customerId().toString());
                     history.then().statusCode(200);
                     List<Map<String, Object>> content = history.jsonPath().getList("data.content");
                     assertThat(content)

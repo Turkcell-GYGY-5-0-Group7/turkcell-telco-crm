@@ -18,17 +18,25 @@ import static org.hamcrest.Matchers.equalTo;
  * Each *AcceptanceIT class still owns and asserts its own scenario-specific steps; this class only
  * assembles the common precondition.
  *
- * <p>Every step below takes both a {@code subscriberToken} (the real seeded SUBSCRIBER user,
- * {@code subscriber@telco.local}) and an {@code adminToken}, and uses whichever the underlying
- * controller actually requires - see {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME} and each
- * {@link GatewayApi} call site's javadoc for the exact role/ownership reasoning per endpoint.
+ * <p>{@link #registerAndApproveCustomer} takes a raw {@code subscriberToken} (issued before
+ * self-registration, so it never carries a {@code customerId} claim yet) and an
+ * {@code adminToken}; {@link #onboardActiveSubscription} instead takes the
+ * {@link SelfServiceSubscriber} itself so it can, after registration, wait for identity-service's
+ * asynchronous {@code customer.registered.v1} linkage (Feature 14.4) and fetch a <em>fresh</em>
+ * token carrying the resolved {@code customerId} claim before making any ownership-gated read - see
+ * each {@link GatewayApi} call site's javadoc for the exact role/ownership reasoning per endpoint.
  */
 public final class OnboardingSteps {
 
     private OnboardingSteps() {
     }
 
-    /** Every id a downstream scenario (AC-02, AC-03) needs from a completed onboarding. */
+    /**
+     * Every id a downstream scenario (AC-02, AC-03) needs from a completed onboarding, plus the
+     * subscriber's own fresh, linked bearer token ({@code subscriberToken}) - carries the resolved
+     * {@code customerId} claim (Feature 14.4) and is what every "view my own resource" read uses
+     * instead of an ADMIN-token workaround.
+     */
     public record ActiveSubscription(
             UUID customerId,
             UUID orderId,
@@ -36,7 +44,8 @@ public final class OnboardingSteps {
             String msisdn,
             String tariffCode,
             BigDecimal monthlyFee,
-            int dataMbIncluded) {
+            int dataMbIncluded,
+            String subscriberToken) {
     }
 
     /**
@@ -69,9 +78,11 @@ public final class OnboardingSteps {
      * {@code hasRole('ADMIN')}); the order is placed and polled by the real SUBSCRIBER
      * (customer-facing, ownership tied to whoever created it - see {@code OrderController}), proving
      * a real subscriber can place and observe their own order end to end. The resulting subscription
-     * is fetched with the ADMIN token only because of the ownership-linkage gap documented on
-     * {@link GatewayApi#getSubscriptionsByCustomer} (customer-service's randomly generated
-     * {@code customerId} is never linked to the subscriber's Keycloak subject).
+     * is fetched with the subscriber's own fresh, linked token (Feature 14.4 closes the
+     * identity-to-customer linkage gap previously documented on
+     * {@link GatewayApi#getSubscriptionsByCustomer}): once identity-service's async
+     * {@code customer.registered.v1} consumer links the customer, a fresh token's resolved
+     * {@code customerId} claim satisfies this ownership check directly, no ADMIN fallback needed.
      *
      * <p>Note (flagged in the suite README/report): the mock PSP
      * ({@code payment-service MockPspAdapter}) fails 10% of charges by design with no
@@ -79,8 +90,10 @@ public final class OnboardingSteps {
      * 1 hour), so this - and anything built on it - carries a small (~10%), currently unavoidable
      * flake probability tied to a real gap in the system under test, not this suite.
      */
-    public static ActiveSubscription onboardActiveSubscription(String subscriberToken, String adminToken,
-                                                               BigDecimal monthlyFee, int dataMbIncluded) {
+    public static ActiveSubscription onboardActiveSubscription(SelfServiceSubscriber subscriber,
+                                                               String adminToken, BigDecimal monthlyFee,
+                                                               int dataMbIncluded) {
+        String subscriberToken = subscriber.initialToken();
         UUID customerId = registerAndApproveCustomer(subscriberToken, adminToken);
         GatewayApi.TariffCreated tariff = GatewayApi.createTariff(adminToken, monthlyFee, dataMbIncluded);
 
@@ -98,12 +111,20 @@ public final class OnboardingSteps {
                     assertThat(order.jsonPath().getString("data.status")).isEqualTo("FULFILLED");
                 });
 
-        Response subscriptions = GatewayApi.getSubscriptionsByCustomer(adminToken, customerId);
+        // A fresh token, fetched only after the customer is registered, carries the resolved
+        // customerId claim once identity-service's async customer.registered.v1 linkage consumer
+        // completes (Feature 14.4) - this is the token every ownership-gated read from here on uses,
+        // including the subscriptions-by-customer lookup immediately below, closing the
+        // identity-to-customer linkage gap that used to force this call onto an ADMIN token.
+        String linkedToken = subscriber.awaitLinkedToken(customerId);
+
+        Response subscriptions = GatewayApi.getSubscriptionsByCustomer(linkedToken, customerId);
         subscriptions.then().statusCode(200);
         UUID subscriptionId = UUID.fromString(subscriptions.jsonPath().getString("data.content[0].id"));
         String msisdn = subscriptions.jsonPath().getString("data.content[0].msisdn");
 
         return new ActiveSubscription(
-                customerId, orderId, subscriptionId, msisdn, tariff.code(), monthlyFee, dataMbIncluded);
+                customerId, orderId, subscriptionId, msisdn, tariff.code(), monthlyFee, dataMbIncluded,
+                linkedToken);
     }
 }

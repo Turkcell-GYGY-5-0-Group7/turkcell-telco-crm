@@ -37,6 +37,31 @@ public final class GatewayApi {
                 .contentType(ContentType.JSON);
     }
 
+    // ── identity-service ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Provisions a real Keycloak-backed user with an initial non-temporary password (ADMIN only,
+     * {@code UserController.createUser}), so the account can authenticate via ROPC immediately -
+     * used to build a genuine self-service SUBSCRIBER for the identity-to-customer linkage proof
+     * (Section 14.1.1/Feature 14.4), replacing the permanently-unlinkable seeded
+     * {@code subscriber@telco.local} for flows that need real ownership verification.
+     */
+    public static Response createUser(String adminToken, String username, String email,
+                                       String firstName, String lastName, String password) {
+        Map<String, Object> body = Map.of(
+                "username", username,
+                "email", email,
+                "firstName", firstName,
+                "lastName", lastName,
+                "password", password);
+        return auth(adminToken).body(body).post("/api/v1/users");
+    }
+
+    /** Assigns realm roles to a user (ADMIN only, {@code UserController.assignRoles}). */
+    public static Response assignRoles(String adminToken, UUID userId, List<String> roleNames) {
+        return auth(adminToken).body(Map.of("roleNames", roleNames)).post("/api/v1/users/{id}/roles", userId);
+    }
+
     // ── customer-service ──────────────────────────────────────────────────────────────────
 
     /** No {@code @PreAuthorize} on {@code CustomerController.register}: any authenticated caller (a SUBSCRIBER applying for themselves, in this suite) may register. */
@@ -51,13 +76,20 @@ public final class GatewayApi {
         return auth(token).body(body).post("/api/v1/customers");
     }
 
-    /** No {@code @PreAuthorize} on {@code CustomerDocumentController.upload}: the subscriber uploads their own KYC document. */
+    /**
+     * No {@code @PreAuthorize} on {@code CustomerDocumentController.upload}: the subscriber uploads
+     * their own KYC document. The content type must be one of
+     * {@code UploadDocumentCommandHandler.ALLOWED_CONTENT_TYPES} (image/jpeg, image/png,
+     * application/pdf) - the handler validates the declared content type but never the byte content
+     * itself (no magic-byte sniffing), so a fake payload declared as {@code application/pdf} is
+     * accepted, matching what a real KYC upload's request shape looks like.
+     */
     public static Response uploadKycDocument(String token, UUID customerId) {
         return RestAssured.given()
                 .auth().oauth2(token)
                 .contentType(ContentType.MULTIPART)
                 .multiPart("type", "ID_CARD")
-                .multiPart("file", "id-card.txt", "acceptance-suite-fake-id-scan".getBytes(), "text/plain")
+                .multiPart("file", "id-card.pdf", "acceptance-suite-fake-id-scan".getBytes(), "application/pdf")
                 .post("/api/v1/customers/{customerId}/documents", customerId);
     }
 
@@ -150,29 +182,29 @@ public final class GatewayApi {
     // ── subscription-service ──────────────────────────────────────────────────────────────
 
     /**
-     * ADMIN only in this suite: ownership is enforced as
-     * {@code customerId.toString().equals(callerUserId)} (JWT sub), and nothing links a Keycloak
-     * subject to customer-service's independently generated {@code customerId} (see
-     * {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME} javadoc) - a SUBSCRIBER token can never
-     * pass this check for a suite-created customer, so ADMIN (which bypasses ownership) is used.
+     * Ownership is enforced against the caller's resolved {@code customerId} claim (Section 14.1.1
+     * linkage, Feature 14.4 - {@code GetSubscriptionsByCustomerQueryHandler}), not the raw JWT
+     * subject. A real self-service SUBSCRIBER (see {@link SelfServiceSubscriber}) whose
+     * {@code customerId} matches the query param passes this check directly; ADMIN still bypasses
+     * ownership entirely, so both token kinds work here.
      */
     public static Response getSubscriptionsByCustomer(String token, UUID customerId) {
         return auth(token).queryParam("customerId", customerId).get("/api/v1/subscriptions");
     }
 
-    /** Same ownership-linkage gap as {@link #getSubscriptionsByCustomer}: ADMIN only in this suite. */
+    /** Same resolved-{@code customerId} ownership check as {@link #getSubscriptionsByCustomer}. */
     public static Response getSubscription(String token, UUID subscriptionId) {
         return auth(token).get("/api/v1/subscriptions/{id}", subscriptionId);
     }
 
     // ── usage-service ─────────────────────────────────────────────────────────────────────
 
-    /** Same ownership-linkage gap (quota.customerId vs JWT sub, see AcceptanceConfig): ADMIN only. */
+    /** Resolved-{@code customerId} ownership check (see {@link #getSubscriptionsByCustomer}). */
     public static Response getQuota(String token, UUID subscriptionId) {
         return auth(token).get("/api/v1/usage/subscriptions/{id}/quota", subscriptionId);
     }
 
-    /** Same ownership-linkage gap: ADMIN only in this suite. */
+    /** Resolved-{@code customerId} ownership check (see {@link #getSubscriptionsByCustomer}). */
     public static Response getUsageHistory(String token, UUID subscriptionId, Instant from, Instant to) {
         return auth(token)
                 .queryParam("from", from.toString())
@@ -196,7 +228,7 @@ public final class GatewayApi {
         return auth(token).body(body).post("/api/v1/billing/runs");
     }
 
-    /** Same ownership-linkage gap as subscription-service reads: ADMIN only in this suite. */
+    /** Resolved-{@code customerId} ownership check (see {@link #getSubscriptionsByCustomer}). */
     public static Response getInvoices(String token, UUID customerId) {
         return auth(token).queryParam("customerId", customerId).get("/api/v1/invoices");
     }
@@ -204,11 +236,10 @@ public final class GatewayApi {
     // ── notification-service ──────────────────────────────────────────────────────────────
 
     /**
-     * ADMIN only in this suite: {@code NotificationController.history} allows
-     * {@code hasRole('ADMIN') or #userId == authentication.name}, and every call site here passes
-     * the business {@code customerId} (or the literal {@code "unknown"} bug value, AC-03) as
-     * {@code userId} - neither ever equals a SUBSCRIBER caller's JWT sub (same identity-linkage gap
-     * as the other ADMIN-only reads above).
+     * {@code NotificationController.history} allows
+     * {@code hasRole('ADMIN') or #userId == @currentUserProvider.currentUser().customerId()} - a real
+     * self-service SUBSCRIBER's resolved {@code customerId} claim now satisfies this directly
+     * (Section 14.1.1 linkage, Feature 14.4), not just ADMIN.
      */
     public static Response getNotificationHistory(String token, String userId) {
         return auth(token).get("/api/v1/notifications/users/{userId}/history", userId);

@@ -1,0 +1,49 @@
+{
+  "type": "record",
+  "name": "PaymentFailedV1",
+  "namespace": "com.telco.platform.events.payment",
+  "doc": "Emitted when a payment attempt fails (payment.failed.v1). Producer: payment-service.",
+  "fields": [
+    {
+      "name": "paymentId",
+      "type": "string",
+      "doc": "Unique payment identifier (UUID)."
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Order this payment attempt targets."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer attempting payment."
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Attempted amount as an exact decimal (precision 19, scale 4)."
+    },
+    {
+      "name": "invoiceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Invoice this charge attempt targets, when the payment originates from an invoice. Nullable for order-driven payments."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "doc": "Failure reason."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the payment failed, ISO-8601 (UTC)."
+    }
+  ]
+}

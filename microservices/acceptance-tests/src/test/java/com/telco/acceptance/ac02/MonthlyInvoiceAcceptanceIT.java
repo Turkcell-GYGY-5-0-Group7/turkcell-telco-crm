@@ -3,6 +3,7 @@ package com.telco.acceptance.ac02;
 import com.telco.acceptance.support.AcceptanceConfig;
 import com.telco.acceptance.support.GatewayApi;
 import com.telco.acceptance.support.OnboardingSteps;
+import com.telco.acceptance.support.SelfServiceSubscriber;
 import com.telco.acceptance.support.TokenProvider;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
@@ -58,14 +59,13 @@ import static org.awaitility.Awaitility.await;
  * and only token for that specific call.
  *
  * <p><b>Authentication:</b> onboarding's customer-facing steps (register, KYC document upload,
- * place/read the order) authenticate as the real seeded SUBSCRIBER user
- * ({@code subscriber@telco.local}). KYC approval, tariff creation, the bill-run trigger, the
- * invoice-settling charge, and every {@code customerId}-keyed read (invoices, notification history)
- * stay on the ADMIN token - the last group not because they are admin-only by design, but because of
- * a confirmed identity-linkage gap (see {@link GatewayApi#getSubscriptionsByCustomer} javadoc):
- * nothing in the system links a Keycloak subject to customer-service's independently generated
- * {@code customerId}, so those ownership checks (`customerId == JWT sub`) can never pass for a
- * SUBSCRIBER token against a customer this suite creates through the public API.
+ * place/read the order) authenticate as a real, freshly provisioned SUBSCRIBER
+ * ({@link SelfServiceSubscriber}), not the permanently-unlinkable seeded
+ * {@code subscriber@telco.local}. KYC approval, tariff creation, the bill-run trigger, and the
+ * invoice-settling charge stay on the ADMIN token (genuinely back-office/admin-only actions); every
+ * {@code customerId}-keyed read (invoices, notification history) now uses the subscriber's own
+ * fresh, linked token - the identity-to-customer linkage gap (Section 14.1.1 ruling) that used to
+ * force these onto ADMIN is closed (Feature 14.4).
  */
 @DisplayName("AC-02: Monthly invoice bill-run")
 class MonthlyInvoiceAcceptanceIT {
@@ -76,11 +76,12 @@ class MonthlyInvoiceAcceptanceIT {
     @Test
     @DisplayName("bill-run generates an invoice with a PDF, notifies the customer by email, and the paid invoice reaches PAID")
     void billRunGeneratesInvoiceAndCustomerPaymentMarksItPaid() {
-        String subscriberToken = TokenProvider.subscriberToken();
         String adminToken = TokenProvider.adminToken();
+        SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
 
         OnboardingSteps.ActiveSubscription subscription =
-                OnboardingSteps.onboardActiveSubscription(subscriberToken, adminToken, MONTHLY_FEE, DATA_MB_INCLUDED);
+                OnboardingSteps.onboardActiveSubscription(subscriber, adminToken, MONTHLY_FEE, DATA_MB_INCLUDED);
+        String linkedToken = subscription.subscriberToken();
 
         Instant periodStart = Instant.now().minus(30, ChronoUnit.DAYS);
         Instant periodEnd = Instant.now();
@@ -92,13 +93,13 @@ class MonthlyInvoiceAcceptanceIT {
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
                     GatewayApi.triggerBillRun(adminToken, periodStart, periodEnd).then().statusCode(202);
-                    Response invoices = GatewayApi.getInvoices(adminToken, subscription.customerId());
+                    Response invoices = GatewayApi.getInvoices(linkedToken, subscription.customerId());
                     invoices.then().statusCode(200);
                     List<Map<String, Object>> content = invoices.jsonPath().getList("data.content");
                     assertThat(content).isNotEmpty();
                 });
 
-        Response invoicesResponse = GatewayApi.getInvoices(adminToken, subscription.customerId());
+        Response invoicesResponse = GatewayApi.getInvoices(linkedToken, subscription.customerId());
         List<Map<String, Object>> invoices = invoicesResponse.jsonPath().getList("data.content");
         Map<String, Object> invoice = invoices.get(0);
 
@@ -114,7 +115,7 @@ class MonthlyInvoiceAcceptanceIT {
                 .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
-                    Response history = GatewayApi.getNotificationHistory(adminToken, subscription.customerId().toString());
+                    Response history = GatewayApi.getNotificationHistory(linkedToken, subscription.customerId().toString());
                     history.then().statusCode(200);
                     List<Map<String, Object>> content = history.jsonPath().getList("data.content");
                     assertThat(content)
@@ -151,7 +152,7 @@ class MonthlyInvoiceAcceptanceIT {
                 .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
-                    Response invoicesAfterPayment = GatewayApi.getInvoices(adminToken, subscription.customerId());
+                    Response invoicesAfterPayment = GatewayApi.getInvoices(linkedToken, subscription.customerId());
                     invoicesAfterPayment.then().statusCode(200);
                     List<Map<String, Object>> content = invoicesAfterPayment.jsonPath().getList("data.content");
                     Map<String, Object> paidInvoice = content.stream()

@@ -40,6 +40,15 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>platform-event-contracts</artifactId>
         </dependency>
+        <!-- Shared AvroContractAssertions test-jar (feature 14.5 phase 6, ADR-019):
+             NotificationEventContractTest compares the captured runtime payload against the governed
+             schema. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
 
         <!-- @ServiceConnection wires all Testcontainers to the Spring context (Spring Boot 4.x). -->
         <dependency>

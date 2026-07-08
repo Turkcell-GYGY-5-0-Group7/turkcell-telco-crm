@@ -26,7 +26,14 @@ class CatalogSecurityConfig {
                         .requestMatchers(
                                 "/actuator/health", "/actuator/info",
                                 "/swagger-ui/**", "/v3/api-docs/**",
-                                "/api/v1/tariffs/*/price-snapshot"
+                                // Trusted system-to-system tariff reads (by-id, price-snapshot,
+                                // allowance-snapshot). Moved off the public /api/v1 surface
+                                // (tech-lead ruling 2026-07-06, tariff endpoint internal-surface
+                                // fix): only /internal/** is actually firewalled at the gateway
+                                // (internal-deny-route -> 404), so permitAll routes under
+                                // /api/v1/** were genuinely internet-reachable without a JWT. The
+                                // gateway excludes /internal/** from public traffic (devops).
+                                "/internal/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )

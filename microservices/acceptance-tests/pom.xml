@@ -27,10 +27,47 @@
         <!-- This module has no production code to instrument; skip JaCoCo (inherited from the
              microservices root build) rather than let it evaluate an empty bundle. -->
         <jacoco.skip>true</jacoco.skip>
+        <!-- Pin Groovy back to the version rest-assured 5.5.0 was actually built and tested against
+             (see io.rest-assured:rest-assured-parent:5.5.0, groovy.version=4.0.22). Spring Boot
+             4.1.0's own BOM (spring-boot-dependencies) imports org.apache.groovy:groovy-bom:5.0.6,
+             which - via normal Maven property inheritance - silently overrides every transitive
+             Groovy artifact rest-assured pulls in, this module included. Groovy 5's ClosureMetaClass
+             is not binary/behaviorally compatible with the Groovy 4.x internals rest-assured's own
+             Groovy-scripted HTTP builder (HTTPBuilder.groovy, RequestSpecificationImpl.groovy) was
+             compiled against: the mismatch throws a NullPointerException deep in
+             ClosureMetaClass.invokeOnDelegationObject the first time a request closure executes on a
+             new thread (exactly what every Awaitility untilAsserted(...) poll does, from its own
+             background thread) - reproduced on every AcceptanceIT class, 100% of the time, first
+             confirmed 2026-07-06 once the suite finally progressed past order creation. -->
+        <groovy.version>4.0.22</groovy.version>
         <!-- Standard Failsafe integration-test naming convention; see class names ending "AcceptanceIT". -->
         <maven.install.skip>true</maven.install.skip>
         <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Explicit pin (property override alone does not win: spring-boot-dependencies
+                 resolves org.apache.groovy:groovy-bom's own ${groovy.version} placeholder against
+                 its own effective model at import time, not this module's overridden property) -
+                 force every Groovy artifact rest-assured pulls in back to 4.0.22 directly. -->
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy</artifactId>
+                <version>${groovy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy-xml</artifactId>
+                <version>${groovy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy-json</artifactId>
+                <version>${groovy.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- ── Test framework ───────────────────────────────────────────────────── -->

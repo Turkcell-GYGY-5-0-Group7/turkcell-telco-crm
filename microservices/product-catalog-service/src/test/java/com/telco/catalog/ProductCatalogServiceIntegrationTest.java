@@ -1,5 +1,8 @@
 package com.telco.catalog;
 
+import com.telco.catalog.domain.model.Tariff;
+import com.telco.catalog.domain.model.TariffType;
+import com.telco.catalog.infrastructure.persistence.TariffRepository;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.platform.starter.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +26,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -76,6 +81,9 @@ class ProductCatalogServiceIntegrationTest {
 
     @Autowired
     StringRedisTemplate redisTemplate;
+
+    @Autowired
+    TariffRepository tariffRepository;
 
     @LocalServerPort
     int port;
@@ -133,7 +141,7 @@ class ProductCatalogServiceIntegrationTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> data = (Map<String, Object>) body.get("data");
         assertThat(data.get("code")).isEqualTo("POSTPAID-001");
-        assertThat(data.get("status")).isEqualTo("DRAFT");
+        assertThat(data.get("status")).isEqualTo("ACTIVE");
         assertThat(data.get("id")).isNotNull();
     }
 
@@ -193,11 +201,25 @@ class ProductCatalogServiceIntegrationTest {
     @Test
     void unknown_tariff_price_snapshot_returns_404() {
         ResponseEntity<String> response = client.get()
-                .uri("/api/v1/tariffs/NONEXISTENT/price-snapshot")
+                .uri("/internal/tariffs/NONEXISTENT/price-snapshot")
                 .retrieve()
                 .toEntity(String.class);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void old_public_price_snapshot_path_now_requires_auth() {
+        // The route moved to /internal/tariffs/{code}/price-snapshot (tech-lead ruling
+        // 2026-07-06, tariff endpoint internal-surface fix). The old /api/v1 path is no longer
+        // registered at all, so Spring MVC falls through to .anyRequest().authenticated() -> 401,
+        // not a 200 with tariff data.
+        ResponseEntity<String> response = client.get()
+                .uri("/api/v1/tariffs/NONEXISTENT/price-snapshot")
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -225,6 +247,38 @@ class ProductCatalogServiceIntegrationTest {
     }
 
     @Test
+    void get_tariff_twice_returns_200_on_cache_miss_and_cache_hit() {
+        // Regression test for the Sprint 14 load-test bug: TariffResponse is cached in Redis via
+        // a polymorphically-typed ObjectMapper, but TariffResponse is a Java record (implicitly
+        // final). DefaultTyping.NON_FINAL never wrote "@class" type metadata for final classes,
+        // so the value serialized on the first (cache-miss) call could not be deserialized on the
+        // second (cache-hit) call and GET /api/v1/tariffs/{code} returned 500 every time after the
+        // first request. This must exercise the real RedisCacheManager/serializer, not a mock.
+        createTariff("CACHE-HIT-001");
+
+        ResponseEntity<Map<String, Object>> firstCall = client.get()
+                .uri("/api/v1/tariffs/CACHE-HIT-001")
+                .header("Authorization", "Bearer " + customerToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(firstCall.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Confirm the value actually landed in Redis (i.e. the second call below is a genuine
+        // cache HIT, not merely a second cache MISS re-reading Postgres).
+        assertThat(redisTemplate.keys("tariffs*")).isNotEmpty();
+
+        ResponseEntity<Map<String, Object>> secondCall = client.get()
+                .uri("/api/v1/tariffs/CACHE-HIT-001")
+                .header("Authorization", "Bearer " + customerToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(secondCall.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(secondCall.getBody().get("data")).isEqualTo(firstCall.getBody().get("data"));
+    }
+
+    @Test
     void list_addons_with_tariff_code_returns_200() {
         ResponseEntity<Map<String, Object>> response = client.get()
                 .uri("/api/v1/addons?tariffCode=NONEXISTENT")
@@ -237,10 +291,10 @@ class ProductCatalogServiceIntegrationTest {
 
     @Test
     void price_snapshot_endpoint_requires_no_auth_and_draft_returns_404() {
-        createTariff("SNAP-001");
+        persistDraftTariff("SNAP-001");
 
         ResponseEntity<String> snapResponse = client.get()
-                .uri("/api/v1/tariffs/SNAP-001/price-snapshot")
+                .uri("/internal/tariffs/SNAP-001/price-snapshot")
                 .retrieve()
                 .toEntity(String.class);
 
@@ -249,7 +303,7 @@ class ProductCatalogServiceIntegrationTest {
 
     @Test
     void draft_tariff_not_returned_by_get_single_returns_404() {
-        createTariff("DRAFT-404");
+        persistDraftTariff("DRAFT-404");
 
         ResponseEntity<String> response = client.get()
                 .uri("/api/v1/tariffs/DRAFT-404")
@@ -262,14 +316,10 @@ class ProductCatalogServiceIntegrationTest {
 
     @Test
     void draft_tariff_not_returned_by_get_by_id_returns_404() {
-        ResponseEntity<Map<String, Object>> created = createTariff("DRAFT-BY-ID-404");
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) created.getBody().get("data");
-        String id = (String) data.get("id");
+        Tariff draft = persistDraftTariff("DRAFT-BY-ID-404");
 
         ResponseEntity<String> response = client.get()
-                .uri("/api/v1/tariffs/by-id/{id}", id)
-                .header("Authorization", "Bearer " + customerToken)
+                .uri("/internal/tariffs/{id}", draft.getId())
                 .retrieve()
                 .toEntity(String.class);
 
@@ -279,8 +329,7 @@ class ProductCatalogServiceIntegrationTest {
     @Test
     void unknown_tariff_id_returns_404() {
         ResponseEntity<String> response = client.get()
-                .uri("/api/v1/tariffs/by-id/{id}", UUID.randomUUID())
-                .header("Authorization", "Bearer " + customerToken)
+                .uri("/internal/tariffs/{id}", UUID.randomUUID())
                 .retrieve()
                 .toEntity(String.class);
 
@@ -288,7 +337,23 @@ class ProductCatalogServiceIntegrationTest {
     }
 
     @Test
-    void get_by_id_endpoint_requires_authentication() {
+    void get_by_id_endpoint_permits_unauthenticated_requests() {
+        ResponseEntity<String> response = client.get()
+                .uri("/internal/tariffs/{id}", UUID.randomUUID())
+                .retrieve()
+                .toEntity(String.class);
+
+        // /internal/tariffs/** is an internal, system-to-system lookup (no PII, no ADMIN-only
+        // data) and is permitAll, mirroring customer-service's /internal/customers pattern. An
+        // unknown id still resolves through security to the handler and returns 404, not 401.
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void old_public_by_id_path_now_requires_auth() {
+        // The route moved to /internal/tariffs/{id} (tech-lead ruling 2026-07-06, tariff
+        // endpoint internal-surface fix). /api/v1/tariffs/by-id/** is no longer registered, so it
+        // falls through to .anyRequest().authenticated() -> 401 for an unauthenticated caller.
         ResponseEntity<String> response = client.get()
                 .uri("/api/v1/tariffs/by-id/{id}", UUID.randomUUID())
                 .retrieve()
@@ -307,6 +372,18 @@ class ProductCatalogServiceIntegrationTest {
                 .body(validCreateTariffJson(code))
                 .retrieve()
                 .toEntity(MAP_TYPE);
+    }
+
+    /**
+     * Persists a tariff directly in {@link com.telco.catalog.domain.model.TariffStatus#DRAFT}
+     * state, bypassing the create endpoint (which now activates on creation per the Sprint 07
+     * spec). Used to test the ACTIVE-only read guard on the query side.
+     */
+    private Tariff persistDraftTariff(String code) {
+        Tariff tariff = Tariff.create(code, "Test Tariff " + code, TariffType.POSTPAID,
+                new BigDecimal("49.99"), "TRY", 500, 100, 10240, null,
+                Instant.parse("2026-01-01T00:00:00Z"), null);
+        return tariffRepository.save(tariff);
     }
 
     private static String validCreateTariffJson(String code) {

@@ -16,6 +16,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Distinct consumer group (bug found via live acceptance testing, 2026-07-06): see
+ * {@link SubscriptionActivatedBillingConsumer}'s javadoc - this listener previously shared
+ * {@code groupId="billing-service"} with that consumer and {@link SubscriptionTerminatedBillingConsumer}
+ * on the same {@code subscription.events} topic, and could be starved of every message for an entire
+ * session depending on which of the three won the topic's partition assignment. Now has its own
+ * dedicated group id.
+ */
 @Component
 public class SubscriptionSuspendedBillingConsumer {
 
@@ -36,7 +44,7 @@ public class SubscriptionSuspendedBillingConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "subscription.events", groupId = "billing-service",
+    @KafkaListener(topics = "subscription.events", groupId = "billing-service-subscription-suspended",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onSubscriptionSuspended(ConsumerRecord<String, String> record) {
         // Type filter FIRST (fail closed): subscription.events carries every subscription event type;
@@ -60,8 +68,15 @@ public class SubscriptionSuspendedBillingConsumer {
                 return;
             }
 
+            // suspendedAt is published as epoch millis (subscription-service SubscriptionSuspendedV1,
+            // a long, matching the Avro timestamp-millis contract), not an ISO-8601 string. Using
+            // Instant.parse(...) here (same defect class found via live acceptance testing,
+            // 2026-07-06, as SubscriptionActivatedBillingConsumer/usage-service's
+            // SubscriptionActivatedEventConsumer) would throw DateTimeParseException on every real
+            // message and, because the inbox row is marked seen before this line runs, permanently
+            // swallow every redelivery retry as a "duplicate".
             Instant suspendedAt = payload.suspendedAt() != null
-                    ? Instant.parse(payload.suspendedAt()) : Instant.now();
+                    ? Instant.ofEpochMilli(payload.suspendedAt()) : Instant.now();
 
             mediator.send(new RecordSubscriptionSuspendedCommand(
                     UUID.fromString(payload.subscriptionId()), suspendedAt));
@@ -79,5 +94,5 @@ public class SubscriptionSuspendedBillingConsumer {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Payload(String eventId, String subscriptionId, String suspendedAt) {}
+    public record Payload(String eventId, String subscriptionId, Long suspendedAt) {}
 }

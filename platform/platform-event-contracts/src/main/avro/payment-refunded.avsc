@@ -1,0 +1,43 @@
+{
+  "type": "record",
+  "name": "PaymentRefundedV1",
+  "namespace": "com.telco.platform.events.payment",
+  "doc": "Emitted when a payment is refunded (payment.refunded.v1). Producer: payment-service.",
+  "fields": [
+    {
+      "name": "paymentId",
+      "type": "string",
+      "doc": "Unique payment identifier (UUID)."
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Order this refunded payment settled."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer refunded."
+    },
+    {
+      "name": "amount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Refunded amount as an exact decimal (precision 19, scale 4)."
+    },
+    {
+      "name": "reason",
+      "type": "string",
+      "doc": "Refund reason (non-nullable, @NotBlank at the command)."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the payment was refunded, ISO-8601 (UTC)."
+    }
+  ]
+}

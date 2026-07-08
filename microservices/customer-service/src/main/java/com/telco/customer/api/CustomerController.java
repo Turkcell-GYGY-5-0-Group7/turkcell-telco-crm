@@ -10,6 +10,8 @@ import com.telco.customer.application.query.GetCustomerQuery;
 import com.telco.customer.application.query.ListCustomersQuery;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.api.PageResult;
+import com.telco.platform.common.context.UserContext;
+import com.telco.platform.common.context.UserContextHolder;
 import com.telco.platform.cqrs.Unit;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
@@ -27,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -51,7 +54,51 @@ public class CustomerController {
     public ApiResult<CustomerResponse> register(@Valid @RequestBody RegisterCustomerRequest request) {
         return responses.ok(mediator.send(new RegisterCustomerCommand(
                 request.type(), request.firstName(), request.lastName(),
-                request.identityNumber(), request.dateOfBirth())));
+                request.identityNumber(), request.dateOfBirth(), resolveRegisteredByUserId())));
+    }
+
+    /**
+     * Keycloak's own technical/composite roles that every user carries regardless of application
+     * role assignment - never meaningful for the self-service-vs-staff-assisted distinction below.
+     * {@code offline_access} and {@code uma_authorization} are the two client roles folded into the
+     * {@code default-roles-<realm>} composite; the composite's own name embeds the realm, hence the
+     * prefix match rather than an exact-name match (bug found and fixed during Feature 14.4
+     * end-to-end verification - see the "Step 7" QA log in
+     * {@code docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md}).
+     */
+    private static final Set<String> KEYCLOAK_TECHNICAL_ROLES = Set.of("offline_access", "uma_authorization");
+
+    /**
+     * Resolves the identity to attribute a registration to, for genuine self-service calls only.
+     * A caller is self-service when their application-level roles (Keycloak's own technical/default
+     * roles stripped out first) are exactly {@code {SUBSCRIBER}} - no
+     * {@code CALL_CENTER_AGENT}/{@code DEALER}/{@code ADMIN} role present. Agent/dealer-assisted
+     * registrations must not be attributed to the assisting staff member's own identity, so this
+     * resolves to null for them (see the identity-to-customer linkage ruling in
+     * {@code docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md}).
+     * This is identity/channel resolution at the edge (who called, with which role), not domain
+     * business logic - consistent with ADR-008, the same category as forwarding a correlationId.
+     *
+     * <p><b>Bug fixed during Feature 14.4 end-to-end verification:</b> the original check compared
+     * the caller's raw roles set for exact equality against {@code {SUBSCRIBER}}. That works for a
+     * realm-import-seeded demo user (Keycloak's bulk import applies only the {@code realmRoles}
+     * explicitly listed in the export JSON), but Keycloak's Admin API - the only provisioning path
+     * that creates a matching local {@code users} row in identity-service - always additionally
+     * attaches the realm's {@code default-roles-<realm>} composite role (which itself expands to
+     * {@code offline_access}/{@code uma_authorization}) to every user it creates. The exact-equality
+     * check therefore misclassified every Admin-API-provisioned SUBSCRIBER as agent/dealer-assisted,
+     * silently defeating self-service linkage for the only caller shape that can ever be linked -
+     * confirmed live: {@code roles} claim {@code [default-roles-telco-crm, offline_access,
+     * uma_authorization, SUBSCRIBER]} was rejected as non-self-service before this fix.
+     */
+    private String resolveRegisteredByUserId() {
+        UserContext caller = UserContextHolder.get().orElse(UserContext.anonymous());
+        Set<String> applicationRoles = caller.roles().stream()
+                .filter(role -> !role.startsWith("default-roles-"))
+                .filter(role -> !KEYCLOAK_TECHNICAL_ROLES.contains(role))
+                .collect(java.util.stream.Collectors.toSet());
+        boolean selfService = applicationRoles.equals(Set.of("SUBSCRIBER"));
+        return selfService ? caller.userId() : null;
     }
 
     // Staff-only until the customerId-to-Keycloak-subject linkage lands (see

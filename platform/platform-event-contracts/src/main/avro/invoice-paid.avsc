@@ -1,0 +1,26 @@
+{
+  "type": "record",
+  "name": "InvoicePaidV1",
+  "namespace": "com.telco.platform.events.invoice",
+  "doc": "Emitted when an invoice is marked paid (invoice.paid.v1). Producer: billing-service.",
+  "fields": [
+    {
+      "name": "invoiceId",
+      "type": "string",
+      "doc": "Unique invoice identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer billed."
+    },
+    {
+      "name": "paidAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the invoice was marked paid, in epoch milliseconds (UTC)."
+    }
+  ]
+}

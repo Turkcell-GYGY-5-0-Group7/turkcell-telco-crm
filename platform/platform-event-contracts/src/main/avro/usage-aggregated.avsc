@@ -5,11 +5,11 @@
   "doc": "Emitted when period usage is aggregated for billing (usage.aggregated.v1). Producer: usage-service.",
   "fields": [
     { "name": "subscriptionId", "type": "string" },
-    { "name": "periodStart", "type": { "type": "long", "logicalType": "timestamp-millis" } },
-    { "name": "periodEnd", "type": { "type": "long", "logicalType": "timestamp-millis" } },
+    { "name": "periodStart", "type": "string" },
+    { "name": "periodEnd", "type": "string" },
     { "name": "voiceOverageSeconds", "type": "long", "default": 0 },
     { "name": "smsOverageCount", "type": "long", "default": 0 },
     { "name": "dataOverageKb", "type": "long", "default": 0 },
-    { "name": "aggregatedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+    { "name": "aggregatedAt", "type": "string" }
   ]
 }

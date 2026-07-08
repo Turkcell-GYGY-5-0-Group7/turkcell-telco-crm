@@ -39,6 +39,15 @@ import java.util.UUID;
  * the post-grace signal and suspends immediately. A subscription-side timed deferral (holding the
  * suspend for N hours and cancelling it if a later {@code payment.completed.v1} arrives) is deferred
  * to the saga wiring in 9.4 / a follow-up, and is intentionally NOT faked here.
+ *
+ * <p><b>Distinct consumer group (bug found via live acceptance testing, 2026-07-06):</b> this
+ * listener and {@link PaymentCompletedEventConsumer} both read {@code payment.events}, and both
+ * previously used the shared {@code groupId="subscription-service"}. Two @KafkaListener members of
+ * the SAME consumer group compete for the topic's partition(s): Kafka's group coordinator hands the
+ * (single, dev-sized) partition to exactly one member, permanently starving the other of every
+ * message on the topic, not just the event types it does not care about. Each consumer here filters
+ * internally by {@code eventType} and is meant to see every message independently (fan-out, not
+ * competing consumption), so each now gets its own dedicated group id.
  */
 @Component
 public class PaymentFailedEventConsumer {
@@ -58,7 +67,7 @@ public class PaymentFailedEventConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "payment.events", groupId = "subscription-service",
+    @KafkaListener(topics = "payment.events", groupId = "subscription-service-payment-failed",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onPaymentFailed(ConsumerRecord<String, String> record) {
         String messageId = record.key() != null ? record.key() : "fallback-" + record.offset();

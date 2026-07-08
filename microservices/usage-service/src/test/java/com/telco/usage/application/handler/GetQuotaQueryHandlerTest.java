@@ -64,9 +64,9 @@ class GetQuotaQueryHandlerTest {
     }
 
     @Test
-    void admin_principal_null_returns_quota_regardless_of_customer_id() {
+    void admin_caller_returns_quota_regardless_of_customer_id() {
         stubActiveQuota(activeQuota(customerId));
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null);
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null, true);
 
         QuotaResponse response = handler.handle(query);
 
@@ -75,9 +75,9 @@ class GetQuotaQueryHandlerTest {
     }
 
     @Test
-    void customer_with_matching_customer_id_returns_quota() {
+    void customer_with_matching_resolved_customer_id_returns_quota() {
         stubActiveQuota(activeQuota(customerId));
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, customerId.toString());
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, customerId.toString(), false);
 
         QuotaResponse response = handler.handle(query);
 
@@ -87,10 +87,19 @@ class GetQuotaQueryHandlerTest {
     }
 
     @Test
-    void customer_with_non_matching_customer_id_throws_access_denied() {
+    void customer_with_non_matching_resolved_customer_id_throws_access_denied() {
         UUID otherCustomerId = UUID.randomUUID();
         stubActiveQuota(activeQuota(customerId));
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, otherCustomerId.toString());
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, otherCustomerId.toString(), false);
+
+        assertThatThrownBy(() -> handler.handle(query))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void unlinked_subscriber_with_null_resolved_customer_id_throws_access_denied_not_bypass() {
+        stubActiveQuota(activeQuota(customerId));
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null, false);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
@@ -99,7 +108,7 @@ class GetQuotaQueryHandlerTest {
     @Test
     void customer_id_null_on_quota_throws_access_denied_for_non_admin() {
         stubActiveQuota(activeQuota(null));
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, customerId.toString());
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, customerId.toString(), false);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
@@ -108,7 +117,7 @@ class GetQuotaQueryHandlerTest {
     @Test
     void no_active_quota_throws_resource_not_found() {
         stubNoActiveQuota();
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null);
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null, true);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(ResourceNotFoundException.class);
@@ -118,7 +127,7 @@ class GetQuotaQueryHandlerTest {
     void response_maps_all_quota_fields_correctly() {
         Quota quota = activeQuota(customerId);
         stubActiveQuota(quota);
-        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, null);
+        GetQuotaQuery query = new GetQuotaQuery(subscriptionId, customerId.toString(), false);
 
         QuotaResponse response = handler.handle(query);
 

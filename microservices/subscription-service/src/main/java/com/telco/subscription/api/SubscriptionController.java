@@ -2,6 +2,7 @@ package com.telco.subscription.api;
 
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.api.PageResult;
+import com.telco.platform.common.context.CurrentUserProvider;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import com.telco.subscription.application.command.ReactivateSubscriptionCommand;
@@ -40,10 +41,13 @@ public class SubscriptionController {
 
     private final Mediator mediator;
     private final ApiResponseFactory responses;
+    private final CurrentUserProvider currentUserProvider;
 
-    public SubscriptionController(Mediator mediator, ApiResponseFactory responses) {
+    public SubscriptionController(Mediator mediator, ApiResponseFactory responses,
+                                  CurrentUserProvider currentUserProvider) {
         this.mediator = mediator;
         this.responses = responses;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping("/{id}")
@@ -52,7 +56,8 @@ public class SubscriptionController {
             Authentication authentication,
             @PathVariable UUID id) {
         return responses.ok(mediator.query(
-                new GetSubscriptionQuery(id, authentication.getName(), isAdmin(authentication))));
+                new GetSubscriptionQuery(id, authentication.getName(), isAdmin(authentication),
+                        currentUserProvider.currentUser().customerId())));
     }
 
     @GetMapping
@@ -64,7 +69,8 @@ public class SubscriptionController {
             @RequestParam(defaultValue = "20") int size) {
         return responses.ok(mediator.query(
                 new GetSubscriptionsByCustomerQuery(
-                        customerId, page, size, authentication.getName(), isAdmin(authentication))));
+                        customerId, page, size, authentication.getName(), isAdmin(authentication),
+                        currentUserProvider.currentUser().customerId())));
     }
 
     @PostMapping("/{id}/suspend")

@@ -16,6 +16,15 @@
     <description>Invoice generation, monthly bill-run, PDF rendering, and payment reconciliation
         (port 9007, Domain Orchestration). Implements features 11.1-11.6: AC-02.</description>
 
+    <!-- The NFR-17 jacoco.minCoverage=0.56 exception (tech-lead ruling 2026-07-06) is closed: the
+         14.3.2 saga/orchestration coverage pass added unit tests for the previously-untested
+         Kafka consumers, storage adapter (incl. circuit-breaker fallbacks), PDF renderer, query
+         handlers, and subscription-lifecycle command handlers, raising LINE coverage from 57.8% to
+         90.6% (mvn -f microservices/pom.xml -pl billing-service -am test jacoco:report). billing-
+         service now falls back to the inherited default 70% gate like every other non-excepted
+         service - see docs/tasks/sprint-14-testing-and-hardening/README.md and
+         14.3-bill-run-throughput-and-coverage-report.md for the full before/after breakdown. -->
+
     <dependencies>
         <dependency>
             <groupId>com.telco.platform</groupId>
@@ -36,6 +45,14 @@
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>platform-event-contracts</artifactId>
+        </dependency>
+        <!-- Shared AvroContractAssertions test-jar (feature 14.5 phase 6, ADR-019):
+             BillingEventSchemaCompatTest compares real event records against the governed schema. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
         </dependency>
 
         <!-- PDF rendering: OpenPDF (MIT-licensed iText fork). -->

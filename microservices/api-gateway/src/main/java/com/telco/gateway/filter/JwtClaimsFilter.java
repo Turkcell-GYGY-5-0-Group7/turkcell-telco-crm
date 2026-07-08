@@ -19,8 +19,8 @@ import java.util.stream.Collectors;
 /**
  * Runs after the Spring Security filter chain has validated the JWT. Strips any
  * client-supplied identity headers (anti-spoofing, FR-IAM-03), then injects
- * X-User-Id and X-User-Roles derived from the verified token so downstream
- * services can trust them (gateway-behind-trust, ADR-011).
+ * X-User-Id, X-User-Roles, and X-Customer-Id derived from the verified token so
+ * downstream services can trust them (gateway-behind-trust, ADR-011).
  */
 @Component
 @Order(10)
@@ -28,6 +28,7 @@ public class JwtClaimsFilter extends OncePerRequestFilter {
 
     static final String X_USER_ID = "X-User-Id";
     static final String X_USER_ROLES = "X-User-Roles";
+    static final String X_CUSTOMER_ID = "X-Customer-Id";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -39,6 +40,7 @@ public class JwtClaimsFilter extends OncePerRequestFilter {
         // Strip any client-supplied identity headers unconditionally.
         mutable.removeHeader(X_USER_ID);
         mutable.removeHeader(X_USER_ROLES);
+        mutable.removeHeader(X_CUSTOMER_ID);
 
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth instanceof JwtAuthenticationToken jwtAuth) {
@@ -54,6 +56,14 @@ public class JwtClaimsFilter extends OncePerRequestFilter {
                         .map(Object::toString)
                         .collect(Collectors.joining(","));
                 mutable.putHeader(X_USER_ROLES, rolesHeader);
+            }
+
+            // Keycloak maps the identity-linked customer_id user attribute to a
+            // "customerId" claim via the telco-roles scope. Absent entirely for
+            // users not yet linked to a customer-service record (ADR-011/14.1.1).
+            Object customerIdClaim = jwtAuth.getToken().getClaim("customerId");
+            if (customerIdClaim instanceof String customerId && !customerId.isBlank()) {
+                mutable.putHeader(X_CUSTOMER_ID, customerId);
             }
         }
 

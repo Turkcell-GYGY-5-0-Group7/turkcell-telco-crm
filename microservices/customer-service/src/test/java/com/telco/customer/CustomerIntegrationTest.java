@@ -1,10 +1,12 @@
 package com.telco.customer;
 
+import com.telco.customer.application.event.CustomerRegisteredV1;
 import com.telco.customer.infrastructure.storage.DocumentStorage;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.platform.starter.security.JwtService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -86,6 +88,8 @@ class CustomerIntegrationTest {
     private RestClient client;
     private String customerToken;
     private String adminToken;
+    private String agentToken;
+    private String subscriberUserId;
 
     @BeforeEach
     void setUp() {
@@ -94,8 +98,10 @@ class CustomerIntegrationTest {
         jdbc.execute("DELETE FROM addresses");
         jdbc.execute("DELETE FROM customers");
 
-        customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
+        subscriberUserId = UUID.randomUUID().toString();
+        customerToken = jwtService.issue(subscriberUserId, Set.of("SUBSCRIBER"));
         adminToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("ADMIN"));
+        agentToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("CALL_CENTER_AGENT"));
 
         client = RestClient.builder()
                 .baseUrl("http://localhost:" + port)
@@ -139,6 +145,70 @@ class CustomerIntegrationTest {
         assertThat(masked).doesNotContain(VALID_TCKN);
 
         verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), any());
+    }
+
+    @Test
+    void subscriber_self_registration_sets_registered_by_user_id_to_caller() {
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Ada", "Lovelace", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
+        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
+        assertThat(event.registeredByUserId()).isEqualTo(subscriberUserId);
+    }
+
+    @Test
+    void subscriber_self_registration_with_keycloak_technical_roles_still_sets_registered_by_user_id() {
+        // Regression test (Feature 14.4 end-to-end verification): a real Keycloak-Admin-API-created
+        // user's token always additionally carries the realm's default composite role and its two
+        // expanded client roles, on top of the application-level SUBSCRIBER role. The self-service
+        // check must not be defeated by these Keycloak-internal roles - confirmed live against a real
+        // Keycloak container where the exact-set-equality version of this check silently misclassified
+        // every such caller as agent/dealer-assisted, permanently blocking self-service linkage.
+        String realTokenShapeUserId = UUID.randomUUID().toString();
+        String tokenWithKeycloakTechnicalRoles = jwtService.issue(realTokenShapeUserId,
+                Set.of("SUBSCRIBER", "default-roles-telco-crm", "offline_access", "uma_authorization"));
+
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + tokenWithKeycloakTechnicalRoles)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Grace", "Realistic", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
+        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
+        assertThat(event.registeredByUserId()).isEqualTo(realTokenShapeUserId);
+    }
+
+    @Test
+    void agent_assisted_registration_leaves_registered_by_user_id_null() {
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + agentToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Grace", "Hopper", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
+        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
+        assertThat(event.registeredByUserId()).isNull();
     }
 
     @Test

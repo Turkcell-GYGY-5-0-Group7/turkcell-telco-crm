@@ -16,6 +16,7 @@ import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -29,10 +30,17 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * <p>Flyway (not Hibernate) owns the schema, mirroring production {@code spring.flyway.locations}.
  * The crypto converter and key provider are imported explicitly because the {@code @DataJpaTest} slice
  * does not scan {@code @Component} beans, and the {@link Customer} mapping requires the converter.
+ *
+ * <p>{@code @ActiveProfiles("test")} keeps this slice on the same logging profile as every other
+ * Spring context in the module; without it, the context loads under the default profile, which wires
+ * the Loki appender (logback-spring.xml) and leaves its async sender retrying against an unreachable
+ * Loki after this test's context shuts down - poisoning the next context's startup with a spurious
+ * "Logback configuration error detected" failure.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import({IdentityNumberCryptoConverter.class, AesKeyProvider.class})
+@ActiveProfiles("test")
 class CustomerRepositoryTest {
 
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");

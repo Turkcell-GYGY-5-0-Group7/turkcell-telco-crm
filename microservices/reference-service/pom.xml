@@ -88,6 +88,29 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!--
+                ADR-017: reference-service is a template/reference artifact, not a shipped
+                service, excluded from NFR-17 coverage gate by tech-lead ruling 2026-07-06.
+                Overrides the inherited jacoco-check execution (microservices/pom.xml) with an
+                empty rule set so the check goal is a clean no-op skip rather than a lowered
+                threshold.
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>jacoco-check</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <skip>true</skip>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 

@@ -1,68 +1,54 @@
 package com.telco.usage;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.telco.platform.events.testsupport.AvroContractAssertions;
+import org.apache.avro.Schema;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.io.InputStream;
-import java.lang.reflect.RecordComponent;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
+/**
+ * Event-schema contract gate for the usage domain events (ADR-019, NFR-16; extended feature 14.5
+ * phase 6).
+ *
+ * <p>Each Java payload record usage-service publishes or consumes is compared field-for-field <b>and
+ * type-for-type, with nullability checked in both directions</b> against the canonical Avro schema
+ * loaded directly from {@code platform-event-contracts} (not a hand-copied local {@code .avsc}
+ * snapshot). {@code cdr.recorded.v1} is a consumed (not produced) external contract -- checked against
+ * {@link com.telco.usage.application.consumer.CdrRecordedEventConsumer.CdrPayload}, the DTO the
+ * consumer actually deserializes into.
+ *
+ * <p>Guarded events: {@code usage.recorded.v1}, {@code quota.threshold-reached.v1},
+ * {@code quota.exceeded.v1}, {@code usage.aggregated.v1}, {@code cdr.recorded.v1}.
+ */
 class UsageEventSchemaCompatTest {
 
-    private static final String AVRO_PACKAGE = "com.telco.usage.application.event.";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String AVRO_PACKAGE = "com.telco.platform.events.usage.";
+    private static final String EVENT_PACKAGE = "com.telco.usage.application.event.";
 
-    record SchemaCase(String avscPath, String javaClassName) {}
+    record SchemaCase(String canonicalClassName, String javaClassName) {
+        @Override
+        public String toString() {
+            return canonicalClassName;
+        }
+    }
 
     static Stream<SchemaCase> schemas() {
         return Stream.of(
-                new SchemaCase("avro/usage-recorded.avsc", AVRO_PACKAGE + "UsageRecordedEvent"),
-                new SchemaCase("avro/quota-threshold-reached.avsc", AVRO_PACKAGE + "QuotaThresholdReachedEvent"),
-                new SchemaCase("avro/quota-exceeded.avsc", AVRO_PACKAGE + "QuotaExceededEvent"),
-                new SchemaCase("avro/usage-aggregated.avsc", AVRO_PACKAGE + "UsageAggregatedEvent")
+                new SchemaCase(AVRO_PACKAGE + "UsageRecordedV1", EVENT_PACKAGE + "UsageRecordedEvent"),
+                new SchemaCase(AVRO_PACKAGE + "QuotaThresholdReachedV1", EVENT_PACKAGE + "QuotaThresholdReachedEvent"),
+                new SchemaCase(AVRO_PACKAGE + "QuotaExceededV1", EVENT_PACKAGE + "QuotaExceededEvent"),
+                new SchemaCase(AVRO_PACKAGE + "UsageAggregatedV1", EVENT_PACKAGE + "UsageAggregatedEvent"),
+                new SchemaCase(AVRO_PACKAGE + "CdrRecordedV1",
+                        "com.telco.usage.application.consumer.CdrRecordedEventConsumer$CdrPayload")
         );
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("schemas")
-    void avro_fields_match_java_record_components(SchemaCase schema) throws Exception {
-        Set<String> avroFields = avroFieldNames(schema.avscPath());
-        Set<String> javaFields = javaRecordComponents(schema.javaClassName());
-
-        assertThat(avroFields)
-                .as("Avro fields in %s not covered by Java record %s",
-                        schema.avscPath(), schema.javaClassName())
-                .isSubsetOf(javaFields);
-
-        assertThat(javaFields)
-                .as("Java record components in %s not present in Avro schema %s",
-                        schema.javaClassName(), schema.avscPath())
-                .isSubsetOf(avroFields);
-    }
-
-    private static Set<String> avroFieldNames(String classpathPath) throws Exception {
-        try (InputStream in = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(classpathPath)) {
-            assertThat(in).as("resource not found: " + classpathPath).isNotNull();
-            JsonNode root = MAPPER.readTree(in);
-            return StreamSupport.stream(root.get("fields").spliterator(), false)
-                    .map(n -> n.get("name").asText())
-                    .collect(Collectors.toSet());
-        }
-    }
-
-    private static Set<String> javaRecordComponents(String className) throws Exception {
-        Class<?> clazz = Class.forName(className);
-        return Arrays.stream(clazz.getRecordComponents())
-                .map(RecordComponent::getName)
-                .collect(Collectors.toSet());
+    void avro_schema_matches_java_record_exactly(SchemaCase schema) throws Exception {
+        Schema avroSchema = AvroContractAssertions.canonicalSchema(schema.canonicalClassName());
+        Class<?> javaClass = Class.forName(schema.javaClassName());
+        AvroContractAssertions.assertRecordMatchesSchema(avroSchema, javaClass);
     }
 }

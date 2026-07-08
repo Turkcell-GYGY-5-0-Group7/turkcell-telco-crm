@@ -6,6 +6,8 @@ spring:
     url: jdbc:postgresql://postgres:5432/order_db
     username: order
     password: order
+  kafka:
+    bootstrap-servers: kafka:9092
   security:
     oauth2:
       resourceserver:

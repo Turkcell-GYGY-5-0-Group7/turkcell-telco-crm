@@ -18,7 +18,7 @@
       "name": "subscriptionId",
       "type": ["null", "string"],
       "default": null,
-      "doc": "Subscription this invoice covers, when invoice is per-subscription. Nullable for account-level invoices."
+      "doc": "Subscription this invoice covers. Always populated by the current producer (BillRunBatchProcessor); kept nullable because invoice.generated.v1 is already live-registered in Schema Registry and a live BACKWARD-compatibility check confirmed tightening to non-nullable is rejected (TYPE_MISMATCH: reader STRING not compatible with writer NULL). A genuine future tightening requires a new invoice.generated.v2 event version per ADR-009/ADR-019's immutability rule, not a v1 mutation -- see docs/tasks/sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md for the full compatibility-check evidence."
     },
     {
       "name": "periodStart",

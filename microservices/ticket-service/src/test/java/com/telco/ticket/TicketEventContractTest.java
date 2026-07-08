@@ -6,8 +6,8 @@ import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.telco.platform.events.testsupport.AvroContractAssertions;
 import com.telco.platform.outbox.OutboxService;
 import com.telco.ticket.application.command.AssignTicketCommand;
 import com.telco.ticket.application.command.DetectSlaBreachCommand;
@@ -21,7 +21,6 @@ import com.telco.ticket.domain.SlaPolicy;
 import com.telco.ticket.domain.Ticket;
 import com.telco.ticket.infrastructure.persistence.SlaPolicyRepository;
 import com.telco.ticket.infrastructure.persistence.TicketRepository;
-import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -29,10 +28,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import org.apache.avro.Schema;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -40,14 +37,18 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Event-schema contract gate for the ticket domain events (feature 14.1.2, ADR-019, NFR-16).
+ * Event-schema contract gate for the ticket domain events (feature 14.1.2, ADR-019, NFR-16; extended
+ * feature 14.5 phase 6).
  *
  * <p>ticket-service builds its outbox payloads inline as {@code Map.of(...)} rather than typed
  * records, so there is no compile-time type to reflect on. This test drives each command handler with
  * Mockito mocks, captures the actual payload passed to {@link OutboxService#publish}, and compares its
- * key set field-for-field against the frozen Avro snapshot under {@code src/test/resources/avro/}.
- * A removed, renamed, or added map key fails the build, blocking a backward-incompatible change to a
- * published ticket event. No Kafka, Schema Registry, or Spring context is booted.
+ * keys, runtime value types, and observed nullness <b>against the canonical Avro schema loaded
+ * directly from {@code platform-event-contracts}</b> (not a hand-copied local {@code .avsc} snapshot:
+ * see the 14.5 tracking doc, phase 6, for why that check was self-referential and never verified the
+ * governed contract). A removed, renamed, retyped, or added map key fails the build, blocking a
+ * backward-incompatible change to a published ticket event. No Kafka, Schema Registry, or Spring
+ * context is booted.
  *
  * <p>Guarded events: {@code ticket.opened.v1}, {@code ticket.assigned.v1}, {@code ticket.resolved.v1},
  * {@code ticket.sla-breached.v1}.
@@ -56,6 +57,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class TicketEventContractTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final String AVRO_PACKAGE = "com.telco.platform.events.ticket.";
 
     @Mock private TicketRepository ticketRepository;
     @Mock private SlaPolicyRepository slaPolicyRepository;
@@ -77,9 +79,9 @@ class TicketEventContractTest {
         new OpenTicketCommandHandler(ticketRepository, slaPolicyRepository, outboxService)
                 .handle(new OpenTicketCommand(UUID.randomUUID(), "BILLING", "HIGH", "Invoice error"));
 
-        Map<String, Set<String>> emitted = capturePayloadKeys();
-        assertMatchesContract("ticket.opened.v1", "avro/ticket-opened.avsc", emitted);
-        assertMatchesContract("ticket.assigned.v1", "avro/ticket-assigned.avsc", emitted);
+        Map<String, Map<String, Object>> emitted = capturePayloads();
+        assertMatchesContract("ticket.opened.v1", "TicketOpenedV1", emitted);
+        assertMatchesContract("ticket.assigned.v1", "TicketAssignedV1", emitted);
     }
 
     @Test
@@ -90,7 +92,7 @@ class TicketEventContractTest {
         new AssignTicketCommandHandler(ticketRepository, outboxService)
                 .handle(new AssignTicketCommand(ticket.getId(), "tech-support"));
 
-        assertMatchesContract("ticket.assigned.v1", "avro/ticket-assigned.avsc", capturePayloadKeys());
+        assertMatchesContract("ticket.assigned.v1", "TicketAssignedV1", capturePayloads());
     }
 
     @Test
@@ -101,7 +103,7 @@ class TicketEventContractTest {
         new ResolveTicketCommandHandler(ticketRepository, outboxService)
                 .handle(new ResolveTicketCommand(ticket.getId()));
 
-        assertMatchesContract("ticket.resolved.v1", "avro/ticket-resolved.avsc", capturePayloadKeys());
+        assertMatchesContract("ticket.resolved.v1", "TicketResolvedV1", capturePayloads());
     }
 
     @Test
@@ -112,51 +114,35 @@ class TicketEventContractTest {
         new DetectSlaBreachCommandHandler(ticketRepository, outboxService)
                 .handle(new DetectSlaBreachCommand());
 
-        assertMatchesContract("ticket.sla-breached.v1", "avro/ticket-sla-breached.avsc", capturePayloadKeys());
+        assertMatchesContract("ticket.sla-breached.v1", "TicketSlaBreachedV1", capturePayloads());
     }
 
     // --- helpers ---
 
-    private Map<String, Set<String>> capturePayloadKeys() {
+    private Map<String, Map<String, Object>> capturePayloads() {
         ArgumentCaptor<String> eventType = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
         org.mockito.Mockito.verify(outboxService, org.mockito.Mockito.atLeastOnce())
                 .publish(any(), any(), eventType.capture(), payload.capture());
 
-        Map<String, Set<String>> byType = new HashMap<>();
+        Map<String, Map<String, Object>> byType = new HashMap<>();
         List<String> types = eventType.getAllValues();
         List<Object> payloads = payload.getAllValues();
         for (int i = 0; i < types.size(); i++) {
             Map<String, Object> asMap = MAPPER.convertValue(payloads.get(i), new TypeReference<>() {});
-            byType.put(types.get(i), asMap.keySet());
+            byType.put(types.get(i), asMap);
         }
         return byType;
     }
 
-    private static void assertMatchesContract(String eventType, String avscPath,
-                                              Map<String, Set<String>> emitted) {
+    private static void assertMatchesContract(String eventType, String canonicalRecordName,
+            Map<String, Map<String, Object>> emitted) {
         assertThat(emitted)
                 .as("handler did not publish %s", eventType)
                 .containsKey(eventType);
-        Set<String> emittedKeys = emitted.get(eventType);
-        Set<String> contractFields = avroFieldNames(avscPath);
-        assertThat(emittedKeys)
-                .as("emitted %s payload keys must equal the frozen %s contract; a removed/renamed/added "
-                        + "key is a backward-incompatible change (NFR-16)", eventType, avscPath)
-                .containsExactlyInAnyOrderElementsOf(contractFields);
-    }
 
-    private static Set<String> avroFieldNames(String classpathPath) {
-        try (InputStream in = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(classpathPath)) {
-            assertThat(in).as("schema resource not found: %s", classpathPath).isNotNull();
-            JsonNode root = MAPPER.readTree(in);
-            return StreamSupport.stream(root.get("fields").spliterator(), false)
-                    .map(n -> n.get("name").asText())
-                    .collect(Collectors.toSet());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        Schema schema = AvroContractAssertions.canonicalSchema(AVRO_PACKAGE + canonicalRecordName);
+        AvroContractAssertions.assertPayloadMatchesSchema(schema, emitted.get(eventType));
     }
 
     private static Ticket openTicketWithId() {

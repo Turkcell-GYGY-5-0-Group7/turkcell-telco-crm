@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -25,9 +26,16 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * {@code ddl-auto=none}. The schema is migrated before the context loads (the {@code @DataJpaTest}
  * slice does not auto-configure Flyway). Config-server and Eureka are disabled - the repositories are
  * the unit under test.
+ *
+ * <p>{@code @ActiveProfiles("test")} keeps this slice on the same logging profile as every other
+ * Spring context in the module; without it, the context loads under the default profile, which wires
+ * the Loki appender (logback-spring.xml) and leaves its async sender retrying against an unreachable
+ * Loki after this test's context shuts down - poisoning the next context's startup with a spurious
+ * "Logback configuration error detected" failure.
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
+@ActiveProfiles("test")
 class IdentityRepositoryTest {
 
     private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");

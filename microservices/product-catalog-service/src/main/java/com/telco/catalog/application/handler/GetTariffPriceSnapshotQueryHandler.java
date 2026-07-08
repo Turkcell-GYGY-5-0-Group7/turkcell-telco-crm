@@ -44,6 +44,7 @@ public class GetTariffPriceSnapshotQueryHandler
 
         return new PriceSnapshotResponse(
                 tariff.getCode(),
+                tariff.getName(),
                 tariff.getMonthlyFee(),
                 tariff.getCurrency(),
                 tariff.getVersion(),

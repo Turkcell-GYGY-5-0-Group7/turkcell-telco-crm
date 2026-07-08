@@ -37,6 +37,16 @@ import java.util.UUID;
  * 2a/2b). The handler is also check-then-act (a fresh messageId on an already-CANCELLED/terminal
  * order is a no-op). The consumer additionally read-checks the status FIRST as defense-in-depth, so
  * an already-resolved order skips dispatch entirely.
+ *
+ * <p><b>Distinct consumer group (bug found via live acceptance testing, 2026-07-06):</b> this
+ * listener previously shared {@code groupId="order-service"} with
+ * {@link PaymentCompletedEventConsumer} on the same {@code payment.events} topic. Two
+ * @KafkaListener members of the SAME consumer group compete for the topic's partition(s): Kafka's
+ * group coordinator handed the (single, dev-sized) partition to that other consumer and starved
+ * this one of every message on the topic for the entire session - AC-01's compensation path never
+ * advanced past order status CONFIRMED because this listener never fired at all. Now has its own
+ * dedicated group id so both consumers independently see every message (fan-out, not competing
+ * consumption) and filter internally by {@code eventType} as designed.
  */
 @Component
 public class PaymentRefundedEventConsumer {
@@ -58,7 +68,7 @@ public class PaymentRefundedEventConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "payment.events", groupId = "order-service",
+    @KafkaListener(topics = "payment.events", groupId = "order-service-payment-refunded",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onPaymentRefunded(ConsumerRecord<String, String> record) {
         String messageId = record.key() != null ? record.key() : "fallback-" + record.offset();

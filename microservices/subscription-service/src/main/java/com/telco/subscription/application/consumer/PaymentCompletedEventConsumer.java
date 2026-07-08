@@ -55,6 +55,15 @@ import java.util.UUID;
  * The consumer therefore writes NO inbox row itself; crucially the sync order-service hop happens
  * BEFORE any command is sent, so a transient {@link DependencyFailureException} propagates with no
  * inbox write and redelivery retries the hop.
+ *
+ * <p><b>Distinct consumer group (bug found via live acceptance testing, 2026-07-06):</b> this
+ * listener and {@link PaymentFailedEventConsumer} both read {@code payment.events}, and both
+ * previously used the shared {@code groupId="subscription-service"}. Two @KafkaListener members of
+ * the SAME consumer group compete for the topic's partition(s): Kafka's group coordinator hands the
+ * (single, dev-sized) partition to exactly one member, permanently starving the other of every
+ * message on the topic. Each now gets its own dedicated group id so both independently see every
+ * message (fan-out, not competing consumption) and filter internally by {@code eventType} as
+ * designed.
  */
 @Component
 public class PaymentCompletedEventConsumer {
@@ -76,7 +85,7 @@ public class PaymentCompletedEventConsumer {
         this.orderServiceClient = orderServiceClient;
     }
 
-    @KafkaListener(topics = "payment.events", groupId = "subscription-service",
+    @KafkaListener(topics = "payment.events", groupId = "subscription-service-payment-completed",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onPaymentCompleted(ConsumerRecord<String, String> record) {
         String messageId = record.key() != null ? record.key() : "fallback-" + record.offset();

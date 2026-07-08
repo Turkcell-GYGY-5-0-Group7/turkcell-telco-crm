@@ -8,6 +8,7 @@ import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Returns orders for a customer. ADMIN callers filter by the requested customerId; SUBSCRIBER callers
@@ -25,6 +26,7 @@ public class GetOrdersByCustomerQueryHandler
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PageResult<OrderResponse> handle(GetOrdersByCustomerQuery query) {
         PageRequest pageable = PageRequest.of(query.page(), query.size());
         Page<OrderResponse> page;

@@ -46,7 +46,7 @@ public class NotificationController {
     }
 
     @GetMapping("/users/{userId}/history")
-    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
+    @PreAuthorize("hasRole('ADMIN') or #userId == @currentUserProvider.currentUser().customerId()")
     public ApiResult<PageResult<NotificationResponse>> history(
             @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
@@ -59,13 +59,13 @@ public class NotificationController {
     }
 
     @GetMapping("/users/{userId}/preferences")
-    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
+    @PreAuthorize("hasRole('ADMIN') or #userId == @currentUserProvider.currentUser().customerId()")
     public ApiResult<List<CommunicationPreference>> getPreferences(@PathVariable String userId) {
         return apiResponseFactory.ok(notificationService.getPreferences(userId));
     }
 
     @PutMapping("/users/{userId}/preferences/{channel}")
-    @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
+    @PreAuthorize("hasRole('ADMIN') or #userId == @currentUserProvider.currentUser().customerId()")
     public ApiResult<CommunicationPreference> updatePreference(
             @PathVariable String userId,
             @PathVariable String channel,

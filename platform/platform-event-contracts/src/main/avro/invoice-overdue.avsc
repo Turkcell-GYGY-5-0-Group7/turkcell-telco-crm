@@ -1,0 +1,31 @@
+{
+  "type": "record",
+  "name": "InvoiceOverdueV1",
+  "namespace": "com.telco.platform.events.invoice",
+  "doc": "Emitted when an invoice is detected overdue (invoice.overdue.v1). Producer: billing-service.",
+  "fields": [
+    {
+      "name": "invoiceId",
+      "type": "string",
+      "doc": "Unique invoice identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer billed."
+    },
+    {
+      "name": "dueDate",
+      "type": "string",
+      "doc": "Invoice due date, ISO-8601 date."
+    },
+    {
+      "name": "detectedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant overdue status was detected, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "UserCreatedV1",
+  "namespace": "com.telco.platform.events.identity",
+  "doc": "Emitted when a user is created (user.created.v1). Producer: identity-service.",
+  "fields": [
+    {
+      "name": "userId",
+      "type": "string",
+      "doc": "Unique user identifier (UUID)."
+    },
+    {
+      "name": "username",
+      "type": "string",
+      "doc": "Username."
+    },
+    {
+      "name": "email",
+      "type": "string",
+      "doc": "User email address."
+    },
+    {
+      "name": "createdAt",
+      "type": "string",
+      "doc": "Instant the user was created, ISO-8601 (UTC)."
+    }
+  ]
+}

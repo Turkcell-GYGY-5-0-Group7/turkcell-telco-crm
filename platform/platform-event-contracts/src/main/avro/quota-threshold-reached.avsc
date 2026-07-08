@@ -13,6 +13,6 @@
       "default": null,
       "doc": "Owning customer, resolved from the Quota aggregate. Nullable for events emitted before this field existed."
     },
-    { "name": "reachedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+    { "name": "reachedAt", "type": "string" }
   ]
 }

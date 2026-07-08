@@ -24,11 +24,17 @@ public class ProductCatalogBillingClient {
         this.restClient = productCatalogRestClient;
     }
 
+    /**
+     * Fetches tariff pricing via the tokenless, permitAll internal price-snapshot endpoint
+     * ({@code GET /internal/tariffs/{code}/price-snapshot}); this client sends no JWT, so it must
+     * never call an authenticated route (tech-lead ruling 2026-07-06, tariff endpoint
+     * internal-surface fix).
+     */
     @CircuitBreaker(name = "product-catalog-service", fallbackMethod = "getTariffPricingFallback")
     public TariffPricingResponse getTariffPricing(String tariffCode) {
         try {
             ApiResult<TariffPricingResponse> result = restClient.get()
-                    .uri("/api/v1/tariffs/{code}", tariffCode)
+                    .uri("/internal/tariffs/{code}/price-snapshot", tariffCode)
                     .retrieve()
                     .body(RESPONSE_TYPE);
 

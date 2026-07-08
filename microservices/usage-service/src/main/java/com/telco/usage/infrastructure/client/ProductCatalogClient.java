@@ -13,6 +13,15 @@ import org.springframework.web.client.RestClient;
 /**
  * HTTP client for the product-catalog-service tariff read API.
  * Called during quota provisioning to obtain a tariff's usage allowances.
+ *
+ * <p>Uses the tokenless {@code GET /internal/tariffs/{code}/allowance-snapshot} endpoint (bug
+ * found via live acceptance testing, 2026-07-06): this client is invoked from a Kafka consumer
+ * ({@code SubscriptionActivatedEventConsumer}), which holds no caller JWT to forward, so it must
+ * never call an authenticated route - it was previously calling the authenticated
+ * {@code GET /api/v1/tariffs/{code}} and getting 401s on every single quota provisioning attempt.
+ * Mirrors the same tech-lead-ruled pattern (2026-07-06, tariff endpoint internal-surface fix) as
+ * billing-service's {@code ProductCatalogBillingClient}/price-snapshot; the route now lives under
+ * {@code /internal/**}, which the gateway excludes from public traffic.
  */
 @Component
 public class ProductCatalogClient {
@@ -36,7 +45,7 @@ public class ProductCatalogClient {
     public TariffAllowanceResponse getTariffAllowances(String tariffCode) {
         try {
             ApiResult<TariffAllowanceResponse> result = restClient.get()
-                    .uri("/api/v1/tariffs/{code}", tariffCode)
+                    .uri("/internal/tariffs/{code}/allowance-snapshot", tariffCode)
                     .retrieve()
                     .body(RESPONSE_TYPE);
 

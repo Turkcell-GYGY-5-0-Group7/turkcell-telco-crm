@@ -54,6 +54,21 @@
             <artifactId>connect-transforms</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Canonical Avro event contracts and the shared AvroContractAssertions test-jar (feature
+             14.5 phase 6, ADR-019): PaymentEventSchemaCompatTest compares real event records against
+             the governed schema in platform-event-contracts, not a local test-resources snapshot. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 </project>

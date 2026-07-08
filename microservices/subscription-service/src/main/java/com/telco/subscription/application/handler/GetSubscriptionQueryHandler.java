@@ -9,7 +9,14 @@ import com.telco.subscription.domain.Subscription;
 import com.telco.subscription.infrastructure.SubscriptionRepository;
 import org.springframework.stereotype.Component;
 
-/** Returns a single subscription by id; a missing id raises {@code ResourceNotFoundException} (-> 404). */
+/**
+ * Returns a single subscription by id; a missing id raises {@code ResourceNotFoundException} (-> 404).
+ *
+ * <p>Ownership compares the subscription's {@code customerId} against the caller's <em>resolved</em>
+ * {@code customerId} claim (identity-to-customer linkage, ADR-011), not the raw JWT subject - the
+ * same fix already applied to {@link GetSubscriptionsByCustomerQueryHandler}. An unlinked caller
+ * (null {@code callerCustomerId}) can never own any subscription.
+ */
 @Component
 public class GetSubscriptionQueryHandler
         implements QueryHandler<GetSubscriptionQuery, SubscriptionResponse> {
@@ -27,7 +34,8 @@ public class GetSubscriptionQueryHandler
                         "Subscription not found: " + query.subscriptionId()));
 
         if (!query.callerIsAdmin()
-                && !subscription.getCustomerId().toString().equals(query.callerUserId())) {
+                && (query.callerCustomerId() == null
+                        || !subscription.getCustomerId().toString().equals(query.callerCustomerId()))) {
             throw new AccessDeniedException("Subscription does not belong to caller");
         }
 

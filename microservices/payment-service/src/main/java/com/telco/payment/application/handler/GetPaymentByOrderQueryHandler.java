@@ -7,6 +7,7 @@ import com.telco.platform.common.exception.CommonErrorCode;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
@@ -22,6 +23,7 @@ public class GetPaymentByOrderQueryHandler
     }
 
     @Override
+    @Transactional(readOnly = true)
     public PaymentResponse handle(GetPaymentByOrderQuery query) {
         return paymentRepository.findByOrderId(query.orderId())
                 .map(PaymentResponse::from)

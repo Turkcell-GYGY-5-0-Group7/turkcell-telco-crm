@@ -9,6 +9,6 @@
     { "name": "type", "type": "string", "doc": "VOICE, SMS, or DATA." },
     { "name": "quantity", "type": "long" },
     { "name": "overage", "type": "boolean", "doc": "True if this usage was post-quota-exhaustion." },
-    { "name": "recordedAt", "type": { "type": "long", "logicalType": "timestamp-millis" } }
+    { "name": "recordedAt", "type": "string" }
   ]
 }

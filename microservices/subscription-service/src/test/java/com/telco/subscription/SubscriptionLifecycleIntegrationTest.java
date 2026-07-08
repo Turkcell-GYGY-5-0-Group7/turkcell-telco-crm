@@ -5,10 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.telco.platform.starter.security.JwtService;
 import com.telco.subscription.application.command.ActivateSubscriptionCommand;
 import com.telco.platform.mediator.Mediator;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.io.Decoders;
+import io.jsonwebtoken.security.Keys;
+import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import javax.crypto.SecretKey;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -50,6 +56,13 @@ class SubscriptionLifecycleIntegrationTest {
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
 
+    // Matches telco.platform.security.jwt.secret in src/test/resources/application-test.yml.
+    // JwtService.issue() has no customerId-claim overload (it is a test/identity-service-only
+    // helper on starter-security, out of this agent's authority to extend), so tokens carrying a
+    // resolved customerId claim (identity-to-customer linkage, ADR-011) are minted locally here with
+    // the same HMAC key, mirroring JwtAuthFilter#fromBearerToken's expected "customerId" claim shape.
+    private static final String JWT_SECRET = "bXktdGVzdC1zZWNyZXQta2V5LWZvci1zdWJzY3JpcHRpb24tc3Zj";
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");
 
@@ -89,11 +102,34 @@ class SubscriptionLifecycleIntegrationTest {
                 .defaultStatusHandler(HttpStatusCode::isError, (req, res) -> { /* never throw */ })
                 .build();
 
-        // Subject is a UUID matching Keycloak's sub claim. The same UUID is used as customerId
-        // so that ownership checks pass for this customer's own subscriptions.
+        // Subject is a UUID matching Keycloak's sub claim. The same UUID is also carried as the
+        // resolved customerId claim (identity-to-customer linkage, ADR-011), so both the raw-subject
+        // ownership checks (single get/suspend/reactivate/terminate) and the resolved-customerId
+        // ownership check (list-by-customer) pass for this customer's own subscriptions.
         customerId = UUID.randomUUID();
-        customerToken = jwtService.issue(customerId.toString(), Set.of("SUBSCRIBER"));
-        otherCustomerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
+        customerToken = issueWithCustomerId(customerId.toString(), Set.of("SUBSCRIBER"), customerId.toString());
+        otherCustomerToken = issueWithCustomerId(
+                UUID.randomUUID().toString(), Set.of("SUBSCRIBER"), UUID.randomUUID().toString());
+    }
+
+    /**
+     * Mints an HMAC-signed token carrying a {@code customerId} claim, the shape
+     * {@code JwtAuthFilter#fromBearerToken} resolves into {@code CurrentUserProvider}. Local to this
+     * test because {@link JwtService#issue} intentionally has no customerId-claim overload
+     * (starter-security is out of this agent's authority to extend).
+     */
+    private static String issueWithCustomerId(String subject, Set<String> roles, String customerId) {
+        SecretKey key = Keys.hmacShaKeyFor(Decoders.BASE64.decode(JWT_SECRET));
+        Instant now = Instant.now();
+        return Jwts.builder()
+                .issuer("telco")
+                .subject(subject)
+                .claim("roles", List.copyOf(roles))
+                .claim("customerId", customerId)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plusSeconds(3600)))
+                .signWith(key)
+                .compact();
     }
 
     /** Activates a subscription directly via the mediator (bypassing the internal HTTP endpoint). */
@@ -284,6 +320,25 @@ class SubscriptionLifecycleIntegrationTest {
                 .header("Authorization", "Bearer " + otherCustomerToken)
                 .retrieve()
                 .toEntity(MAP_TYPE);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
+
+    /**
+     * Identity-to-customer linkage (ADR-011) null-safety requirement: a caller with no resolved
+     * customerId claim (unlinked subscriber) must be denied, even when the requested customerId in
+     * the query param happens to equal their own raw JWT subject - the exact value the old,
+     * pre-fix comparison against {@code authentication.getName()} would have wrongly accepted.
+     */
+    @Test
+    void unlinked_subscriber_listing_by_own_subject_as_customer_id_is_rejected_403() {
+        String unlinkedToken = jwtService.issue(customerId.toString(), Set.of("SUBSCRIBER"));
+
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/api/v1/subscriptions?customerId=" + customerId + "&page=0&size=20")
+                .header("Authorization", "Bearer " + unlinkedToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 

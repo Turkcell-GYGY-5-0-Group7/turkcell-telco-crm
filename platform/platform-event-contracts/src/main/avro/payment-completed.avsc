@@ -11,9 +11,13 @@
     },
     {
       "name": "orderId",
-      "type": ["null", "string"],
-      "default": null,
-      "doc": "Order this payment settles, when the payment originates from an order. Nullable for invoice-driven payments."
+      "type": "string",
+      "doc": "Order this payment settles."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who made the payment."
     },
     {
       "name": "invoiceId",
@@ -29,20 +33,12 @@
         "precision": 19,
         "scale": 4
       },
-      "doc": "Paid amount as an exact decimal (precision 19, scale 4). Always paired with currency."
+      "doc": "Paid amount as an exact decimal (precision 19, scale 4)."
     },
     {
-      "name": "currency",
+      "name": "occurredAt",
       "type": "string",
-      "doc": "ISO 4217 currency code for amount, for example TRY."
-    },
-    {
-      "name": "completedAt",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      },
-      "doc": "Instant the payment completed, in epoch milliseconds (UTC)."
+      "doc": "Instant the payment completed, ISO-8601 (UTC)."
     }
   ]
 }

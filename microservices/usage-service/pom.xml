@@ -38,6 +38,14 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>platform-event-contracts</artifactId>
         </dependency>
+        <!-- Shared AvroContractAssertions test-jar (feature 14.5 phase 6, ADR-019):
+             UsageEventSchemaCompatTest compares real event records against the governed schema. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.kafka</groupId>

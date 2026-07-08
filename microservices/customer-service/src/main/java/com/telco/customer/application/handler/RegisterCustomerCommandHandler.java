@@ -45,7 +45,7 @@ public class RegisterCustomerCommandHandler
         String id = customer.getId().toString();
         outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, CustomerRegisteredV1.of(
                 id, customer.getType().name(), customer.getStatus().name(),
-                customer.getCreatedAt().toEpochMilli()));
+                customer.getCreatedAt().toEpochMilli(), command.registeredByUserId()));
 
         audit.log("CUSTOMER_REGISTERED", AGGREGATE_TYPE, id, Map.of("type", customer.getType().name()));
 

@@ -34,7 +34,7 @@ public class GetUsageHistoryQueryHandler
     @Override
     @Transactional(readOnly = true)
     public CursorPage<UsageHistoryItem> handle(GetUsageHistoryQuery query) {
-        verifyOwnership(query.principalId(), query.subscriptionId());
+        verifyOwnership(query.callerCustomerId(), query.callerIsAdmin(), query.subscriptionId());
 
         // Fetch one extra record to determine if there is a next page.
         List<UsageRecord> rows;
@@ -59,9 +59,17 @@ public class GetUsageHistoryQueryHandler
         return new CursorPage<>(content, nextCursor, hasNext, query.limit());
     }
 
-    private void verifyOwnership(String principalId, java.util.UUID subscriptionId) {
-        if (principalId == null) {
-            return;
+    private void verifyOwnership(String callerCustomerId, boolean callerIsAdmin,
+                                  java.util.UUID subscriptionId) {
+        if (callerIsAdmin) {
+            return; // staff bypass
+        }
+        if (callerCustomerId == null) {
+            // Caller has no linked customerId (unlinked subscriber, or identity-to-customer
+            // linkage, ADR-011, not yet established for this identity). Never treat a null
+            // resolved customerId as a bypass — fail-closed.
+            throw new AccessDeniedException(
+                    "Caller identity is not linked to a customer for subscriptionId: " + subscriptionId);
         }
         Optional<Quota> anyQuota = quotaRepository.findFirstBySubscriptionId(subscriptionId);
         if (anyQuota.isEmpty()) {
@@ -70,7 +78,7 @@ public class GetUsageHistoryQueryHandler
         }
         Quota quota = anyQuota.get();
         if (quota.getCustomerId() == null
-                || !quota.getCustomerId().toString().equals(principalId)) {
+                || !quota.getCustomerId().toString().equals(callerCustomerId)) {
             throw new AccessDeniedException(
                     "Not authorized to view history for subscriptionId: " + subscriptionId);
         }
