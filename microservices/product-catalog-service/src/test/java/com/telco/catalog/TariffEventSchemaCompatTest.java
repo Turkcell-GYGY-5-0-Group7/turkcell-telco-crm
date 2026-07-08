@@ -1,85 +1,47 @@
 package com.telco.catalog;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.InputStream;
-import java.lang.reflect.RecordComponent;
-import java.util.Arrays;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
+import com.telco.platform.events.testsupport.AvroContractAssertions;
+import org.apache.avro.Schema;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.util.stream.Stream;
+
 /**
- * Event-schema contract gate for the tariff domain events (feature 14.1.2, ADR-019, NFR-16).
+ * Event-schema contract gate for the tariff domain events (feature 14.1.2, ADR-019, NFR-16; extended
+ * feature 14.5 phase 6).
  *
- * <p>Each canonical Avro schema is snapshotted under {@code src/test/resources/avro/} and compared
- * field-for-field against the Java outbox payload record that product-catalog-service actually
- * publishes. The test fails the build when a record drops, renames, or adds a field without the
- * matching contract change, catching a backward-incompatible event change before it reaches Kafka /
- * Schema Registry. No Avro library, Schema Registry, or Spring context is required (the {@code name}
- * field of the snapshot is documentation only; the mapping to the Java class is explicit below).
+ * <p>Each Java outbox payload record product-catalog-service publishes is compared field-for-field
+ * <b>and type-for-type, with nullability checked in both directions</b> against the canonical Avro
+ * schema loaded directly from {@code platform-event-contracts} (not a hand-copied local {@code .avsc}
+ * snapshot). The test fails the build when a record drops, renames, retypes, or adds a field without
+ * the matching contract change, catching a backward-incompatible event change before it reaches Kafka
+ * / Schema Registry. Pure unit test: no Avro-serialization, Kafka, Schema Registry, or Spring context.
  *
  * <p>Guarded events: {@code tariff.created.v1}, {@code tariff.price-changed.v1}.
  */
 class TariffEventSchemaCompatTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    record SchemaCase(String avscPath, String javaClass) {
+    record SchemaCase(String canonicalClassName, String javaClass) {
         @Override
         public String toString() {
-            return avscPath;
+            return canonicalClassName;
         }
     }
 
     static Stream<SchemaCase> schemas() {
         return Stream.of(
-                new SchemaCase("avro/tariff-created.avsc",
+                new SchemaCase("com.telco.platform.events.catalog.TariffCreatedV1",
                         "com.telco.catalog.domain.event.TariffCreatedEvent"),
-                new SchemaCase("avro/tariff-price-changed.avsc",
+                new SchemaCase("com.telco.platform.events.catalog.TariffPriceChangedV1",
                         "com.telco.catalog.domain.event.TariffPriceChangedEvent"));
     }
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("schemas")
-    void avro_fields_match_java_record_exactly(SchemaCase schema) throws Exception {
-        Set<String> avroFields = avroFieldNames(schema.avscPath());
-        Set<String> javaFields = javaRecordComponents(schema.javaClass());
-
-        assertThat(javaFields)
-                .as("Avro fields missing from Java record %s (a removed/renamed field is a "
-                        + "backward-incompatible change: add a new event version): %s",
-                        schema.javaClass(), avroFields)
-                .containsAll(avroFields);
-
-        assertThat(avroFields)
-                .as("Java record %s declares fields absent from the frozen Avro contract "
-                        + "(register the new field in the .avsc snapshot): %s",
-                        schema.javaClass(), javaFields)
-                .containsAll(javaFields);
-    }
-
-    private static Set<String> avroFieldNames(String classpathPath) throws Exception {
-        try (InputStream in = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(classpathPath)) {
-            assertThat(in).as("schema resource not found on classpath: %s", classpathPath).isNotNull();
-            JsonNode root = MAPPER.readTree(in);
-            return StreamSupport.stream(root.get("fields").spliterator(), false)
-                    .map(n -> n.get("name").asText())
-                    .collect(Collectors.toSet());
-        }
-    }
-
-    private static Set<String> javaRecordComponents(String className) throws Exception {
-        Class<?> clazz = Class.forName(className);
-        assertThat(clazz.isRecord()).as("%s must be a Java record", className).isTrue();
-        return Arrays.stream(clazz.getRecordComponents())
-                .map(RecordComponent::getName)
-                .collect(Collectors.toSet());
+    void avro_schema_matches_java_record_exactly(SchemaCase testCase) throws Exception {
+        Schema schema = AvroContractAssertions.canonicalSchema(testCase.canonicalClassName());
+        Class<?> javaClass = Class.forName(testCase.javaClass());
+        AvroContractAssertions.assertRecordMatchesSchema(schema, javaClass);
     }
 }

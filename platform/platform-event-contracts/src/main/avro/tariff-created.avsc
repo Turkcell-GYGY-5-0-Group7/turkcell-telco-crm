@@ -1,0 +1,53 @@
+{
+  "type": "record",
+  "name": "TariffCreatedV1",
+  "namespace": "com.telco.platform.events.catalog",
+  "doc": "Emitted when a tariff is created (tariff.created.v1). Producer: product-catalog-service.",
+  "fields": [
+    {
+      "name": "tariffId",
+      "type": "string",
+      "doc": "Unique tariff identifier (UUID)."
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "doc": "Tariff code."
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "doc": "Tariff name."
+    },
+    {
+      "name": "type",
+      "type": "string",
+      "doc": "Tariff type."
+    },
+    {
+      "name": "monthlyFee",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Monthly fee as an exact decimal (precision 19, scale 4)."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code for monthlyFee, for example TRY."
+    },
+    {
+      "name": "effectiveFrom",
+      "type": "string",
+      "doc": "Instant the tariff becomes effective, ISO-8601."
+    },
+    {
+      "name": "createdAt",
+      "type": "string",
+      "doc": "Instant the tariff was created, ISO-8601 (UTC)."
+    }
+  ]
+}

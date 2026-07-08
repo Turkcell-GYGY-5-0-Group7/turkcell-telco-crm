@@ -3,6 +3,7 @@ package com.telco.acceptance.ac01;
 import com.telco.acceptance.support.AcceptanceConfig;
 import com.telco.acceptance.support.GatewayApi;
 import com.telco.acceptance.support.OnboardingSteps;
+import com.telco.acceptance.support.SelfServiceSubscriber;
 import com.telco.acceptance.support.TokenProvider;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
@@ -42,11 +43,12 @@ import static org.awaitility.Awaitility.await;
  *
  * <p>Same mock-PSP flake caveat as the happy-path test applies to step 1 above.
  *
- * <p><b>Authentication:</b> registration, KYC document upload, and order placement/reads use the
- * real seeded SUBSCRIBER user; KYC approval and tariff creation stay ADMIN (genuinely back-office
- * actions). The final subscriptions-by-customer check stays ADMIN too, for the same
- * ownership-linkage gap documented on {@link GatewayApi#getSubscriptionsByCustomer} - see the AC-01
- * happy-path test class javadoc for the full explanation.
+ * <p><b>Authentication:</b> registration, KYC document upload, and order placement/reads use a real,
+ * freshly provisioned SUBSCRIBER ({@link SelfServiceSubscriber}), not the permanently-unlinkable
+ * seeded {@code subscriber@telco.local}; KYC approval and tariff creation stay ADMIN (genuinely
+ * back-office actions). The final subscriptions-by-customer check uses the subscriber's own fresh,
+ * linked token (Feature 14.4 identity-to-customer linkage) instead of the ADMIN-token workaround the
+ * AC-01 happy-path test class javadoc used to document.
  */
 @DisplayName("AC-01: New subscriber onboarding, activation-failure compensation path")
 class NewSubscriberOnboardingCompensationAcceptanceIT {
@@ -56,10 +58,12 @@ class NewSubscriberOnboardingCompensationAcceptanceIT {
     @Test
     @DisplayName("multi-item order fails activation, payment is refunded, and the order is cancelled")
     void activationFailureTriggersRefundAndOrderCancellation() {
-        String subscriberToken = TokenProvider.subscriberToken();
         String adminToken = TokenProvider.adminToken();
+        SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
+        String subscriberToken = subscriber.initialToken();
 
         UUID customerId = OnboardingSteps.registerAndApproveCustomer(subscriberToken, adminToken);
+        String linkedToken = subscriber.awaitLinkedToken(customerId);
         GatewayApi.TariffCreated tariff = GatewayApi.createTariff(adminToken, MONTHLY_FEE, 1000);
 
         // Two items -> order-service accepts it (no line-count validation on capture), but
@@ -92,8 +96,9 @@ class NewSubscriberOnboardingCompensationAcceptanceIT {
                 });
 
         // No subscription (and therefore no MSISDN) was ever created for this customer: activation
-        // never proceeded past the pre-activation multi-item guard. ADMIN token - see class javadoc.
-        Response subscriptions = GatewayApi.getSubscriptionsByCustomer(adminToken, customerId);
+        // never proceeded past the pre-activation multi-item guard. Own linked token - see class
+        // javadoc: resolved customerId claim satisfies ownership directly (Feature 14.4).
+        Response subscriptions = GatewayApi.getSubscriptionsByCustomer(linkedToken, customerId);
         subscriptions.then().statusCode(200);
         List<Object> content = subscriptions.jsonPath().getList("data.content");
         assertThat(content).isEmpty();

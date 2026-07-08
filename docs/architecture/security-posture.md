@@ -3,8 +3,8 @@
 | Field | Value |
 | --- | --- |
 | Authority | ADR-011 (security foundation), NFR-05, NFR-06, NFR-12, NFR-18, ADR-021 |
-| Status | MVP delivered (Sprints 04-13); reviewed in Sprint 14 (Feature 14.2) |
-| Last updated | 2026-07-03 |
+| Status | MVP delivered (Sprints 04-13); reviewed in Sprint 14 (Feature 14.2); re-signed-off Phase 1, 2026-07-06 |
+| Last updated | 2026-07-06 |
 | Companion | `docs/architecture/keycloak-and-auth.md` (auth integration), `14.2-security-audit-report.md` (findings) |
 
 This document records the platform's security posture and the explicit, reviewed decision to defer
@@ -148,15 +148,20 @@ in production; out of scope for the MVP.)"
 
 - Mandatory in identity, customer, payment, and subscription. Each row carries actor, action, entity,
   entityId, correlationId, details (no PII), and timestamp, written inside the mediator transaction.
-- Current status (Sprint 14 review): identity and subscription are complete; customer covers the full
-  customer/KYC/document lifecycle but not address sub-resource mutations; payment-service has no audit
-  infrastructure. The gaps and the ready-to-apply remediation are tracked in
-  `docs/tasks/sprint-14-testing-and-hardening/14.2-security-audit-report.md` (subtask 14.2.3).
+- Current status (Sprint 14 Phase 1 re-sign-off, 2026-07-06): all four mandated services are complete.
+  identity and subscription were complete from the original review; the two gaps flagged on 2026-07-03
+  (payment-service had no audit infrastructure at all; customer-service did not audit the address
+  sub-resource) have both been closed - payment-service now has its own `audit_log` table/entity/
+  repository/writer wired into `ChargePaymentCommandHandler` and `RefundPaymentCommandHandler`, and
+  customer-service's three address handlers now call the existing `AuditLogWriter`. See
+  `docs/tasks/sprint-14-testing-and-hardening/14.2-security-audit-report.md` (subtask 14.2.3 and its
+  2026-07-06 addendum) for the file-level evidence.
 
 ## 10. Production hardening checklist (carried forward)
 
 - [ ] mTLS for internal traffic (mesh or SPIFFE/SPIRE) + default-deny NetworkPolicies.
-- [ ] Close the payment-service audit gap (HIGH) and confirm/close the customer address audit gap.
+- [x] Close the payment-service audit gap (HIGH) and confirm/close the customer address audit gap.
+      Done 2026-07-06 - see Section 9.
 - [ ] `starter-crypto` extraction + key-id/envelope encryption for zero-downtime key rotation, DEK
       backed by KMS/HSM.
 - [ ] Real secrets from Vault/K8s Secret; HTTPS everywhere; `sslRequired` enforced; per-env realms.

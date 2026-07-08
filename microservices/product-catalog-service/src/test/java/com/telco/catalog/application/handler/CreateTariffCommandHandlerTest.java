@@ -55,6 +55,7 @@ class CreateTariffCommandHandlerTest {
 
         assertThat(response).isNotNull();
         assertThat(response.code()).isEqualTo("PLAN-X");
+        assertThat(response.status()).isEqualTo("ACTIVE");
         verify(tariffRepository).save(any());
         verify(versioningService).createInitialSnapshot(any());
         verify(outboxService).publish(eq("tariff"), anyString(), eq("tariff.created.v1"), any());

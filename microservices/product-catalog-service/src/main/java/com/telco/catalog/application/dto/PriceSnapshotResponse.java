@@ -10,6 +10,7 @@ import java.time.Instant;
  */
 public record PriceSnapshotResponse(
         String code,
+        String name,
         BigDecimal monthlyFee,
         String currency,
         int version,

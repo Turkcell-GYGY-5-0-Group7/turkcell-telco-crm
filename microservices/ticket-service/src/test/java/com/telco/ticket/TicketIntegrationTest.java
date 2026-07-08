@@ -76,7 +76,7 @@ class TicketIntegrationTest {
         UUID ticketId = mediator.send(new OpenTicketCommand(
                 customerId, "BILLING", "HIGH", "Invoice discrepancy"));
 
-        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false, customerId.toString()));
         assertThat(resp.status()).isEqualTo("OPEN");
         assertThat(resp.assignedTeam()).isEqualTo("billing-support");
         assertThat(resp.slaDueAt()).isNotNull();
@@ -100,7 +100,7 @@ class TicketIntegrationTest {
 
         mediator.send(new ResolveTicketCommand(ticketId));
 
-        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false, customerId.toString()));
         assertThat(resp.status()).isEqualTo("RESOLVED");
         assertThat(resp.resolvedAt()).isNotNull();
 
@@ -115,7 +115,7 @@ class TicketIntegrationTest {
         mediator.send(new ResolveTicketCommand(ticketId));
         mediator.send(new ResolveTicketCommand(ticketId));
 
-        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false, customerId.toString()));
         assertThat(resp.status()).isEqualTo("RESOLVED");
     }
 
@@ -126,7 +126,7 @@ class TicketIntegrationTest {
         UUID agentId = UUID.randomUUID();
         mediator.send(new AddCommentCommand(ticketId, agentId, "We are looking into this."));
 
-        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false, customerId.toString()));
         assertThat(resp.comments()).hasSize(1);
         assertThat(resp.comments().get(0).body()).isEqualTo("We are looking into this.");
     }
@@ -137,7 +137,7 @@ class TicketIntegrationTest {
                 customerId, "TECHNICAL", "HIGH", "Network outage"));
         mediator.send(new AssignTicketCommand(ticketId, "escalation-team"));
 
-        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse resp = mediator.query(new GetTicketQuery(ticketId, customerId, false, customerId.toString()));
         assertThat(resp.assignedTeam()).isEqualTo("escalation-team");
         assertThat(resp.status()).isEqualTo("ASSIGNED");
     }
@@ -194,7 +194,7 @@ class TicketIntegrationTest {
     void get_unknown_ticket_id_returns_not_found() {
         UUID unknownId = UUID.randomUUID();
 
-        assertThatThrownBy(() -> mediator.query(new GetTicketQuery(unknownId, customerId, true)))
+        assertThatThrownBy(() -> mediator.query(new GetTicketQuery(unknownId, customerId, true, null)))
                 .isInstanceOf(com.telco.platform.common.exception.ResourceNotFoundException.class)
                 .hasMessageContaining(unknownId.toString());
     }

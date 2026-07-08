@@ -46,7 +46,13 @@ import static org.mockito.Mockito.when;
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
                 "spring.config.import=",
-                "spring.cloud.config.enabled=false"
+                "spring.cloud.config.enabled=false",
+                // Matches the production config-server value (configs/order-service/application.yml).
+                // Tests must run with OSIV disabled, exactly like prod, otherwise a handler that
+                // forgets @Transactional and lazily loads a collection after its session closes
+                // (e.g. the Sprint 14 GetOrderQueryHandler bug) is silently masked by the
+                // open-in-view session instead of failing the way it does in production.
+                "spring.jpa.open-in-view=false"
         }
 )
 @ActiveProfiles("test")
@@ -168,6 +174,53 @@ class OrderServiceIntegrationTest {
         assertThat(data(response).get("id")).isEqualTo(orderId);
     }
 
+    /**
+     * Regression test for the Sprint 14 bug: {@code GetOrderQueryHandler.handle()} was not
+     * {@code @Transactional}, so {@code order.getItems()} (a LAZY {@code @OneToMany}) threw
+     * {@code LazyInitializationException} once the repository's short-lived session closed,
+     * surfacing as a 500 on every {@code GET /api/v1/orders/{id}} call. With
+     * {@code spring.jpa.open-in-view=false} set above (matching production), this test only
+     * passes if the handler's session stays open long enough to serialize a populated,
+     * multi-item {@code items} list.
+     */
+    @Test
+    void get_order_returns_populated_items_without_lazy_initialization_error() {
+        String orderJson = """
+                {
+                  "customerId": "%s",
+                  "items": [
+                    { "tariffId": "%s", "quantity": 2 },
+                    { "tariffId": "%s", "quantity": 1 }
+                  ]
+                }
+                """.formatted(CUSTOMER_ID, TARIFF_ID, TARIFF_ID);
+
+        ResponseEntity<Map<String, Object>> created = client.post()
+                .uri("/api/v1/orders")
+                .header("Authorization", "Bearer " + customerAlphaToken)
+                .header("Idempotency-Key", UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(orderJson)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String orderId = orderId(created);
+
+        ResponseEntity<Map<String, Object>> response = client.get()
+                .uri("/api/v1/orders/" + orderId)
+                .header("Authorization", "Bearer " + customerAlphaToken)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        Map<String, Object> data = data(response);
+        assertThat(data.get("id")).isEqualTo(orderId);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> items = (List<Map<String, Object>>) data.get("items");
+        assertThat(items).hasSize(2);
+        assertThat(items.get(0).get("tariffCode")).isEqualTo("POSTPAID-001");
+    }
+
     @Test
     void customer_cannot_get_other_customers_order_returns_403() {
         String orderId = orderId(createOrder(customerAlphaToken, UUID.randomUUID().toString()));
@@ -219,8 +272,14 @@ class OrderServiceIntegrationTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         @SuppressWarnings("unchecked")
-        List<Object> content = (List<Object>) data(response).get("content");
+        List<Map<String, Object>> content = (List<Map<String, Object>>) data(response).get("content");
         assertThat(content).hasSize(1);
+        // Regression guard: GetOrdersByCustomerQueryHandler also maps each Order's lazy `items`
+        // collection (Page.map(OrderResponse::from)); with open-in-view disabled this only
+        // serializes if the handler is @Transactional.
+        @SuppressWarnings("unchecked")
+        List<Object> items = (List<Object>) content.get(0).get("items");
+        assertThat(items).hasSize(1);
     }
 
     @Test

@@ -8,7 +8,7 @@
 | Version | 1.0 |
 | Parent | [../product/BRD.md](../product/BRD.md) |
 | Technical authority | ADR-009 (event-driven architecture), ADR-019 (event contract and schema governance) |
-| Last updated | 2026-07-04 |
+| Last updated | 2026-07-07 |
 
 All events are immutable, versioned (`domain.event.v1`), Avro-encoded, and registered in the
 Schema Registry. Events are published through the transactional outbox and consumed
@@ -34,6 +34,8 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | Event | Producer | Consumers | Purpose |
 | --- | --- | --- | --- |
 | `customer.registered.v1` | customer-service | notification | New customer created. |
+| `user.created.v1` | identity-service | - | New identity user provisioned (Keycloak-backed). No current consumer; registered for future audit/notification integration. |
+| `user.deleted.v1` | identity-service | - | Identity user deleted/deactivated. No current consumer; registered for future audit/notification integration. |
 | `customer.kyc-approved.v1` | customer-service | notification, order | KYC approved; customer becomes ACTIVE. |
 | `customer.kyc-rejected.v1` | customer-service | notification | KYC rejected. |
 | `customer.updated.v1` | customer-service | notification | Customer profile changed. |
@@ -100,6 +102,25 @@ field only; no field was renamed, removed, or retyped.
 | --- | --- | --- | --- |
 | 2026-07-04 | `payment.completed.v1`, `payment.failed.v1` | `invoiceId` (nullable string) | Carries the invoice being settled so billing-service's `PaymentCompletedBillingConsumer` can mark the invoice paid when a customer pays via `POST /api/v1/payments` with an `invoiceId` (Section 14.2). Null for order-only charges. |
 | 2026-07-04 | `quota.threshold-reached.v1`, `quota.exceeded.v1` | `customerId` (nullable string) | Lets notification-service route the 80%/100% quota SMS to the real customer instead of falling back to the literal `unknown`. Resolved by usage-service from the `Quota` aggregate's locally stored `customer_id` (set at provisioning time from `subscription.activated.v1`). Null only for events emitted before this field existed (rolling-upgrade compatibility). |
+| 2026-07-07 | `customer.registered.v1` | `registeredByUserId` (nullable string) | Carries the Keycloak subject of the caller for genuine self-service registration, so identity-service's new inbox consumer can upsert `users.customer_id` and close the identity-to-customer linkage gap (Section 14.1.1 ruling). Null for agent/dealer-assisted registration - those customers stay unlinked until a future "claim my account" flow. |
+
+---
+
+## 6. Schema Governance Reconciliation Log (Feature 14.5)
+
+Tracking reference: `docs/tasks/sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md`
+(tech-lead ruling, ADR-019 Amendment (2026-07-07)). Unlike Section 5 above (additive field changes to
+already-registered schemas), this log records the one-time reconciliation of the canonical schema
+directory (`platform/platform-event-contracts/src/main/avro/`) against the real, currently-shipping
+event payloads, closing a gap where the `.avsc` files had never been cross-checked against the code
+that actually publishes each event.
+
+| Date | Change type | Detail |
+| --- | --- | --- |
+| 2026-07-07 | Reconciled (type/shape fix, no behavior change) | 7 pre-existing canonical schemas corrected to match the real, already-shipping payload: `order-created.avsc` (added `items` array of the nested `OrderItemPayload` record, added `idempotencyKey`, removed `currency`, renamed/retyped `createdAt`(long) to `occurredAt`(string)); `payment-completed.avsc` (added `customerId`, removed `currency`, renamed/retyped `completedAt`(long) to `occurredAt`(string)); `cdr-recorded.avsc` (retyped `occurredAt` from `long`/timestamp-millis to `string`); `usage-aggregated.avsc` (retyped `periodStart`, `periodEnd`, `aggregatedAt` from `long` to `string`); `usage-recorded.avsc` (retyped `recordedAt` from `long` to `string`); `quota-exceeded.avsc` (retyped `exceededAt` from `long` to `string`); `quota-threshold-reached.avsc` (retyped `reachedAt` from `long` to `string`). The nested `OrderItemPayload` type required for `order-created.avsc`'s `items` field is defined inline within `order-created.avsc` itself (not an independent Schema Registry subject - see tracking doc's tech-lead ruling on the registry-parsing conflict). |
+| 2026-07-07 | Added (new canonical schema, closing a previously-unregistered gap) | 14 event types that were already being published in production code but had no canonical `.avsc` file at all: `order.cancelled.v1`, `payment.failed.v1`, `payment.refunded.v1`, `tariff.created.v1`, `tariff.price-changed.v1`, `ticket.opened.v1`, `ticket.assigned.v1`, `ticket.resolved.v1`, `ticket.sla-breached.v1`, `invoice.paid.v1`, `invoice.overdue.v1`, `notification.dispatched.v1`, `user.created.v1`, `user.deleted.v1`. All 14 are now registered in the Schema Registry under the standard backward-compatibility mode. See Section 2 above for the two identity-service rows this addition required in the event registry table. |
+| 2026-07-07 | Renamed (naming-convention fix, no shape change) | `EventEnvelope.avsc` -> `event-envelope.avsc`, closing a kebab-case-filename convention violation (ADR-019 Amendment, point A5). The Avro record's own `name` field is unchanged (`EventEnvelope`, PascalCase, drives Java class generation) - only the filename changed, along with the corresponding `avro-maven-plugin` property in `platform/platform-event-contracts/pom.xml`. |
+| 2026-07-07 | Tooling (process change, going forward) | Added `AvroContractAssertions`, a shared, type-and-nullability-aware compatibility checker (`platform/platform-event-contracts/src/test/java/com/telco/platform/events/testsupport/AvroContractAssertions.java`, shipped as this module's test-jar). Every one of the 32 canonical schemas (18 reconciled/unchanged + 14 newly added above) now has a per-service `*EventSchemaCompatTest`/`*EventContractTest` that loads the schema directly from the canonical `platform-event-contracts` module (not a hand-maintained local copy) and asserts field name, type, and nullability against the real Java payload class or captured runtime payload. Going forward, any producing service whose payload class drifts from its canonical schema (field removed/renamed/retyped, or a nullability mismatch) fails that service's build - this is now a required, standing quality gate for every service that publishes a domain event, not a one-time manual reconciliation. |
 
 ---
 

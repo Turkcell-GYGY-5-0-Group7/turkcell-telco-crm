@@ -12,6 +12,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -45,12 +46,28 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
 
     @Override
     @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "createUserFallback")
-    public String createUser(String username, String email) {
+    public String createUser(String username, String email, String firstName, String lastName,
+                              String password) {
         String token = fetchAdminToken();
 
+        // firstName/lastName/emailVerified=true are mandatory, not cosmetic: the realm's declarative
+        // Keycloak User Profile requires firstName/lastName/email for the account holder's own ("user")
+        // context. A user created without them silently fails Keycloak's VERIFY_PROFILE required-action
+        // trigger evaluation on its very first login attempt (added invisibly - it never shows up in a
+        // GET .../users/{id} read of requiredActions taken beforehand), and the Resource Owner Password
+        // Credentials grant can never resolve an interactive required action, so the account is
+        // permanently stuck with invalid_grant/resolve_required_actions ("Account is not fully set up").
+        // Confirmed live (Feature 14.4 end-to-end verification): patching a stuck account's
+        // firstName/lastName/emailVerified immediately un-blocks its next login with no other change.
+        // emailVerified is unconditionally true because this platform has no email-confirmation flow;
+        // an admin-provisioned account's email is inherently already administrator-confirmed, exactly
+        // matching every seeded realm-export.json user.
         Map<String, Object> body = Map.of(
                 "username", username,
                 "email", email,
+                "firstName", firstName,
+                "lastName", lastName,
+                "emailVerified", true,
                 "enabled", true
         );
 
@@ -74,7 +91,39 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
         }
 
         String path = location.getPath();
-        return path.substring(path.lastIndexOf('/') + 1);
+        String keycloakId = path.substring(path.lastIndexOf('/') + 1);
+
+        if (password != null) {
+            // A dedicated reset-password call, not an embedded `credentials` array on the create body -
+            // both were verified equally effective once firstName/lastName/emailVerified were also
+            // fixed, but the dedicated endpoint keeps this method's request body minimal and mirrors
+            // the same admin operation a human operator would perform via the Keycloak console.
+            setInitialPassword(token, keycloakId, password);
+        }
+
+        return keycloakId;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void setInitialPassword(String token, String keycloakId, String password) {
+        Map<String, Object> credential = Map.of(
+                "type", "password",
+                "value", password,
+                "temporary", false
+        );
+
+        RestClient.create()
+                .put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId + "/reset-password")
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(credential)
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> {
+                            throw new RuntimeException("Keycloak Admin API error: " + res.getStatusCode());
+                        })
+                .toBodilessEntity();
     }
 
     @Override
@@ -135,9 +184,62 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
                 .toBodilessEntity();
     }
 
+    @Override
+    @CircuitBreaker(name = "keycloak-admin", fallbackMethod = "setCustomerIdAttributeFallback")
+    @SuppressWarnings("unchecked")
+    public void setCustomerIdAttribute(String keycloakId, UUID customerId) {
+        String token = fetchAdminToken();
+
+        // Keycloak's user PUT is a full-representation replace, not a partial patch: any top-level
+        // field (username/email/firstName/lastName/attributes) omitted from the body is cleared on
+        // the server, not left unchanged. Fetch the current representation first and merge only the
+        // customer_id attribute into it, so this call can never silently wipe the user's existing
+        // profile fields (bug found and fixed during Feature 14.4 end-to-end verification - confirmed
+        // live: an earlier attributes-only PUT body cleared email/firstName/lastName on a real user).
+        Map<String, Object> current = RestClient.create()
+                .get()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                .header("Authorization", "Bearer " + token)
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> {
+                            throw new RuntimeException("Keycloak Admin API error: " + res.getStatusCode());
+                        })
+                .body(Map.class);
+
+        if (current == null) {
+            throw new RuntimeException(
+                    "Keycloak Admin API error: no user representation returned for " + keycloakId);
+        }
+
+        Map<String, Object> mergedAttributes = new java.util.HashMap<>();
+        Object existingAttributes = current.get("attributes");
+        if (existingAttributes instanceof Map<?, ?> existing) {
+            existing.forEach((k, v) -> mergedAttributes.put((String) k, v));
+        }
+        mergedAttributes.put("customer_id", List.of(customerId.toString()));
+
+        Map<String, Object> merged = new java.util.HashMap<>(current);
+        merged.put("attributes", mergedAttributes);
+
+        RestClient.create()
+                .put()
+                .uri(serverUrl + "/admin/realms/" + realm + "/users/" + keycloakId)
+                .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(merged)
+                .retrieve()
+                .onStatus(status -> !status.is2xxSuccessful(),
+                        (req, res) -> {
+                            throw new RuntimeException("Keycloak Admin API error: " + res.getStatusCode());
+                        })
+                .toBodilessEntity();
+    }
+
     // --- Fallback methods ---
 
-    private String createUserFallback(String username, String email, Throwable t) {
+    private String createUserFallback(String username, String email, String firstName, String lastName,
+                                       String password, Throwable t) {
         throw new DependencyFailureException(
                 "Keycloak Admin API unavailable: cannot create user " + username, t);
     }
@@ -157,6 +259,11 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
                 "Keycloak Admin API unavailable: cannot disable user " + keycloakId, t);
     }
 
+    private void setCustomerIdAttributeFallback(String keycloakId, UUID customerId, Throwable t) {
+        throw new DependencyFailureException(
+                "Keycloak Admin API unavailable: cannot set customer_id attribute for " + keycloakId, t);
+    }
+
     // --- Private helpers (called inside circuit-breaker-guarded public methods) ---
 
     @SuppressWarnings("unchecked")
@@ -165,9 +272,18 @@ public class KeycloakAdminRestClient implements KeycloakAdminClient {
                 + "&client_id=" + clientId
                 + "&client_secret=" + clientSecret;
 
+        // The client-credentials grant must be requested from the realm the client is actually
+        // registered in. keycloak.admin.client-id (telco-gateway) is a confidential client defined
+        // in the target realm (see infra/docker/keycloak/realm/realm-export.json), not the Keycloak
+        // "master" realm - posting to /realms/master previously always returned 401 invalid_client
+        // against a real Keycloak server (confirmed live), which every KeycloakAdminClient call
+        // (createUser, assignRealmRoles, removeRealmRoles, disableUser, setCustomerIdAttribute)
+        // depends on. This had never been exercised against a live Keycloak container before Feature
+        // 14.4's end-to-end verification - identity-service's own tests mock KeycloakAdminClient and
+        // the acceptance suite only ever used pre-seeded realm users, never POST /api/v1/users.
         Map<String, Object> response = RestClient.create()
                 .post()
-                .uri(serverUrl + "/realms/master/protocol/openid-connect/token")
+                .uri(serverUrl + "/realms/" + realm + "/protocol/openid-connect/token")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(formBody)
                 .retrieve()

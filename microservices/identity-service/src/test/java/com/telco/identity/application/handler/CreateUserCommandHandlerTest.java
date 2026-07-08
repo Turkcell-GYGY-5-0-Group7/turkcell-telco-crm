@@ -41,15 +41,30 @@ class CreateUserCommandHandlerTest {
 
     @Test
     void provisionsUserActivatesAndPublishesEvent() {
-        when(keycloakAdminClient.createUser("alice", "alice@example.com")).thenReturn("kc-alice-123");
+        when(keycloakAdminClient.createUser("alice", "alice@example.com", "Alice", "Doe", null))
+                .thenReturn("kc-alice-123");
         when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        UserResponse response = handler.handle(new CreateUserCommand("alice", "alice@example.com"));
+        UserResponse response =
+                handler.handle(new CreateUserCommand("alice", "alice@example.com", "Alice", "Doe", null));
 
         assertThat(response.username()).isEqualTo("alice");
         assertThat(response.email()).isEqualTo("alice@example.com");
         assertThat(response.status()).isEqualTo("ACTIVE");
         verify(outboxService).publish(eq("user"), any(), eq("user.created.v1"), any());
         verify(auditLogWriter).log(eq("USER_CREATED"), eq("User"), any(), any());
+    }
+
+    @Test
+    void provisionsUserWithInitialPasswordForwardsItToKeycloak() {
+        when(keycloakAdminClient.createUser("bob", "bob@example.com", "Bob", "Smith", "S3curePass!"))
+                .thenReturn("kc-bob-456");
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UserResponse response = handler.handle(
+                new CreateUserCommand("bob", "bob@example.com", "Bob", "Smith", "S3curePass!"));
+
+        assertThat(response.username()).isEqualTo("bob");
+        verify(keycloakAdminClient).createUser("bob", "bob@example.com", "Bob", "Smith", "S3curePass!");
     }
 }

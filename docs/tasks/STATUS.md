@@ -14,7 +14,384 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-04 (Sprint 14, task 14.1.1 acceptance E2E moved from TODO to IN PROGRESS: Docker
+Last updated: 2026-07-08 (Sprint 14, task 14.4 Identity-to-Customer Linkage: **DONE**. Sprint 14 is
+now **5/5, DONE**.
+
+Correction first: the immediately-prior entry below described the remaining blocker as the Keycloak
+User Profile `unmanagedAttributePolicy` gap; that was already resolved earlier the same day (declaring
+`customer_id` as an explicit, admin-only managed attribute) and was stale by the time this entry was
+written. The actual remaining blocker, once that fix was in place, was narrower: every
+identity-service-created user permanently failed ROPC login (`invalid_grant`/
+`resolve_required_actions`, "Account is not fully set up"). Root-caused to a real, previously-unknown
+defect in `KeycloakAdminRestClient.createUser`: it never sent `firstName`/`lastName` (both required by
+the realm's declarative Keycloak User Profile for the account-holder's own context) or
+`emailVerified: true`, silently triggering Keycloak's `VERIFY_PROFILE`/`VERIFY_EMAIL` required-action
+checks - which block the Resource Owner Password Credentials grant outright and never necessarily show
+up in a `requiredActions` read taken beforehand. Confirmed live by patching a stuck account's profile
+fields with no other change and watching its next login succeed immediately. **Fixed in code, not
+realm config:** `CreateUserCommand` gained mandatory `firstName`/`lastName` and an optional `password`
+field; `KeycloakAdminClient`/`KeycloakAdminRestClient.createUser` now sends both plus
+`emailVerified: true` and can set a non-temporary initial password via a dedicated `reset-password`
+call. Regression-tested; identity-service suite 39/39 green. A second, adjacent real bug found while
+completing the proof: `subscription-service`'s single-subscription-by-id read
+(`GetSubscriptionQueryHandler`) had never received the identity-to-customer linkage fix its sibling
+by-customer-list query already had (still compared the raw JWT subject, not the resolved `customerId`
+claim) - fixed identically, new test added, subscription-service suite 72/72 green. Completed the full
+live-stack proof with a fresh, real, admin-API-provisioned SUBSCRIBER: created with the new
+`password`/`firstName`/`lastName` fields -> logged in on the first attempt -> self-registered a
+customer -> confirmed the local `identity_db` link, the Keycloak `customer_id` attribute, and a fresh
+JWT's `customerId` claim (decoded claim values only, never the raw token) -> confirmed all six
+previously-ADMIN-gated reads (subscriptions, invoices, quota, usage-history, tickets, notifications)
+now succeed with the subscriber's own token -> confirmed a second, different, unlinked subscriber is
+denied all six. Removed the acceptance suite's ADMIN-token workaround for these reads (new
+`SelfServiceSubscriber`/`JwtClaims` support classes; `OnboardingSteps` and all three `AcceptanceIT`
+classes updated); full acceptance suite green across repeated runs
+(`mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify`), surviving the documented
+~10% mock-PSP flake on retry. Full detail, including an honest disclosure of one procedural misstep
+(a redundant, not-newly-destructive password reset during root-cause investigation) and an
+incidental environment-hygiene fix (a stale, exhaustible MSISDN-block assertion loosened to the
+general Turkish mobile-number shape):
+[14.1.1-identity-linkage-gap-ruling.md](sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md)
+Step 8. **Sprint 14 rollup: 5 of 5 features DONE. Sprint 14 is DONE.**
+
+Prior update, 2026-07-08 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: tech-lead's
+final sign-off delivered - Feature 14.5 is now **DONE**. Resolved both open findings from
+code-review's phase-8 pass: (1) MEDIUM - `platform/platform-event-contracts/src/main/avro/
+invoice-generated.avsc`'s `subscriptionId` field `doc` string corrected in place (JSON validity and
+`mvn generate-sources -Dschema.registry.skip=true` re-verified green) to state the real reason it
+stays nullable: always populated by the real producer (`BillRunBatchProcessor`), kept nullable
+purely because a live Schema-Registry BACKWARD-compatibility check already rejected tightening it
+(evidenced earlier in the tracking doc) - not the untrue "account-level invoices" business claim
+the field previously carried; a real future tightening requires `invoice.generated.v2`, not a v1
+mutation. (2) LOW/escalation - ruled `platform-event-contracts` as a direct (non-starter) test-scope
+dependency across 10 services does NOT violate ADR-018: read ADR-018 directly (not just
+code-review's framing) and found the Dependency Rule targets runtime-infrastructure coupling
+(business logic, bean wiring, `AutoConfiguration`) that a service would otherwise reimplement or
+hand-configure, not pure contract/schema-definition modules with zero `AutoConfiguration` and no
+injected runtime behavior - meaningfully different in kind from `platform-core`. This also ratifies
+an already-existing, pre-14.5 pattern (4 services depended on it directly before this feature, 2 of
+them at compile/production scope, never previously flagged). Amended ADR-018 in place
+(`architecture/adr/ADR-018-platform-starter-dependency-model.md`, new "Amendment (2026-07-08)"
+section) with an explicit, bounded carve-out scoped to `platform-event-contracts` specifically -
+`platform-core`/`platform-autoconfigure`/other internal modules remain fully subject to the
+unscoped rule - so this does not get re-litigated by a future agent. Final determination: with
+638/638 reactor tests green (phase 7), the acceptance suite's one failure independently root-caused
+to a pre-existing, out-of-scope MSISDN-pool-exhaustion artifact (not a Feature 14.5 regression), and
+code-review's APPROVE verdict with both findings now closed, **Feature 14.5 is DONE**. Full detail:
+[14.5-avro-schema-governance-ruling.md](sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md),
+"Tech-lead final sign-off" section. **Sprint 14 rollup: 4 of 5 features DONE (14.1/14.2/14.3/14.5);
+14.4 (Identity-to-Customer Linkage) remains the one open item, tracked as a narrow, precisely-scoped
+follow-up** - code-complete and individually verified per service, but a real fresh JWT actually
+carrying the `customerId` claim through a genuine self-registration was never proven end-to-end,
+blocked specifically by the realm's Keycloak User Profile `unmanagedAttributePolicy` gap (a
+persistent, security-adjacent realm-config change correctly withheld pending its own authorization) -
+see `sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md` Step 7 for the exact
+remaining scope. Sprint 14 itself stays **IN PROGRESS, 4/5**, not yet DONE, until 14.4 closes.
+
+Prior update, 2026-07-07 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: phase 8's
+devops portion complete. Point 1 (compat-test gate in CI) needed no change: confirmed, with a live
+proof (installed `platform-event-contracts` with the exact CI command, verified the test-jar artifact
+it produces, then ran identity-service's new `IdentityEventSchemaCompatTest` against exactly that
+repo - BUILD SUCCESS), that `.github/workflows/ci.yml`'s existing `microservices-test` job already
+exercises all 32 canonical schemas via the 10 rewritten `*EventSchemaCompatTest`/`*EventContractTest`
+classes on every PR to master. Point 2 (Schema Registry compatibility check in CI): found `ci.yml` has
+no live registry anywhere (unchanged, pre-existing, out of scope) but
+`.github/workflows/acceptance.yml` already stands up a real `telco-schema-registry` container for
+Debezium and was needlessly skipping the compatibility check too - flipped that one step to run it for
+real against all 33 subjects. Proved by hand (long-lived registry vs. a disposable empty one, plus a
+deliberate type-mismatch edit) that this newly-enabled check reliably catches structural/
+registrability breaks every run, but - because the registry is destroyed and recreated empty each CI
+run - cannot catch true persisted-history BACKWARD-compatibility drift; documented this residual gap
+plainly in both workflow files and the tracking doc, not silently closed or fabricated. Full detail:
+[14.5-avro-schema-governance-ruling.md](sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md),
+"Phase 8 - devops portion" section. Feature 14.5 stays **IN PROGRESS** (code-review's ADR-019-
+compliance pass and tech-lead's final sign-off remain).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: phase 7 of 8
+complete - qa ran the full reactor `mvn -f microservices/pom.xml verify`: **BUILD SUCCESS**, all 18
+modules, 638 tests, 0 failures/errors, including all 32 rewritten/new `*EventSchemaCompatTest`/
+`*EventContractTest` classes from phase 6. Ran the acceptance suite against the already-running live
+stack: AC-01 compensation path, AC-02, and AC-03 all passed; AC-01's happy path failed on an MSISDN
+regex mismatch, root-caused to a pre-existing, out-of-scope MSISDN-pool-exhaustion artifact in this
+session's long-lived stack (a live, out-of-migration DB top-up block), independently confirmed
+unrelated to any Feature 14.5 change and flagged for devops/domain-engineer separately - not a
+regression from phases 1-6. Added the two missing `user.created.v1`/`user.deleted.v1` rows to
+`docs/architecture/event-catalog.md`'s Section 2 event registry and a new Section 6 "Schema
+Governance Reconciliation Log" documenting all of phases 3-6's schema changes. Fixed
+notification-service's `DomainEventNotificationConsumerTest` to reference real, legitimately-
+unhandled event names (`subscription.suspended.v1`, `customer.updated.v1`) instead of the two
+fictional event-type strings flagged during phase 5. Full detail:
+[14.5-avro-schema-governance-ruling.md](sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md),
+"Phase 7" section. Feature 14.5 stays **IN PROGRESS** (phase 8 remains: devops/code-review/tech-lead
+close-out).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: phase 6 of 8
+complete - event-integration extended every `*EventSchemaCompatTest`/`*EventContractTest` from a
+field-name-only check to a type-and-nullability-aware one (new shared `AvroContractAssertions`,
+packaged as `platform-event-contracts`'s test-jar) and re-pointed all of them at the canonical schema
+in `platform-event-contracts` (loaded from the Avro-generated class's embedded `Schema`), not each
+service's local `src/test/resources/avro/*.avsc` copy (now deleted). All 32 canonical schemas across
+10 test classes in 10 services are covered, including a brand-new `IdentityEventSchemaCompatTest`
+(identity-service had none before) and a newly-added 5th case for usage-service's consumed
+`cdr.recorded.v1`. Proved the tooling catches real drift: deliberately retyped
+`usage-recorded.avsc`'s `recordedAt` from `string` to `long`, confirmed `UsageEventSchemaCompatTest`
+failed with an exact field/type diagnosis, then reverted and confirmed green. `mvn verify` across all
+10 touched services and a full-reactor `mvn compile` both green. Full detail:
+[14.5-avro-schema-governance-ruling.md](sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md),
+"Phase 6" section. Feature 14.5 stays **IN PROGRESS** (phases 7-8 remain: qa's full-suite run and
+catalog update, devops/code-review/tech-lead close-out).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: phases 3-4 of 8
+complete - event-integration reconciled the 7 real-diff canonical schemas (`order-created`,
+`payment-completed`, `cdr-recorded`, `usage-aggregated`, `usage-recorded`, `quota-exceeded`,
+`quota-threshold-reached`), authored the nested `order-item.avsc` and all 14 new canonical schemas,
+registered all 14 in `platform-event-contracts/pom.xml`'s Schema Registry subjects config, and renamed
+`EventEnvelope.avsc` -> `event-envelope.avsc` (record name unchanged). Re-verifying against real Java
+source before writing caught one gap the diff spec's bullet list missed: `payment-completed.avsc` was
+missing a `customerId` field the real `PaymentCompletedEvent` actually carries - added. `mvn
+generate-sources -Dschema.registry.skip=true` is green (35 generated classes: 32 canonical events + the
+renamed envelope + nested `OrderItemPayload` + pre-existing `CdrType` enum). A live Schema Registry
+container happened to be running, so live registration was also tried: 32 of 33 real subjects register
+cleanly; `order.created.v1` cannot be validated standalone because Confluent's plugin/API parses each
+subject's `.avsc` text independently and cannot resolve the cross-file `OrderItemPayload` reference
+without either inlining it or making it its own Schema Registry subject - the latter conflicts directly
+with this ruling's explicit "no independent subject" instruction for `order-item`. Not resolved
+unilaterally; flagged for architecture/tech-lead before phase 8's live CI gate needs to cover
+`order.created.v1`. Full detail:
+[14.5-avro-schema-governance-ruling.md](sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md)
+"Phases 3 and 4 execution log". Feature 14.5 stays **IN PROGRESS** (phases 5-8 remain: domain-engineer
+per-service drift reconciliation, contract-test tooling extension, qa's full-suite run and catalog
+update, devops/code-review/tech-lead close-out).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.5 Avro Schema Governance Reconciliation: tech-lead
+ruling delivered, phase 1 of 8 complete, feature moved from not-started to **IN PROGRESS**. Auditing
+event-contract coverage as a 14.1.2 follow-up found that `platform/platform-event-contracts/src/main/
+avro/` (the canonical Avro schema directory) had drifted silently from the real JSON shape several
+already-shipping events publish, because no tooling ever cross-checked the two against each other.
+Ruled: ADR-019 governance is enforced over JSON-serialized shape, not literal Avro binary wire bytes;
+the outbox continues publishing plain JSON per ADR-009, unchanged and not reopened. Verified against
+the real codebase (every `outboxService.publish("<event>.v1", ...)` call site cross-referenced against
+the canonical schema directory, each service's own test-local `.avsc` snapshots, and
+`docs/architecture/event-catalog.md`): **14 real, production-emitted event types have no canonical
+schema at all** - `order.cancelled.v1`, `payment.failed.v1`, `payment.refunded.v1`,
+`tariff.created.v1`, `tariff.price-changed.v1`, `ticket.opened.v1`, `ticket.assigned.v1`,
+`ticket.resolved.v1`, `ticket.sla-breached.v1`, `invoice.paid.v1`, `invoice.overdue.v1`,
+`notification.dispatched.v1`, `user.created.v1`, `user.deleted.v1` - one more than first estimated
+(`user.deleted.v1` surfaced during this session's re-verification; the ruling documents this
+correction explicitly rather than silently using the higher, correct number). `EventEnvelope.avsc` is
+also being renamed to `event-envelope.avsc` to comply with the directory's kebab-case naming
+convention (Avro record name stays `EventEnvelope`, PascalCase, unaffected). ADR-019 amended in place
+(`architecture/adr/ADR-019-event-contract-and-schema-governance.md`, new "Amendment (2026-07-07)"
+section, original Decision left untouched) and a durable tracking/execution document created
+(`sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md`) with the full itemized list
+and an 8-phase execution order (architecture validates the reconciled shapes; event-integration
+promotes/authors the 14 schemas and does the rename; domain-engineer reconciles any last-mile payload
+drift per producing service; qa extends contract-test tooling and re-verifies; devops/code-review sign
+off; tech-lead closes). Only phase 1 is done - no schema files have been added, promoted, or renamed
+yet. Sprint 14 is now **IN PROGRESS, 3/5 features** (14.1/14.2/14.3 DONE, 14.4 BLOCKED, 14.5 IN
+PROGRESS).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.4 Identity-to-Customer Linkage: second capstone
+verification session, **still BLOCKED, not DONE - closer, with two real bugs found and fixed, and a
+new, deeper blocker found**. Picking up from the prior session's IAM-permission blocker (below): that
+grant (`manage-users`/`view-realm`/`view-users`/`query-users` on `telco-gateway`'s service account) was
+confirmed live and persisted into `infra/docker/keycloak/realm/realm-export.json` under explicit
+authorization, and independently re-verified this session (`POST /api/v1/users` through the gateway
+with a real admin JWT returned a genuine 201). Resuming the verification plan surfaced two further real,
+previously-undiscovered bugs, both found, fixed, unit-tested, and confirmed live against the running
+stack:
+
+1. **`CustomerController.resolveRegisteredByUserId()` misclassified every real self-service caller as
+   agent/dealer-assisted.** The check compared the caller's roles for exact equality against
+   `{SUBSCRIBER}`, but any user provisioned through `POST /api/v1/users` (identity-service's own admin
+   API - the *only* path that creates the local `users` row the linkage consumer needs) is
+   automatically also granted Keycloak's `default-roles-<realm>` composite role by the Admin API
+   (which itself expands to `offline_access`/`uma_authorization`), so the real roles claim is never
+   exactly `{SUBSCRIBER}`. Confirmed live before the fix: a freshly provisioned SUBSCRIBER's
+   `customer.registered.v1` was logged as "agent/dealer-assisted (no registeredByUserId)" every time.
+   Fixed by filtering Keycloak's own technical/default roles out before the equality check; added a
+   regression test (`CustomerIntegrationTest.subscriber_self_registration_with_keycloak_technical_roles_still_sets_registered_by_user_id`)
+   using exactly that real-token role shape; customer-service full suite 77/77 green; rebuilt/redeployed;
+   confirmed live - the local `users.customer_id` link now fires correctly.
+2. **`KeycloakAdminRestClient.setCustomerIdAttribute` used a destructive full-object PUT** that wiped
+   the user's `email`/`firstName`/`lastName` on every real invocation (Keycloak's user PUT replaces the
+   whole representation; only `attributes` was sent). Confirmed live before the fix (email/firstName/
+   lastName gone after the call). Fixed to GET-merge-PUT so existing fields survive; identity-service
+   full suite 36/36 green; rebuilt/redeployed; confirmed live - profile fields now survive the call.
+
+**New, deeper blocker found (this is the reason 14.4 is still not DONE):** even with both fixes, the
+`customer_id` attribute itself is silently dropped by Keycloak and never persists, because the realm's
+declarative User Profile has `unmanagedAttributePolicy` unset (disabled) and does not declare
+`customer_id` as a managed attribute - confirmed live (`GET users/{id}` shows no `attributes` key at
+all after the call, and a **fresh** token for the same user still carries `customerId: null`). The fix
+(set `unmanagedAttributePolicy=ADMIN_EDIT`, or explicitly declare `customer_id` in the realm's User
+Profile schema) is itself a persistent, security-relevant Keycloak realm configuration change - the
+same class of change the prior session correctly stopped for - and an attempt to apply it this session
+was independently blocked by the environment's own permission system for exactly that reason. It was
+not worked around. Because the `customerId` JWT claim still never appears for any user, steps 3d
+onward of the verification plan (six ownership reads succeeding for a real subscriber, cross-subscriber
+denial, unlinked-subscriber denial) and the acceptance suite's ADMIN-token workaround removal remain
+unprovable and were not attempted. **Feature 14.4 stays BLOCKED, not DONE** - closer than before (two
+real bugs closed, both confirmed with regression tests and live redeploys), one authorization-gated
+Keycloak realm-config change away from completion. Full detail:
+`sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md` Step 7 (continued). Sprint 14
+remains **IN PROGRESS, 3/4 features complete** (14.1/14.2/14.3 DONE, 14.4 BLOCKED).
+
+Prior update, 2026-07-07 (Sprint 14, task 14.4 Identity-to-Customer Linkage: capstone live-stack
+verification attempted, **BLOCKED, not DONE**. Rebuilt and redeployed all 8 affected services
+(api-gateway, identity-service, customer-service, subscription-service, billing-service, usage-service,
+ticket-service, notification-service), all healthy; applied the `customer-id-mapper` Keycloak protocol
+mapper live to the running `telco-keycloak` container (explicitly authorized, local-dev IdP config),
+confirmed via the Admin API. Found and fixed a real bug: `KeycloakAdminRestClient.fetchAdminToken()`
+requested its client-credentials token from Keycloak's `master` realm instead of the client's actual
+`telco-crm` realm (every call 401'd, confirmed live before/after the fix); also reconciled a genuine
+Flyway out-of-order conflict on this session's long-lived `identity_db` (new `V4` migration landed
+below the already-applied shared platform `V900` migration - applied via the Flyway CLI out of order,
+checksums verified; fresh/CI environments unaffected). Verification then surfaced a second, deeper
+pre-existing bug: `telco-gateway`'s service account (used for every `identity-service` Keycloak Admin
+API call) was never granted any `realm-management` client roles (`manage-users`, `view-realm`, etc.),
+so `identity-service`'s entire Keycloak-admin path - including this feature's own new
+`setCustomerIdAttribute` - has never functioned against a real Keycloak server in any environment, not
+just locally. A trial role grant was applied live via `kcadm` to test the fix, but the follow-up
+verification call was correctly blocked by the environment's permission policy: this session's explicit
+authorization covered only the protocol-mapper addition, not granting a client's service account
+elevated `realm-management` (IAM/RBAC) permissions - a materially different, security-relevant class of
+change that was not pre-authorized, so it was not worked around. Because the full loop cannot be proven
+without this same permission, the acceptance suite's ADMIN-token workaround for the six affected reads
+(subscriptions/invoices/quota/usage-history/tickets/notifications) was NOT removed this session - doing
+so without a proven-working linkage would silently reintroduce the exact false-negative risk 14.1.1
+exists to catch. Full detail, the exact role set needed, and next steps:
+`sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md` Step 7. Sprint 14 is
+**IN PROGRESS, 3/4 features complete** (14.1/14.2/14.3 DONE, 14.4 BLOCKED).
+
+Prior update, 2026-07-06 (Sprint 14, task 14.3.1: both prior blockers fixed and re-verified - task
+now DONE (PASS). (1) Fixed the real cache-serialization bug in product-catalog-service:
+`CacheConfig.java` switched Jackson `DefaultTyping.NON_FINAL` -> `DefaultTyping.EVERYTHING` (the
+cached DTOs are Java records, implicitly `final`, so `NON_FINAL` never wrote `@class` type metadata
+and every cache hit threw `InvalidTypeIdException`), and extended the `PolymorphicTypeValidator`
+allow-list to cover `com.telco.platform.common.api.` (the shared `PageResult<T>` envelope the
+`addons` cache also serializes - a second silent instance of the same defect). Added a real
+Testcontainers-Redis regression test proving a cache HIT round-trips
+(`ProductCatalogServiceIntegrationTest.get_tariff_twice_returns_200_on_cache_miss_and_cache_hit`,
+49/49 tests green); rebuilt the Docker image and confirmed three consecutive
+`GET /api/v1/tariffs/{code}` calls through the real gateway all return 200 with identical data
+(previously the 2nd/3rd 500'd). (2) Provisioned 30 dedicated, load-test-only SUBSCRIBER-role
+Keycloak identities (`loadtest-user-01..30@telco.local`, local-dev realm only - test infrastructure,
+not a production change) so `microservices/acceptance-tests/perf/api-latency-load-test.js` can
+round-robin one identity per VU instead of sharing a single subject across 30 VUs, which had been
+saturating the gateway's 100 req/min per-subject rate limiter (NFR-18). Re-ran the k6 script three
+times: run 1 (cold JVM/connection pools right after the redeploy) showed p95=1.64s - a cold-start
+artifact; runs 2 and 3 (steady state) were consistent at blended p95 = **193.5ms and 198.5ms**
+respectively across the full endpoint mix (successful responses only), comfortably under the 300ms
+NFR-01 target. **PASS.** Two residual, non-blocking caveats remain and are flagged for follow-up
+with their own authorization: the two ADMIN-gated reads (orders-by-customer, subscriptions-by-
+customer) still share the single seeded `admin@telco.local` identity (per the pre-existing
+ownership-linkage gap) and remain heavily rate-limited at this concurrency; and `POST /orders` sits
+right at the edge of the 300ms budget in isolation (p95=299.9ms, p99=2.2s). Full detail:
+`sprint-14-testing-and-hardening/14.3.1-api-latency-load-test-report.md`. At the time of this entry,
+Sprint 14's three originally-scoped features (14.1/14.2/14.3) were complete; a fourth feature, 14.4
+(Identity-to-Customer Linkage), was tracked separately and later found BLOCKED - see the 2026-07-07
+entry above.
+
+Prior update, 2026-07-06 (Sprint 14, task 14.3.2: bill-run throughput test DONE (PASS) - 100,000
+subscribers seeded and billed via the real mediator/`RunBillCommand` path in 6m 20.34s (380,339 ms),
+well inside the 30-minute NFR-02 target, generating exactly 100,000 invoices with zero skipped and
+zero duplicates (direct SQL `GROUP BY subscription_id, period_start HAVING COUNT(*) > 1` returned no
+rows). Tuned via a `RunBillCommandHandler`/new `BillRunBatchProcessor` split
+(`@Transactional(propagation = REQUIRES_NEW)` per batch, configurable batch-size/parallelism),
+staying inside the existing Domain Orchestration mode and outbox pattern - no architecture change, no
+outbox bypass. Folded in per tech-lead ruling: closed billing-service's tracked
+`jacoco.minCoverage=0.56` exception (57 new unit tests targeting the saga/orchestration surface -
+Kafka consumer dedup/retry branches, circuit-breaker fallbacks, subscription-lifecycle no-ops,
+query-handler access control) - LINE coverage 57.8% -> 90.6%, override removed from
+`microservices/billing-service/pom.xml`, verified passing the platform's default 70% gate
+("All coverage checks have been met"). Full detail:
+`sprint-14-testing-and-hardening/14.3.2-bill-run-throughput-report.md`.
+
+Prior update, 2026-07-06 (Sprint 14, task 14.3.1: API latency load test (k6) built and run against
+the live stack via `microservices/acceptance-tests/perf/api-latency-load-test.js`. NOT a clean PASS -
+staying IN PROGRESS/BLOCKED, reported honestly rather than marked done. Two real findings: (1) a new
+bug in `product-catalog-service`'s Redis tariff cache (`CacheConfig.java`) - Jackson
+`DefaultTyping.NON_FINAL` typing never writes `@class` for the cached DTOs (Java records, implicitly
+`final`), so every cache **hit** (not just under load - reproduced with a single request) throws
+`InvalidTypeIdException` and `GET /api/v1/tariffs/{code}` 500s after the first call; not fixed this
+session, routed to domain-engineer/platform-engineer. (2) The gateway's existing 100 req/min
+per-JWT-subject rate limiter (NFR-18) cannot be satisfied at the task's 20-50 VU target concurrency
+while only the two seeded realm identities (`subscriber@telco.local`, `admin@telco.local`) are
+available - an attempt to provision dedicated load-test identities via the Keycloak Admin REST API
+was correctly blocked by the environment's permission policy as an out-of-scope IAM change, and was
+not worked around. Real measured k6 numbers: at 30 VUs, p95 latency of genuinely-served
+(non-rate-limited) requests = 3.09s (target <300ms, FAIL); at 2 VUs (diagnostic), 584.71ms (still
+FAIL). Full detail: `sprint-14-testing-and-hardening/14.3.1-api-latency-load-test-report.md`.
+
+Prior update, 2026-07-06 (Sprint 14, task 14.1.1/14.1: security-fix confirmation run, DONE for real.
+After the prior clean sign-off below, code-review found a HIGH-severity gap in bug #7 of that run: the
+new tariff-allowance-snapshot endpoint (plus the pre-existing by-id and price-snapshot lookups) had
+been left on the public, gateway-reachable `/api/v1/tariffs/**` surface as `permitAll` instead of the
+gateway-blocked `/internal/**` surface - a real unauthenticated tariff-data-exposure gap (OWASP A01).
+tech-lead ruled it must be fixed; domain-engineer moved all three routes to a new
+`TariffInternalController` under `/internal/tariffs/**` and repointed the three callers
+(order-service, billing-service, usage-service); security signed off PASS. QA independently
+re-verified at the network layer (old public paths now 401, new `/internal/tariffs/**` routes 200
+inside the compose network but 404 through the gateway) and re-ran the full acceptance suite four
+times against the rebuilt stack: run 1 hit a genuine, pre-existing race in the suite's own
+`NewSubscriberOnboardingAcceptanceIT` (an unguarded quota assertion racing usage-service's independent
+Kafka consumer, only exposed this once by cold-start latency on the freshly restarted
+product-catalog-service's brand-new endpoint - confirmed as a timing artifact, not a functional
+regression, by an immediate clean re-run), fixed by wrapping that assertion in the same
+`await(...)` pattern the sibling welcome-SMS check already used (test-only change, no production code
+touched); run 3 (with the fix) hit the already-accepted ~10% mock-PSP flake on AC-03, confirmed via
+payment-service logs, unrelated to the security fix; run 4 was clean (4/4, 0 failures, 0 errors, 25s).
+This is the 15th real bug found this sprint (a security-severity fix, not a functional-bug), on top of
+the 14 already documented below; 14.1.1 and 14.1 close DONE for real on this evidence. Full detail:
+`sprint-14-testing-and-hardening/README.md`.
+
+Prior update, 2026-07-06 (Sprint 14, task 14.1.1: DONE. First-ever live run of
+`microservices/acceptance-tests` against a real, full `auth+platform+apps` Docker Compose stack.
+All AC-01 (incl. the activation-failure compensation path), AC-02, and AC-03 scenarios passed end to
+end through the real API gateway with real Keycloak-issued tokens - confirmed with a clean final run
+(4/4 tests, 0 failures, 0 errors, 45s). Getting there took 13 full-suite runs across this session,
+each failure traced to a genuine, distinct root cause and fixed once (never recurring after its fix).
+On top of the auth-gap, tariff-DRAFT-lifecycle, and 5-query-handler-`@Transactional` fixes already
+below, this confirmation pass found and fixed 8 further real cross-service bugs: (1) Debezium's
+outbox `EventRouter` was missing `table.expand.json.payload=true` on all 10 connectors, so every
+event in the entire platform was delivered as a double-JSON-encoded string and failed to deserialize
+in every consumer - this had silently blocked every saga since day one and was only reachable once
+the same-day fixes let a saga get this far for the first time; (2) 7 `@KafkaListener`s across
+order-service, subscription-service, and billing-service shared Kafka consumer-group IDs on the same
+topic, so Kafka's group coordinator starved all but one of every message (confirmed via partition
+assignment logs); (3) usage-service's subscription-activated consumer checked inbox dedup before the
+payload-completeness filter, letting an unrelated same-key event permanently poison quota
+provisioning; (4) 4 call sites in usage-service/billing-service called `Instant.parse()` on
+epoch-millis `long` fields instead of `Instant.ofEpochMilli()`, throwing on every real message and
+(via the same inbox-poisoning mechanism) permanently swallowing quota/billing lifecycle updates;
+(5) a genuine race condition in order-service's `FulfillOrderCommandHandler` treated a still-PENDING
+order (subscription-activated arriving before payment-confirmed, an unavoidable ordering gap between
+independent topics) as a terminal no-op instead of a transient retry case; (6) usage-service was
+missing its own `application-docker.yml` override for the product-catalog-service client URL (same
+bug class as the order-service Kafka bootstrap-servers gap); (7) usage-service's tariff-allowance
+client called an authenticated endpoint from a Kafka-consumer context with no JWT to forward (401) -
+fixed with a new tokenless `allowance-snapshot` endpoint, mirroring the established tech-lead-ruled
+pattern; (8) the suite's own `QuotaExhaustionAcceptanceIT` had a stale assertion querying a
+notification-userId gap that had already been fixed in the application. Two further findings were
+this session's sandbox artifacts, not application bugs: a Groovy version mismatch in the
+acceptance-tests module (Spring Boot 4.1's BOM silently overrides rest-assured's tested Groovy
+version, fixed in the test module's own `pom.xml`) and a transient Docker Desktop host-port-forwarding
+flake (resolved by container restart, never reproduced as an app-level defect). The only remaining
+run-to-run variance is the mock PSP's pre-existing, documented ~10% simulated-charge-failure rate
+(`OnboardingSteps` javadoc), an accepted characteristic of the system under test. Full detail:
+`sprint-14-testing-and-hardening/README.md`. 14.1 is DONE overall (14.1.1 + 14.1.2 contract tests +
+14.1.3 coverage gate), with 14.1.3's tracked, dated exceptions for identity-service (58% floor)
+expiring end of Sprint 15, and the config-server/discovery-server/web-bff zero-test loophole tracked
+as Sprint 15 debt. **billing-service's exception is now CLOSED** (see the 14.3.2 entry above: LINE
+coverage 57.8% -> 90.6%, `jacoco.minCoverage` override removed, module verified passing the platform's
+default 70% gate) - billing-service is no longer part of this tracked-exceptions list. Still
+outstanding and deliberately deferred: the
+identity-to-customer linkage gap (Feature 14.4), which is why the suite still uses an ADMIN-token
+workaround for 6 read paths (subscriptions/invoices/quota/usage/tickets/notifications) - a
+tech-lead-ruled, tracked, accepted exception, not a hidden gap.
+
+Prior update, 2026-07-04 (Sprint 14, task 14.1.1 acceptance E2E moved from TODO to IN PROGRESS: Docker
 Compose `apps` profile for all 10 domain services (incl. new `mongo` service for notification-service),
 Makefile targets, 10 real Debezium outbox connectors, new `acceptance.yml` CI workflow, and the new
 `microservices/acceptance-tests` suite (AC-01 incl. compensation, AC-02, AC-03, gateway-driven via a
@@ -42,8 +419,18 @@ for delete) as an interim measure until the linkage work resolves real ownership
 `CustomerIntegrationTest` cases pass incl. a new test proving the closure. See
 `docs/tasks/lessons.md` (2026-07-04 entries) and `sprint-14-testing-and-hardening/README.md` for full
 detail. Prior: Sprint 14 Wave A (2026-07-03) — 14.1.2 contract tests DONE (avsc-snapshot +
-provider API guards across all produced events), 14.1.3 coverage gate DONE (JaCoCo 70% line/module,
-warn-first), 14.2 Security Hardening DONE — PII-at-rest/masking/mTLS audits PASS; audit-log gaps fixed:
+provider API guards across all produced events); 14.1.3 coverage gate DONE-WITH-TRACKED-EXCEPTIONS
+(tech-lead ruling 2026-07-06): the JaCoCo gate (70% LINE/module) is now BLOCKING
+(`jacoco.haltOnFailure=true` in `microservices/pom.xml`, no longer warn-first), verified with a fresh
+green `mvn -f microservices/pom.xml verify`. Tracked exceptions ride alongside the blocking gate:
+`reference-service`/`service-template` are cleanly excluded from the `jacoco-check` goal (ADR-017,
+template/reference artifacts, not a lowered threshold); `identity-service` (58%) carries a dated
+per-module coverage floor exception expiring end of Sprint 15 (target 70%, tracked in
+`docs/tasks/sprint-14-testing-and-hardening/README.md`; `billing-service`'s equivalent 56% exception
+was closed in the 14.3.2 pass above - see top of this file); `config-server`,
+`discovery-server`, and `web-bff` have zero tests today and JaCoCo silently no-ops `check` when there
+is no exec file, so they pass the gate by default - a known, tracked Sprint 15 debt item owned by
+devops+qa, not resolved by this change. 14.2 Security Hardening DONE — PII-at-rest/masking/mTLS audits PASS; audit-log gaps fixed:
 payment-service audit stack added (V3 + AuditLog/Repository/Writer wired into charge/refund) and
 customer address handlers now audited; payment 8/8 + customer address 10/10 tests green. Sprint 13 DONE
 — OTel tracing wired (micrometer-tracing-bridge-otel + opentelemetry-exporter-otlp) with Kafka span
@@ -69,12 +456,16 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | DONE | 6/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
-| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | IN PROGRESS | 1/3 |
+| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 13 sprints DONE, 1 IN PROGRESS, 1 TODO. Features: 68 DONE / 1 IN PROGRESS
-/ 6 TODO (75 total). Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Totals (MVP, Sprints 01-15): 14 sprints DONE, 0 IN PROGRESS, 1 TODO. Features: 72 DONE / 0 IN PROGRESS
+/ 5 TODO / 0 BLOCKED (77 total; Sprint 14, task 14.4 Identity-to-Customer Linkage closed DONE on
+2026-07-08 - see the entry at the top of this file and
+`sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md` Step 8 - completing Sprint 14
+at 5/5, DONE).
+Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.

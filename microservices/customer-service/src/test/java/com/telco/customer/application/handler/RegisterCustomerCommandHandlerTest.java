@@ -9,14 +9,17 @@ import static org.mockito.Mockito.when;
 import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.RegisterCustomerCommand;
 import com.telco.customer.application.dto.CustomerResponse;
+import com.telco.customer.application.event.CustomerRegisteredV1;
 import com.telco.customer.domain.Customer;
 import com.telco.customer.domain.CustomerType;
 import com.telco.customer.infrastructure.persistence.CustomerRepository;
 import com.telco.platform.outbox.OutboxService;
 import java.time.LocalDate;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -42,7 +45,7 @@ class RegisterCustomerCommandHandlerTest {
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         RegisterCustomerCommand command = new RegisterCustomerCommand(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1));
+                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1), null);
 
         CustomerResponse response = handler.handle(command);
 
@@ -52,5 +55,37 @@ class RegisterCustomerCommandHandlerTest {
         assertThat(response.type()).isEqualTo("INDIVIDUAL");
         verify(outbox).publish(eq("customer"), any(), eq("customer.registered.v1"), any());
         verify(audit).log(eq("CUSTOMER_REGISTERED"), eq("Customer"), any(), any());
+    }
+
+    @Test
+    void selfServiceRegistrationPassesCallerUserIdThroughToEvent() {
+        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
+        String callerUserId = UUID.randomUUID().toString();
+
+        RegisterCustomerCommand command = new RegisterCustomerCommand(
+                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
+                callerUserId);
+
+        handler.handle(command);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
+        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
+        assertThat(event.registeredByUserId()).isEqualTo(callerUserId);
+    }
+
+    @Test
+    void agentAssistedRegistrationLeavesRegisteredByUserIdNullOnEvent() {
+        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        RegisterCustomerCommand command = new RegisterCustomerCommand(
+                CustomerType.INDIVIDUAL, "Grace", "Hopper", "10000000146", LocalDate.of(1990, 1, 1), null);
+
+        handler.handle(command);
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
+        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
+        assertThat(event.registeredByUserId()).isNull();
     }
 }

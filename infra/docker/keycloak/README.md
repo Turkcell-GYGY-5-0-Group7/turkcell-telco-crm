@@ -40,6 +40,13 @@ Demo users (password = the obvious value, local only):
 | `agent@telco.local` | `agent` | CALL_CENTER_AGENT |
 | `subscriber@telco.local` | `subscriber` | SUBSCRIBER |
 
+In addition, `loadtest-user-01@telco.local` through `loadtest-user-30@telco.local` (password
+`loadtest`, role SUBSCRIBER) are seeded for k6/perf load-test runs only (task 14.3.1). The gateway's
+per-JWT-subject rate limiter is 100 req/min; a single seeded identity cannot sustain 20-50 VU load
+test concurrency, so the load-test suite round-robins its virtual users across this pool of
+identities instead. These are test-infrastructure identities, not application users - do not use
+them in acceptance/functional test scenarios that assert on a specific persona's data.
+
 ## Get a token (password grant, for local testing)
 
 ```bash

@@ -4,6 +4,8 @@ spring:
     url: jdbc:postgresql://localhost:5432/identity_db
     username: identity
     password: identity
+  kafka:
+    bootstrap-servers: localhost:29092
 
 # Keycloak Admin API: identity-service uses client-credentials via telco-gateway to provision users.
 keycloak:

@@ -24,7 +24,8 @@ public class GetSubscriptionsByCustomerQueryHandler
     @Override
     public PageResult<SubscriptionResponse> handle(GetSubscriptionsByCustomerQuery query) {
         if (!query.callerIsAdmin()
-                && !query.customerId().toString().equals(query.callerUserId())) {
+                && (query.callerCustomerId() == null
+                        || !query.callerCustomerId().equals(query.customerId().toString()))) {
             throw new AccessDeniedException("Cannot list subscriptions for another customer");
         }
 

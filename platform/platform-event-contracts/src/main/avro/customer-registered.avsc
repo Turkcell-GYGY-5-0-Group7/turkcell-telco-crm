@@ -32,6 +32,12 @@
         "logicalType": "timestamp-millis"
       },
       "doc": "Instant the customer was registered, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "registeredByUserId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Keycloak subject of the caller, set only for genuine self-service registration; null for agent/dealer-assisted registration."
     }
   ]
 }

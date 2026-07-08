@@ -43,9 +43,23 @@ class GatewayAuthenticationIntegrationTest {
         mockMvc.perform(get("/api/v1/echo")
                         .with(jwt().jwt(token -> token
                                 .subject("user-9")
-                                .claim("roles", List.of("ADMIN", "SUBSCRIBER")))))
+                                .claim("roles", List.of("ADMIN", "SUBSCRIBER"))
+                                .claim("customerId", "customer-42"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.userId").value("user-9"))
-                .andExpect(jsonPath("$.roles").value("ADMIN,SUBSCRIBER"));
+                .andExpect(jsonPath("$.roles").value("ADMIN,SUBSCRIBER"))
+                .andExpect(jsonPath("$.customerId").value("customer-42"));
+    }
+
+    @Test
+    void tokenWithoutCustomerIdClaimOmitsCustomerIdHeaderEvenIfSpoofed() throws Exception {
+        mockMvc.perform(get("/api/v1/echo")
+                        .header("X-Customer-Id", "spoofed-customer")
+                        .with(jwt().jwt(token -> token
+                                .subject("user-9")
+                                .claim("roles", List.of("SUBSCRIBER")))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value("user-9"))
+                .andExpect(jsonPath("$.customerId").doesNotExist());
     }
 }

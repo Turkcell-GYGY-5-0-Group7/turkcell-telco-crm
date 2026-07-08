@@ -16,8 +16,16 @@ spring:
       ddl-auto: none
     open-in-view: false
   flyway:
-    # Service migrations + platform migrations (outbox V900). ADR-016.
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
     locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: identity-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      max-poll-records: 500
 
 security:
   oauth2:
@@ -37,4 +45,6 @@ telco:
       correlation:
         enabled: true
     outbox:
+      enabled: true
+    inbox:
       enabled: true

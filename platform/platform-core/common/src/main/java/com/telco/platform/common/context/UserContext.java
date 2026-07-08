@@ -5,13 +5,15 @@ import java.util.Set;
 /**
  * Immutable view of the authenticated principal for the current request.
  *
- * @param userId   stable user identifier; null for anonymous
- * @param roles    granted roles; never null
- * @param tenantId owning tenant; null when not tenant-scoped
+ * @param userId     stable user identifier; null for anonymous
+ * @param roles      granted roles; never null
+ * @param tenantId   owning tenant; null when not tenant-scoped
+ * @param customerId resolved customer-service {@code customerId} linked to this identity
+ *                   (identity-to-customer linkage, ADR-011); null when not yet linked or resolved
  */
-public record UserContext(String userId, Set<String> roles, String tenantId) {
+public record UserContext(String userId, Set<String> roles, String tenantId, String customerId) {
 
-    private static final UserContext ANONYMOUS = new UserContext(null, Set.of(), null);
+    private static final UserContext ANONYMOUS = new UserContext(null, Set.of(), null, null);
 
     public UserContext {
         roles = roles == null ? Set.of() : Set.copyOf(roles);

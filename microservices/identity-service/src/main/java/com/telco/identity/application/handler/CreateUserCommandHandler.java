@@ -43,7 +43,8 @@ public class CreateUserCommandHandler implements CommandHandler<CreateUserComman
 
     @Override
     public UserResponse handle(CreateUserCommand command) {
-        String keycloakId = keycloakAdminClient.createUser(command.username(), command.email());
+        String keycloakId = keycloakAdminClient.createUser(command.username(), command.email(),
+                command.firstName(), command.lastName(), command.password());
 
         User user = User.provision(keycloakId, command.username(), command.email());
         user.activate();

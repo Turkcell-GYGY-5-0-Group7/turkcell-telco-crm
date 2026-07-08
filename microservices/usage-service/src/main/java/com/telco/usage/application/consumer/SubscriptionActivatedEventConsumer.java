@@ -53,20 +53,37 @@ public class SubscriptionActivatedEventConsumer {
             SubscriptionActivatedPayload payload =
                     objectMapper.readValue(record.value(), SubscriptionActivatedPayload.class);
 
+            // Type/completeness filter FIRST, before touching the inbox: subscription.events
+            // carries every subscription-aggregate event (msisdn.allocated.v1,
+            // subscription.activation-failed.v1, subscription.suspended.v1, etc.), and Debezium's
+            // outbox EventRouter sets the Kafka record KEY to the aggregate_id (subscriptionId) for
+            // ALL of them - the same key subscription.activated.v1 carries for the same aggregate.
+            // Calling inboxService.firstSeen(messageId, ...) before this check would let an earlier,
+            // unrelated event for the same subscriptionId (e.g. msisdn.allocated.v1, which has no
+            // tariffCode) permanently consume the dedup slot, so the real activation event is then
+            // wrongly treated as a "duplicate" and quota is never provisioned. Matches the
+            // (correctly ordered) sibling consumer, billing-service's
+            // SubscriptionActivatedBillingConsumer.
+            if (payload.subscriptionId() == null || payload.customerId() == null
+                    || payload.tariffCode() == null) {
+                LOGGER.debug("Ignoring non-activation subscription event messageId={}", messageId);
+                return;
+            }
+
             if (!inboxService.firstSeen(messageId, CONSUMER_NAME)) {
                 LOGGER.info("Skipping duplicate subscription.activated.v1 messageId={}", messageId);
                 return;
             }
 
-            if (payload.subscriptionId() == null || payload.customerId() == null
-                    || payload.tariffCode() == null) {
-                LOGGER.warn("Ignoring incomplete subscription.activated.v1 payload messageId={}",
-                        messageId);
-                return;
-            }
-
+            // activatedAt is published as epoch millis (subscription-service SubscriptionActivatedV1,
+            // a long, matching the Avro timestamp-millis contract) - NOT an ISO-8601 string. Using
+            // Instant.parse(...) here (bug found via live acceptance testing, 2026-07-06) threw
+            // DateTimeParseException on every real message ("Text '1783...' could not be parsed at
+            // index 0"), and since the inbox row is marked seen before this line runs, every Kafka
+            // redelivery retry after the crash was then silently swallowed as a "duplicate" - quota
+            // was never provisioned for any subscription, ever, in this environment.
             Instant activatedAt = payload.activatedAt() != null
-                    ? Instant.parse(payload.activatedAt())
+                    ? Instant.ofEpochMilli(payload.activatedAt())
                     : Instant.now();
 
             ProvisionQuotaCommand command = new ProvisionQuotaCommand(
@@ -92,7 +109,7 @@ public class SubscriptionActivatedEventConsumer {
             String subscriptionId,
             String customerId,
             String tariffCode,
-            String activatedAt
+            Long activatedAt
     ) {
     }
 }

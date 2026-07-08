@@ -32,6 +32,15 @@ import java.util.UUID;
  * redelivery of the same message ATOMICALLY inside the handler transaction (tech-lead ruling 2a/2b);
  * (2) the handler is check-then-act - it only confirms a PENDING order, so an already-CONFIRMED (or
  * further) order is a no-op even if the dedup key changes.
+ *
+ * <p><b>Distinct consumer group (bug found via live acceptance testing, 2026-07-06):</b> this
+ * listener and {@link PaymentRefundedEventConsumer} both read {@code payment.events}, and both
+ * previously used the shared {@code groupId="order-service"}. Two @KafkaListener members of the SAME
+ * consumer group compete for the topic's partition(s): Kafka's group coordinator hands the (single,
+ * dev-sized) partition to exactly one member, permanently starving the other of every message on the
+ * topic - not just the event types it does not care about. Each consumer here filters internally by
+ * {@code eventType} and is meant to see every message independently (fan-out, not competing
+ * consumption), so each now gets its own dedicated group id.
  */
 @Component
 public class PaymentCompletedEventConsumer {
@@ -49,7 +58,7 @@ public class PaymentCompletedEventConsumer {
         this.objectMapper = objectMapper;
     }
 
-    @KafkaListener(topics = "payment.events", groupId = "order-service",
+    @KafkaListener(topics = "payment.events", groupId = "order-service-payment-completed",
                    containerFactory = "kafkaListenerContainerFactory")
     public void onPaymentCompleted(ConsumerRecord<String, String> record) {
         String messageId = record.key() != null ? record.key() : "fallback-" + record.offset();

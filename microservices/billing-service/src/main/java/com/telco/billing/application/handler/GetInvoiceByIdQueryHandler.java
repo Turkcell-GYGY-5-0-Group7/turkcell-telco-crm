@@ -26,7 +26,8 @@ public class GetInvoiceByIdQueryHandler implements QueryHandler<GetInvoiceByIdQu
                 .orElseThrow(() -> new ResourceNotFoundException("Invoice not found: " + query.invoiceId()));
 
         if (!query.callerIsAdmin()
-                && !invoice.getCustomerId().toString().equals(query.callerUserId())) {
+                && (query.callerCustomerId() == null
+                        || !query.callerCustomerId().equals(invoice.getCustomerId().toString()))) {
             throw new AccessDeniedException("Invoice does not belong to caller");
         }
 

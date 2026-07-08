@@ -6,6 +6,8 @@ spring:
     url: jdbc:postgresql://postgres:5432/identity_db
     username: identity
     password: identity
+  kafka:
+    bootstrap-servers: kafka:9092
 
 security:
   oauth2:

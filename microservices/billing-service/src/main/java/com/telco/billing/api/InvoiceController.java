@@ -6,6 +6,7 @@ import com.telco.billing.application.query.GetInvoicePdfQuery;
 import com.telco.billing.application.query.GetInvoicesQuery;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.api.PageResult;
+import com.telco.platform.common.context.CurrentUserProvider;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import org.springframework.http.HttpHeaders;
@@ -27,10 +28,13 @@ class InvoiceController {
 
     private final Mediator mediator;
     private final ApiResponseFactory responses;
+    private final CurrentUserProvider currentUserProvider;
 
-    InvoiceController(Mediator mediator, ApiResponseFactory responses) {
+    InvoiceController(Mediator mediator, ApiResponseFactory responses,
+                      CurrentUserProvider currentUserProvider) {
         this.mediator = mediator;
         this.responses = responses;
+        this.currentUserProvider = currentUserProvider;
     }
 
     @GetMapping
@@ -41,14 +45,16 @@ class InvoiceController {
             @RequestParam(defaultValue = "20") int size,
             Authentication authentication) {
         return responses.ok(mediator.query(new GetInvoicesQuery(
-                customerId, page, size, authentication.getName(), isAdmin(authentication))));
+                customerId, page, size, authentication.getName(), isAdmin(authentication),
+                currentUserProvider.currentUser().customerId())));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     ApiResult<InvoiceResponse> getInvoice(@PathVariable UUID id, Authentication authentication) {
         return responses.ok(mediator.query(new GetInvoiceByIdQuery(
-                id, authentication.getName(), isAdmin(authentication))));
+                id, authentication.getName(), isAdmin(authentication),
+                currentUserProvider.currentUser().customerId())));
     }
 
     // Binary PDF download: ResponseEntity<byte[]> is the correct return type for file streams;
@@ -57,7 +63,8 @@ class InvoiceController {
     @PreAuthorize("hasRole('SUBSCRIBER') or hasRole('ADMIN')")
     ResponseEntity<byte[]> getInvoicePdf(@PathVariable UUID id, Authentication authentication) {
         byte[] pdf = mediator.query(new GetInvoicePdfQuery(
-                id, authentication.getName(), isAdmin(authentication)));
+                id, authentication.getName(), isAdmin(authentication),
+                currentUserProvider.currentUser().customerId()));
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"invoice-" + id + ".pdf\"")
                 .contentType(MediaType.APPLICATION_PDF)

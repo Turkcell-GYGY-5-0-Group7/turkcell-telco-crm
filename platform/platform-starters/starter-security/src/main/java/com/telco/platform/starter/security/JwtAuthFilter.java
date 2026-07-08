@@ -69,7 +69,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
         String rolesHeader = request.getHeader(properties.getGatewayTrust().getRolesHeader());
         Set<String> roles = parseRoles(rolesHeader);
-        return new UserContext(userId, roles, null);
+        String customerIdHeader = request.getHeader(properties.getGatewayTrust().getCustomerIdHeader());
+        String customerId = StringUtils.hasText(customerIdHeader) ? customerIdHeader : null;
+        return new UserContext(userId, roles, null, customerId);
     }
 
     private UserContext fromBearerToken(HttpServletRequest request) {
@@ -80,7 +82,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = header.substring(BEARER_PREFIX.length());
         try {
             Claims claims = jwtService.parse(token);
-            return new UserContext(claims.getSubject(), jwtService.roles(claims), null);
+            String customerId = claims.get("customerId", String.class);
+            return new UserContext(claims.getSubject(), jwtService.roles(claims), null, customerId);
         } catch (RuntimeException ex) {
             LOGGER.debug("Rejecting invalid JWT: {}", ex.getMessage());
             return null;

@@ -17,10 +17,12 @@ class EchoController {
 
     @GetMapping("/api/v1/echo")
     Map<String, String> echo(@RequestHeader(value = "X-User-Id", required = false) String userId,
-                             @RequestHeader(value = "X-User-Roles", required = false) String roles) {
+                             @RequestHeader(value = "X-User-Roles", required = false) String roles,
+                             @RequestHeader(value = "X-Customer-Id", required = false) String customerId) {
         Map<String, String> body = new HashMap<>();
         body.put("userId", userId);
         body.put("roles", roles);
+        body.put("customerId", customerId);
         return body;
     }
 }

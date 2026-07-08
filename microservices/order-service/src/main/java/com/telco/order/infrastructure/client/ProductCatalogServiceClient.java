@@ -17,6 +17,12 @@ import java.util.UUID;
 /**
  * HTTP client for product-catalog-service. Uses Spring's {@link RestClient} with a Resilience4j
  * {@link CircuitBreaker} for fault tolerance.
+ *
+ * <p>Targets {@code GET /internal/tariffs/{tariffId}}, a tokenless internal lookup by primary
+ * key (no JWT): {@code CatalogSecurityConfig} permits {@code /internal/**} explicitly, and the
+ * gateway excludes {@code /internal/**} from public traffic (network-perimeter trust, tech-lead
+ * ruling 2026-07-06, tariff endpoint internal-surface fix) - tariff data carries no PII and this
+ * client sends no token.
  */
 @Component
 public class ProductCatalogServiceClient {
@@ -43,7 +49,7 @@ public class ProductCatalogServiceClient {
         try {
             return CircuitBreaker.decorateCallable(circuitBreaker, () -> {
                 ApiResult<TariffClientResponse> result = restClient.get()
-                        .uri("/api/v1/tariffs/by-id/{tariffId}", tariffId)
+                        .uri("/internal/tariffs/{tariffId}", tariffId)
                         .retrieve()
                         .body(RESPONSE_TYPE);
                 if (result == null || !result.success()) {

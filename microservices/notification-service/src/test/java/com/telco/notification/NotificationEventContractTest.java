@@ -1,13 +1,11 @@
 package com.telco.notification;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.telco.notification.channel.ChannelAdapter;
 import com.telco.notification.domain.NotificationTemplate;
@@ -15,14 +13,12 @@ import com.telco.notification.infrastructure.persistence.CommunicationPreference
 import com.telco.notification.infrastructure.persistence.NotificationRepository;
 import com.telco.notification.infrastructure.persistence.NotificationTemplateRepository;
 import com.telco.notification.service.NotificationService;
+import com.telco.platform.events.testsupport.AvroContractAssertions;
 import com.telco.platform.outbox.OutboxService;
-import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import org.apache.avro.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,14 +27,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 /**
- * Event-schema contract gate for {@code notification.dispatched.v1} (feature 14.1.2, ADR-019, NFR-16).
+ * Event-schema contract gate for {@code notification.dispatched.v1} (feature 14.1.2, ADR-019, NFR-16;
+ * extended feature 14.5 phase 6).
  *
  * <p>notification-service builds its outbox payload inline as {@code Map.of(...)} rather than a typed
  * record. This test drives {@link NotificationService#dispatch} with Mockito mocks, captures the
- * actual payload passed to {@link OutboxService#publish}, and compares its key set field-for-field
- * against the frozen Avro snapshot under {@code src/test/resources/avro/}. A removed, renamed, or
- * added key fails the build, blocking a backward-incompatible change. No Kafka, Schema Registry, or
- * Spring context is booted.
+ * actual payload passed to {@link OutboxService#publish}, and compares its keys, runtime value types,
+ * and observed nullness <b>against the canonical Avro schema loaded directly from
+ * {@code platform-event-contracts}</b> (not a hand-copied local {@code .avsc} snapshot). A removed,
+ * renamed, retyped, or added key fails the build, blocking a backward-incompatible change. No Kafka,
+ * Schema Registry, or Spring context is booted.
  */
 @ExtendWith(MockitoExtension.class)
 class NotificationEventContractTest {
@@ -79,22 +77,9 @@ class NotificationEventContractTest {
                 payload.capture());
 
         Map<String, Object> asMap = MAPPER.convertValue(payload.getValue(), new TypeReference<>() {});
-        assertThat(asMap.keySet())
-                .as("emitted notification.dispatched.v1 payload keys must equal the frozen contract; "
-                        + "a removed/renamed/added key is a backward-incompatible change (NFR-16)")
-                .containsExactlyInAnyOrderElementsOf(avroFieldNames("avro/notification-dispatched.avsc"));
-    }
 
-    private static Set<String> avroFieldNames(String classpathPath) {
-        try (InputStream in = Thread.currentThread().getContextClassLoader()
-                .getResourceAsStream(classpathPath)) {
-            assertThat(in).as("schema resource not found: %s", classpathPath).isNotNull();
-            JsonNode root = MAPPER.readTree(in);
-            return StreamSupport.stream(root.get("fields").spliterator(), false)
-                    .map(n -> n.get("name").asText())
-                    .collect(Collectors.toSet());
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        Schema schema = AvroContractAssertions.canonicalSchema(
+                "com.telco.platform.events.notification.NotificationDispatchedV1");
+        AvroContractAssertions.assertPayloadMatchesSchema(schema, asMap);
     }
 }

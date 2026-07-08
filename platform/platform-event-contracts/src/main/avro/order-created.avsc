@@ -15,6 +15,46 @@
       "doc": "Identifier of the customer who placed the order."
     },
     {
+      "name": "items",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "OrderItemPayload",
+          "namespace": "com.telco.platform.events.order",
+          "doc": "Nested line-item snapshot embedded in order.created.v1's items array. Not an independent Kafka-registered subject.",
+          "fields": [
+            {
+              "name": "tariffId",
+              "type": "string",
+              "doc": "Identifier of the tariff ordered."
+            },
+            {
+              "name": "tariffName",
+              "type": "string",
+              "doc": "Tariff name at order time."
+            },
+            {
+              "name": "unitPrice",
+              "type": {
+                "type": "bytes",
+                "logicalType": "decimal",
+                "precision": 19,
+                "scale": 4
+              },
+              "doc": "Unit price as an exact decimal (precision 19, scale 4)."
+            },
+            {
+              "name": "quantity",
+              "type": "int",
+              "doc": "Quantity ordered."
+            }
+          ]
+        }
+      },
+      "doc": "Snapshot of the ordered line items."
+    },
+    {
       "name": "totalAmount",
       "type": {
         "type": "bytes",
@@ -22,20 +62,17 @@
         "precision": 19,
         "scale": 4
       },
-      "doc": "Order total as an exact decimal (precision 19, scale 4). Always paired with currency."
+      "doc": "Order total as an exact decimal (precision 19, scale 4)."
     },
     {
-      "name": "currency",
+      "name": "idempotencyKey",
       "type": "string",
-      "doc": "ISO 4217 currency code for totalAmount, for example TRY."
+      "doc": "Idempotency key supplied on order creation, used for inbox/dedup on downstream consumers."
     },
     {
-      "name": "createdAt",
-      "type": {
-        "type": "long",
-        "logicalType": "timestamp-millis"
-      },
-      "doc": "Instant the order was created, in epoch milliseconds (UTC)."
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the order was created, ISO-8601 (UTC)."
     }
   ]
 }

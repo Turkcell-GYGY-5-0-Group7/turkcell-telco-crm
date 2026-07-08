@@ -1,66 +1,36 @@
 package com.telco.subscription;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.InputStream;
-import java.lang.reflect.RecordComponent;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
+import com.telco.platform.events.testsupport.AvroContractAssertions;
+import org.apache.avro.Schema;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * Schema-compatibility gate for the MSISDN events (feature 9.2.2, ADR-019).
+ * Schema-compatibility gate for the MSISDN events (feature 9.2.2, ADR-019; extended feature 14.5
+ * phase 6).
  *
- * <p>Verifies that each canonical Avro schema (snapshotted in {@code src/test/resources/avro/}) maps
- * field-for-field AND in declaration order to the corresponding Java record under
- * {@code com.telco.subscription.application.event}. Fails the build if the hand-written records drift
- * from the published contracts, catching mistakes before they reach Schema Registry. Mirrors
- * customer-service's CustomerEventSchemaCompatTest, with an added order assertion because the outbox
- * payload and the Avro serializer must agree on field order.
+ * <p>Verifies that each canonical Avro schema -- loaded directly from the Avro-generated class in
+ * {@code platform-event-contracts}, not a hand-copied local {@code .avsc} snapshot -- matches
+ * field-for-field <b>and type-for-type, with nullability checked in both directions</b>, the
+ * corresponding Java record under {@code com.telco.subscription.application.event}. Fails the build
+ * if the hand-written records drift from the published contracts, catching mistakes before they reach
+ * Schema Registry. Mirrors {@link SubscriptionEventSchemaCompatTest}.
  *
  * <p>Pure unit test: no Spring context, no database, no containers.
  */
 class MsisdnEventSchemaCompatTest {
 
     private static final String EVENT_PACKAGE = "com.telco.subscription.application.event";
-    private final ObjectMapper mapper = new ObjectMapper();
+    private static final String CANONICAL_PACKAGE = "com.telco.platform.events.subscription";
 
     @ParameterizedTest(name = "{0}")
     @ValueSource(strings = {
-            "avro/msisdn-allocated.avsc",
-            "avro/msisdn-released.avsc"
+            "MsisdnAllocatedV1",
+            "MsisdnReleasedV1"
     })
-    void java_record_matches_avro_fields_in_order(String schemaResource) throws Exception {
-        InputStream stream = getClass().getClassLoader().getResourceAsStream(schemaResource);
-        assertThat(stream)
-                .as("schema resource not found on classpath: %s", schemaResource)
-                .isNotNull();
-
-        JsonNode schema = mapper.readTree(stream);
-        String avroName = schema.get("name").asText();
-
+    void java_record_matches_avro_schema(String avroName) throws Exception {
+        Schema schema = AvroContractAssertions.canonicalSchema(CANONICAL_PACKAGE + "." + avroName);
         Class<?> recordClass = Class.forName(EVENT_PACKAGE + "." + avroName);
-        assertThat(recordClass.isRecord())
-                .as("%s must be a Java record", avroName)
-                .isTrue();
-
-        List<String> javaFields = Arrays.stream(recordClass.getRecordComponents())
-                .map(RecordComponent::getName)
-                .toList();
-
-        List<String> avroFields = StreamSupport.stream(schema.get("fields").spliterator(), false)
-                .map(f -> f.get("name").asText())
-                .collect(Collectors.toList());
-
-        // Field-for-field AND in order: the record component list must equal the Avro field list.
-        assertThat(javaFields)
-                .as("Java record %s must declare the same fields in the same order as the Avro schema",
-                        avroName)
-                .containsExactlyElementsOf(avroFields);
+        AvroContractAssertions.assertRecordMatchesSchema(schema, recordClass);
     }
 }

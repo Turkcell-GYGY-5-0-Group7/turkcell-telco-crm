@@ -96,9 +96,32 @@ jobs:
         run: |
           make -C infra register-connectors
 
+      # SCHEMA REGISTRY COMPATIBILITY GATE (Feature 14.5, phase 8, devops): the "platform" profile
+      # brought up above already includes a live schema-registry container (telco-schema-registry,
+      # localhost:8081 - the exact schema.registry.url default in platform-event-contracts/pom.xml),
+      # so unlike ci.yml (which has no registry available at all and stays -Dschema.registry.skip=true
+      # by design), this workflow can run the kafka-schema-registry-maven-plugin's test-compatibility
+      # goal (bound to the verify phase, so it executes as part of this install) for real, for all
+      # 33 canonical subjects, and fail the build on a schema that does not parse/register cleanly
+      # against a real Confluent Schema Registry (this is exactly the class of bug Feature 14.5 found
+      # in `order.created.v1`'s nested OrderItemPayload type before it was inlined).
+      #
+      # HONEST LIMIT, verified by hand (2026-07-07) with a disposable, no-history registry
+      # container standing in for this job's always-fresh one: because this workflow's stack (and
+      # its schema-registry container) is created new and torn down every run (see "Tear down the
+      # stack" below), there is no persisted prior schema version for the plugin to diff against on
+      # a brand-new subject - a genuine BACKWARD-incompatible field-type change (e.g. retyping an
+      # existing field from string to long) registers as "compatible" here because Confluent's own
+      # /compatibility endpoint reports trivially-compatible when a subject has no prior version, not
+      # because the check is broken. What this step DOES still catch, every run, regardless of
+      # history: any schema that fails to parse or reference a name Schema Registry can resolve
+      # (structural/registrability validity). Enforcing true point-in-time BACKWARD-compatibility
+      # drift in CI would require a schema-registry deployment whose subject history persists across
+      # CI runs (a standing registry, not one recreated per job) - that is a separate CI
+      # infrastructure decision, out of scope here, and is not silently implied by this change.
       - name: Install platform to local Maven repo
         working-directory: platform
-        run: mvn ${MAVEN_ARGS} install -DskipTests -Dspotbugs.skip=true -Dschema.registry.skip=true
+        run: mvn ${MAVEN_ARGS} install -DskipTests -Dspotbugs.skip=true -Dschema.registry.skip=false
 
       # CONTRACT WITH QA AGENT (owns microservices/acceptance-tests):
       # the acceptance module is assumed to expose a Maven profile named

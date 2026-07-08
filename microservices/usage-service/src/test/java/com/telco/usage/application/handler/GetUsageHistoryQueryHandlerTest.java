@@ -65,10 +65,10 @@ class GetUsageHistoryQueryHandlerTest {
     }
 
     @Test
-    void admin_principal_null_returns_history_without_ownership_check() {
+    void admin_caller_returns_history_without_ownership_check() {
         stubEmptyHistory();
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, null, 50, null);
+                subscriptionId, from, to, null, 50, null, true);
 
         CursorPage<UsageHistoryItem> result = handler.handle(query);
 
@@ -78,12 +78,12 @@ class GetUsageHistoryQueryHandlerTest {
     }
 
     @Test
-    void customer_with_matching_customer_id_returns_history() {
+    void customer_with_matching_resolved_customer_id_returns_history() {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.of(quotaFor(customerId)));
         stubEmptyHistory();
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, null, 50, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString(), false);
 
         CursorPage<UsageHistoryItem> result = handler.handle(query);
 
@@ -92,11 +92,20 @@ class GetUsageHistoryQueryHandlerTest {
     }
 
     @Test
+    void unlinked_subscriber_with_null_resolved_customer_id_throws_access_denied_not_bypass() {
+        GetUsageHistoryQuery query = new GetUsageHistoryQuery(
+                subscriptionId, from, to, null, 50, null, false);
+
+        assertThatThrownBy(() -> handler.handle(query))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
     void no_quota_found_for_customer_throws_access_denied_fail_closed() {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.empty());
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, null, 50, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString(), false);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
@@ -107,19 +116,19 @@ class GetUsageHistoryQueryHandlerTest {
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.of(quotaFor(null)));
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, null, 50, customerId.toString());
+                subscriptionId, from, to, null, 50, customerId.toString(), false);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
-    void customer_with_non_matching_customer_id_throws_access_denied() {
+    void customer_with_non_matching_resolved_customer_id_throws_access_denied() {
         UUID otherCustomer = UUID.randomUUID();
         when(quotaRepository.findFirstBySubscriptionId(subscriptionId))
                 .thenReturn(Optional.of(quotaFor(customerId)));
         GetUsageHistoryQuery query = new GetUsageHistoryQuery(
-                subscriptionId, from, to, null, 50, otherCustomer.toString());
+                subscriptionId, from, to, null, 50, otherCustomer.toString(), false);
 
         assertThatThrownBy(() -> handler.handle(query))
                 .isInstanceOf(AccessDeniedException.class);

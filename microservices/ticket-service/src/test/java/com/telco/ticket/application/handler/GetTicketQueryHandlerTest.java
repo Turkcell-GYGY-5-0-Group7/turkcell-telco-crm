@@ -34,13 +34,14 @@ class GetTicketQueryHandlerTest {
     }
 
     @Test
-    void handle_returns_response_when_caller_is_the_ticket_owner() {
+    void handle_returns_response_when_resolved_customer_id_matches_the_ticket_owner() {
         UUID ticketId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         Ticket ticket = buildTicket(ticketId, customerId);
         when(ticketRepository.findByIdWithComments(ticketId)).thenReturn(Optional.of(ticket));
 
-        TicketResponse response = handler.handle(new GetTicketQuery(ticketId, customerId, false));
+        TicketResponse response = handler.handle(
+                new GetTicketQuery(ticketId, UUID.randomUUID(), false, customerId.toString()));
 
         assertThat(response.customerId()).isEqualTo(customerId);
         assertThat(response.status()).isEqualTo("OPEN");
@@ -55,13 +56,13 @@ class GetTicketQueryHandlerTest {
         Ticket ticket = buildTicket(ticketId, customerId);
         when(ticketRepository.findByIdWithComments(ticketId)).thenReturn(Optional.of(ticket));
 
-        TicketResponse response = handler.handle(new GetTicketQuery(ticketId, adminId, true));
+        TicketResponse response = handler.handle(new GetTicketQuery(ticketId, adminId, true, null));
 
         assertThat(response.customerId()).isEqualTo(customerId);
     }
 
     @Test
-    void handle_throws_access_denied_when_non_admin_caller_does_not_own_ticket() {
+    void handle_throws_access_denied_when_resolved_customer_id_does_not_match_the_owner() {
         UUID ticketId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         UUID intruder = UUID.randomUUID();
@@ -69,7 +70,19 @@ class GetTicketQueryHandlerTest {
         when(ticketRepository.findByIdWithComments(ticketId)).thenReturn(Optional.of(ticket));
 
         assertThatThrownBy(() ->
-                handler.handle(new GetTicketQuery(ticketId, intruder, false)))
+                handler.handle(new GetTicketQuery(ticketId, intruder, false, intruder.toString())))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    void handle_throws_access_denied_when_caller_customer_id_is_null_unlinked_subscriber() {
+        UUID ticketId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        Ticket ticket = buildTicket(ticketId, customerId);
+        when(ticketRepository.findByIdWithComments(ticketId)).thenReturn(Optional.of(ticket));
+
+        assertThatThrownBy(() ->
+                handler.handle(new GetTicketQuery(ticketId, UUID.randomUUID(), false, null)))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
@@ -79,7 +92,7 @@ class GetTicketQueryHandlerTest {
         when(ticketRepository.findByIdWithComments(unknownId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
-                handler.handle(new GetTicketQuery(unknownId, UUID.randomUUID(), true)))
+                handler.handle(new GetTicketQuery(unknownId, UUID.randomUUID(), true, null)))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining(unknownId.toString());
     }

@@ -24,7 +24,11 @@ class CustomerSecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(a -> a
                         .requestMatchers("/actuator/health", "/actuator/info",
-                                "/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                                "/swagger-ui/**", "/v3/api-docs/**",
+                                // Trusted system-to-system customer read (id/status only). The
+                                // gateway excludes /internal/** from public traffic (devops).
+                                "/internal/**")
+                        .permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex

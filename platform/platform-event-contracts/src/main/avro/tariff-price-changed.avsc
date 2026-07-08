@@ -1,0 +1,53 @@
+{
+  "type": "record",
+  "name": "TariffPriceChangedV1",
+  "namespace": "com.telco.platform.events.catalog",
+  "doc": "Emitted when a tariff's monthly fee changes (tariff.price-changed.v1). Producer: product-catalog-service.",
+  "fields": [
+    {
+      "name": "tariffId",
+      "type": "string",
+      "doc": "Unique tariff identifier (UUID)."
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "doc": "Tariff code."
+    },
+    {
+      "name": "oldMonthlyFee",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Previous monthly fee as an exact decimal (precision 19, scale 4)."
+    },
+    {
+      "name": "newMonthlyFee",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "New monthly fee as an exact decimal (precision 19, scale 4)."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code, for example TRY."
+    },
+    {
+      "name": "newVersion",
+      "type": "int",
+      "doc": "New tariff version number."
+    },
+    {
+      "name": "changedAt",
+      "type": "string",
+      "doc": "Instant the price changed, ISO-8601 (UTC)."
+    }
+  ]
+}

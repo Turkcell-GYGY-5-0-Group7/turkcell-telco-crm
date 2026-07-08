@@ -24,7 +24,8 @@ public class GetInvoicesQueryHandler implements QueryHandler<GetInvoicesQuery, P
     @Transactional(readOnly = true)
     public PageResult<InvoiceResponse> handle(GetInvoicesQuery query) {
         if (!query.callerIsAdmin()
-                && !query.customerId().toString().equals(query.callerUserId())) {
+                && (query.callerCustomerId() == null
+                        || !query.callerCustomerId().equals(query.customerId().toString()))) {
             throw new AccessDeniedException("Cannot list invoices for another customer");
         }
 

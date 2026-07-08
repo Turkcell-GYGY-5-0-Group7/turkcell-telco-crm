@@ -9,6 +9,12 @@ spring:
     url: ${BILLING_DB_URL:jdbc:postgresql://localhost:5432/billing_db}
     username: ${BILLING_DB_USER:billing}
     password: ${BILLING_DB_PASSWORD:billing}
+    hikari:
+      # Sized for the bill-run's parallel batches (telco.billing.bill-run.parallelism) plus the
+      # one idle connection the mediator's own outer transaction holds for the whole command
+      # (ADR-009 TransactionBehavior) plus headroom for concurrent read-API/consumer traffic
+      # (NFR-02 tuning, 14.3.2).
+      maximum-pool-size: ${BILLING_DB_POOL_SIZE:20}
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQLDialect
     hibernate:
@@ -46,6 +52,11 @@ telco:
   billing:
     tax-rate: "0.18"
     due-days: 30
+    bill-run:
+      # Batching/parallelism tuning for NFR-02 (100K subscribers under 30 minutes, no duplicate
+      # invoices) — see docs/tasks/sprint-14-testing-and-hardening/14.3-bill-run-throughput-report.md.
+      batch-size: ${BILLING_BILL_RUN_BATCH_SIZE:500}
+      parallelism: ${BILLING_BILL_RUN_PARALLELISM:8}
 
 security:
   oauth2:

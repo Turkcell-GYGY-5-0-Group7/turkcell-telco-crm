@@ -122,6 +122,14 @@
                 <artifactId>platform-event-contracts</artifactId>
                 <version>${platform.version}</version>
             </dependency>
+            <!-- Test-jar classifier: packages the shared AvroContractAssertions checker (feature 14.5
+                 phase 6, ADR-019) so every producing service's schema-compat test can depend on it. -->
+            <dependency>
+                <groupId>com.telco.platform</groupId>
+                <artifactId>platform-event-contracts</artifactId>
+                <version>${platform.version}</version>
+                <type>test-jar</type>
+            </dependency>
             <dependency>
                 <groupId>com.telco.platform</groupId>
                 <artifactId>platform-autoconfigure</artifactId>

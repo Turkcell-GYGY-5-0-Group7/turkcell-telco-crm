@@ -31,19 +31,29 @@ public class CacheConfig {
     RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         // LaissezFaireSubTypeValidator is unsafe: it trusts any @class name in cached JSON,
         // enabling deserialization gadget attacks if Redis is compromised (CVE-2017-7525 class).
-        // BasicPolymorphicTypeValidator restricts type resolution to this service's own DTOs
-        // and safe JDK value types — anything else throws JsonTypeDefinitionException.
+        // BasicPolymorphicTypeValidator restricts type resolution to this service's own DTOs,
+        // the shared platform pagination envelope, and safe JDK value types — anything else
+        // throws JsonTypeDefinitionException.
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.telco.catalog.application.dto.")
+                .allowIfSubType("com.telco.platform.common.api.")
                 .allowIfSubType("java.util.")
                 .allowIfSubType("java.lang.")
                 .allowIfSubType("java.math.")
                 .allowIfSubType("java.time.")
                 .build();
 
+        // Cached DTOs are Java records, which are implicitly final. DefaultTyping.NON_FINAL
+        // never writes "@class" type metadata for final classes, so a value serialized on a
+        // cache PUT loses its concrete type and a subsequent cache HIT fails to deserialize
+        // with InvalidTypeIdException (missing type id). DefaultTyping.EVERYTHING writes type
+        // metadata for all values — including final classes/records — so every cache HIT can
+        // round-trip correctly. The PolymorphicTypeValidator above keeps this safe by rejecting
+        // any type outside this service's own DTOs, the platform pagination envelope, and
+        // well-known JDK value types.
         ObjectMapper om = new ObjectMapper()
                 .findAndRegisterModules()
-                .activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.NON_FINAL,
+                .activateDefaultTyping(ptv, ObjectMapper.DefaultTyping.EVERYTHING,
                         JsonTypeInfo.As.PROPERTY);
 
         RedisSerializer<Object> valueSerializer = new RedisSerializer<>() {

@@ -1,0 +1,29 @@
+{
+  "type": "record",
+  "name": "OrderCancelledV1",
+  "namespace": "com.telco.platform.events.order",
+  "doc": "Emitted when an order is cancelled or compensated (order.cancelled.v1). Producer: order-service.",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Unique order identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who placed the order."
+    },
+    {
+      "name": "reason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Cancellation reason, when supplied. Genuinely nullable: neither CancelOrderCommand.reason nor CompensateOrderCommand.reason is annotated @NotNull/@NotBlank."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the order was cancelled, ISO-8601 (UTC)."
+    }
+  ]
+}

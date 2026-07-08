@@ -54,7 +54,9 @@ class DomainEventNotificationConsumerTest {
 
     @Test
     void subscription_event_with_unrecognised_type_is_silently_ignored() throws Exception {
-        var record = record("subscription.events", "key", "subscription.cancelled.v1",
+        // subscription.suspended.v1 is a real, currently-produced event (subscription-service) that
+        // this consumer's onSubscriptionEvent does not (yet) handle - genuinely unhandled, not fictional.
+        var record = record("subscription.events", "key", "subscription.suspended.v1",
                 Map.of("customerId", "cust-1"));
 
         consumer.onSubscriptionEvent(record);
@@ -95,7 +97,9 @@ class DomainEventNotificationConsumerTest {
 
     @Test
     void customer_event_with_unrecognised_type_is_silently_ignored() throws Exception {
-        var record = record("customer.events", "key", "customer.profile-updated.v1",
+        // customer.updated.v1 is a real, currently-produced event (customer-service) that this
+        // consumer's onCustomerEvent does not (yet) handle - genuinely unhandled, not fictional.
+        var record = record("customer.events", "key", "customer.updated.v1",
                 Map.of("customerId", "cust-1"));
 
         consumer.onCustomerEvent(record);

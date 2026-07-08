@@ -13,6 +13,15 @@ spring:
     locations:
       - classpath:db/migration
       - classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: localhost:19999
+    listener:
+      auto-startup: false
+    consumer:
+      group-id: identity-service-test
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
 
 eureka:
   client:
@@ -30,6 +39,10 @@ telco:
       jwt:
         secret: bXktdGVzdC1zZWNyZXQta2V5LWZvci1pZGVudGl0eS1zZXJ2aWNl
         issuer: telco
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
 
 # Placeholder Keycloak admin config; never reached because KeycloakAdminClient is mocked in tests.
 keycloak:

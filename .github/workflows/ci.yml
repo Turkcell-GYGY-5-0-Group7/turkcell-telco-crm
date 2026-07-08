@@ -83,8 +83,13 @@ jobs:
 
       # Checkstyle + SpotBugs are bound to the verify phase in platform/pom.xml (ADR-014).
       # Skipping tests keeps this stage focused on static analysis; it fails on any violation.
-      # Schema Registry is not available in CI; the compatibility check runs locally or in
-      # a dedicated integration environment against a live Schema Registry.
+      # Schema Registry compatibility (Feature 14.5, phase 8): this per-PR pipeline has no live
+      # Schema Registry available, so the kafka-schema-registry-maven-plugin check stays skipped
+      # here by design (residual, pre-existing gap, not reopened by this feature). The
+      # acceptance.yml workflow's "platform" profile stack does bring up a live registry (for
+      # Debezium) and runs this check for real against all 33 canonical subjects - see the
+      # "SCHEMA REGISTRY COMPATIBILITY GATE" comment there for exactly what that step does and
+      # does not guarantee (registrability, not persisted-history BACKWARD-compat drift).
       - name: Run static analysis
         if: hashFiles('platform/pom.xml') != ''
         working-directory: platform
@@ -148,20 +153,24 @@ jobs:
       # and JaCoCo XMLs are generated before the job is marked failed.
       #
       # COVERAGE GATE (ADR-013, task 14.1.3, NFR-17): `verify` runs the JaCoCo `check` goal
-      # (per-module, 70% LINE) declared in microservices/pom.xml. It is WARN-FIRST today
-      # (jacoco.haltOnFailure=false): violations are printed to this log but do not fail the
-      # build. TO ENFORCE the gate in CI, set jacoco.haltOnFailure=true in microservices/pom.xml
-      # (single change); no edit to this workflow is required for the Maven gate to bite.
+      # (per-module, 70% LINE by default) declared in microservices/pom.xml. HARD GATE as of
+      # tech-lead ruling 2026-07-06 (jacoco.haltOnFailure=true): any module below its coverage
+      # floor fails this step, which fails this job, which fails the required CI check on the
+      # PR. Documented, dated exceptions live in the affected modules' own pom.xml
+      # (reference-service/service-template skip the check goal entirely, ADR-017;
+      # identity-service/billing-service carry lower per-module floors) - see
+      # docs/tasks/sprint-14-testing-and-hardening/README.md for the full ruling.
       - name: Run microservices tests with coverage
         if: hashFiles('microservices/pom.xml') != ''
         working-directory: microservices
         run: mvn ${MAVEN_ARGS} verify --fail-at-end -Dspotbugs.skip=true -Dcheckstyle.skip=true
 
-      # Surfaces per-module coverage numbers as a PR comment (reporting only). WARN-FIRST:
-      # continue-on-error keeps this step from blocking merges while the gate is in report mode,
-      # matching the Maven check goal above. The single source of truth for the hard gate is
-      # jacoco.haltOnFailure in microservices/pom.xml.
-      # TO ENFORCE at the PR-comment level too: remove `continue-on-error` below.
+      # Surfaces per-module coverage numbers as a PR comment (reporting only, informational).
+      # continue-on-error is kept even now that the Maven gate above is a hard block: this step
+      # only runs after the Maven step already succeeded (a failing gate fails the job before
+      # this step is reached), so continue-on-error here is not softening the coverage gate - it
+      # only protects against this third-party GitHub-API action itself failing/rate-limiting and
+      # spuriously red-flagging an otherwise-green, gate-passing build. Left in place by design.
       - name: Post coverage report on PR
         if: github.event_name == 'pull_request'
         continue-on-error: true

@@ -59,6 +59,9 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Column(name = "customer_id")
+    private UUID customerId;
+
     @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_roles",
@@ -142,6 +145,18 @@ public class User {
         status = UserStatus.DELETED;
     }
 
+    /**
+     * Links this identity projection to a customer-service aggregate root once event-driven
+     * resolution establishes the mapping (Section 14.1.1 ruling: identity-to-customer linkage gap).
+     * Idempotent: re-linking to the same customer is a no-op; linking to a different customer
+     * overwrites the mapping (last-write-wins on redelivery of a newer event is not expected in
+     * practice, since a customer only ever registers once, but this method itself enforces no
+     * additional invariant beyond a non-null target).
+     */
+    public void linkCustomer(UUID customerId) {
+        this.customerId = Objects.requireNonNull(customerId, "customerId");
+    }
+
     public UUID getId() {
         return id;
     }
@@ -164,6 +179,11 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    /** The linked customer-service aggregate id, or {@code null} if not yet linked. */
+    public UUID getCustomerId() {
+        return customerId;
     }
 
     /** Unmodifiable view of the roles assigned to this user. */

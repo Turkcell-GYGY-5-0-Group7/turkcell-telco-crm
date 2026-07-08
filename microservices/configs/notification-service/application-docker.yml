@@ -2,9 +2,8 @@
 # Overrides the localhost values in application-dev.yml with Docker service names.
 
 spring:
-  data:
-    mongodb:
-      uri: mongodb://mongo:27017/notification_db
+  mongodb:
+    uri: mongodb://mongo:27017/notification_db
   datasource:
     url: jdbc:postgresql://postgres:5432/notification_db
     username: notification

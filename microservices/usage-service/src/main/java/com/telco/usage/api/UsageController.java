@@ -8,6 +8,7 @@ import com.telco.usage.application.query.GetQuotaQuery;
 import com.telco.usage.application.query.GetUsageHistoryQuery;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.api.CursorPage;
+import com.telco.platform.common.context.CurrentUserProvider;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
@@ -36,10 +37,13 @@ public class UsageController {
 
     private final Mediator mediator;
     private final ApiResponseFactory responses;
+    private final CurrentUserProvider currentUserProvider;
 
-    public UsageController(Mediator mediator, ApiResponseFactory responses) {
+    public UsageController(Mediator mediator, ApiResponseFactory responses,
+                           CurrentUserProvider currentUserProvider) {
         this.mediator = mediator;
         this.responses = responses;
+        this.currentUserProvider = currentUserProvider;
     }
 
     /** Returns the active quota for a subscription. */
@@ -48,8 +52,8 @@ public class UsageController {
     public ApiResult<QuotaResponse> getQuota(
             @PathVariable UUID subscriptionId,
             Authentication authentication) {
-        return responses.ok(mediator.query(
-                new GetQuotaQuery(subscriptionId, principalId(authentication))));
+        return responses.ok(mediator.query(new GetQuotaQuery(
+                subscriptionId, currentUserProvider.currentUser().customerId(), isAdmin(authentication))));
     }
 
     /** Returns cursor-paginated CDR history for a subscription within a time range (ADR-015). */
@@ -62,8 +66,9 @@ public class UsageController {
             @RequestParam(required = false) String cursor,
             @RequestParam(defaultValue = "50") int limit,
             Authentication authentication) {
-        return responses.ok(mediator.query(
-                new GetUsageHistoryQuery(subscriptionId, from, to, cursor, limit, principalId(authentication))));
+        return responses.ok(mediator.query(new GetUsageHistoryQuery(
+                subscriptionId, from, to, cursor, limit,
+                currentUserProvider.currentUser().customerId(), isAdmin(authentication))));
     }
 
     /** Triggers period aggregation for a subscription. ADMIN only. */
@@ -84,13 +89,9 @@ public class UsageController {
     ) {
     }
 
-    /**
-     * Returns the JWT sub (= X-User-Id forwarded by gateway) for SUBSCRIBER callers,
-     * or null for ADMIN callers (ownership check bypassed).
-     */
-    private String principalId(Authentication authentication) {
-        boolean isAdmin = authentication.getAuthorities().stream()
+    /** Staff bypass: true only for ROLE_ADMIN, unchanged from the prior behavior. */
+    private boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
                 .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
-        return isAdmin ? null : authentication.getName();
     }
 }

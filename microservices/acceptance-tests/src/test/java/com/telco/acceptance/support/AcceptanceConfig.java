@@ -39,28 +39,21 @@ public final class AcceptanceConfig {
     /**
      * Seeded SUBSCRIBER-role realm user (infra/docker/keycloak/realm/realm-export.json, tied to
      * persona P1 "Subscriber (End-User)" per docs/architecture/keycloak-and-auth.md and
-     * docs/product/personas.md). Resolves the earlier CUSTOMER-role gap: "CUSTOMER" was simply the
-     * wrong role name - the platform's real end-customer role, already wired on every relevant
-     * controller ({@code hasRole('SUBSCRIBER')}), is SUBSCRIBER. Used for every genuinely
-     * customer-facing call this suite makes (registering, placing/viewing an order the same
-     * subscriber created, viewing a payment by order).
+     * docs/product/personas.md).
      *
-     * <p><b>Known residual gap (not fixed by the SUBSCRIBER rename, and not in this suite's power to
-     * fix - see AcceptanceConfig/OnboardingSteps call sites and the sprint 14.1.1 report):</b>
-     * subscription-service, billing-service, and usage-service all enforce "view own resource"
-     * ownership by comparing the resource's {@code customerId} (customer-service's own, randomly
-     * generated business UUID) against the caller's JWT {@code sub} claim
-     * ({@code Authentication.getName()} - see {@code GatewaySecurityConfig.jwtAuthConverter}, no
-     * custom principal-claim mapping). Nothing in the system ever links a Keycloak user's {@code sub}
-     * to the {@code customerId} minted by {@code CustomerController.register} (no {@code Authentication}
-     * parameter is even read there, and identity-service has no consumer of
-     * {@code customer.registered.v1}), so a SUBSCRIBER token can never satisfy that ownership check for
-     * a customer profile this suite (or any real self-service caller) creates through the public API.
-     * Consequently {@code GET /api/v1/subscriptions*}, {@code GET /api/v1/invoices*},
-     * {@code GET /api/v1/usage/subscriptions/{id}/quota|history}, and
-     * {@code GET /api/v1/notifications/users/{userId}/history} (keyed by that same customerId) stay on
-     * the ADMIN token in this suite - not because they are business-admin-only actions, but because
-     * this identity-linkage gap makes them unreachable as the real subscriber today.
+     * <p><b>Not usable for real ownership proofs (Section 14.1.1 ruling):</b> this account is
+     * imported directly by the realm export, never provisioned through identity-service's
+     * {@code POST /api/v1/users}, so it has no local identity-service {@code users} row and can
+     * never be linked to a customer (the linkage consumer requires that row - see
+     * {@code LinkCustomerToUserCommandHandler}). It remains useful for scenarios that genuinely do
+     * not depend on ownership (placing/viewing an order the same subscriber created, viewing a
+     * payment by order). Tests that need to prove "view my own resource" ownership
+     * ({@code GET /api/v1/subscriptions*}, {@code GET /api/v1/invoices*},
+     * {@code GET /api/v1/usage/subscriptions/{id}/quota|history},
+     * {@code GET /api/v1/notifications/users/{userId}/history}) use
+     * {@link com.telco.acceptance.support.SelfServiceSubscriber} instead, which provisions a fresh,
+     * linkable account (Feature 14.4 closes the identity-to-customer linkage gap this javadoc used
+     * to document as unresolved).
      */
     public static final String KEYCLOAK_SUBSCRIBER_USERNAME =
             env("KEYCLOAK_SUBSCRIBER_USERNAME", "subscriber@telco.local");

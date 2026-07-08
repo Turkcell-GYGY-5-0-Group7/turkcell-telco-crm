@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "TicketAssignedV1",
+  "namespace": "com.telco.platform.events.ticket",
+  "doc": "Emitted when a support ticket is assigned to a team (ticket.assigned.v1). Producer: ticket-service.",
+  "fields": [
+    {
+      "name": "ticketId",
+      "type": "string",
+      "doc": "Unique ticket identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who owns the ticket."
+    },
+    {
+      "name": "assignedTeam",
+      "type": "string",
+      "doc": "Team the ticket was assigned to."
+    }
+  ]
+}

@@ -11,3 +11,13 @@ spring:
       resourceserver:
         jwt:
           jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+# Bug found via live acceptance testing, 2026-07-06: this override was missing (same class of gap
+# as the earlier order-service missing Kafka bootstrap-servers docker override) - ProvisionQuotaCommandHandler
+# fell back to the base application.yml's http://localhost:9003, host-only and unreachable from
+# inside the compose network, so quota was NEVER provisioned for any subscription in Docker (100%
+# deterministic, not a flake). Matches order-service's/billing-service's own application-docker.yml.
+telco:
+  clients:
+    product-catalog-service:
+      url: http://product-catalog-service:9003

@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "NotificationDispatchedV1",
+  "namespace": "com.telco.platform.events.notification",
+  "doc": "Emitted when a notification is dispatched (notification.dispatched.v1). Producer: notification-service.",
+  "fields": [
+    {
+      "name": "notificationId",
+      "type": "string",
+      "doc": "Unique notification identifier (UUID)."
+    },
+    {
+      "name": "userId",
+      "type": "string",
+      "doc": "Identifier of the notified user."
+    },
+    {
+      "name": "channel",
+      "type": "string",
+      "doc": "Delivery channel, for example EMAIL or SMS."
+    },
+    {
+      "name": "templateCode",
+      "type": "string",
+      "doc": "Template used to render the notification."
+    }
+  ]
+}

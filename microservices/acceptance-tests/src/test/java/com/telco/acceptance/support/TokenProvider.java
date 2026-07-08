@@ -30,8 +30,12 @@ public final class TokenProvider {
 
     /**
      * Returns a cached or freshly fetched bearer token for the configured seeded SUBSCRIBER user
-     * (persona P1, see {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME} for the residual
-     * ownership-linkage gap this token still cannot exercise).
+     * (persona P1, {@link AcceptanceConfig#KEYCLOAK_SUBSCRIBER_USERNAME}). This account is imported
+     * directly by the realm export, not provisioned through identity-service's
+     * {@code POST /api/v1/users}, so it has no local identity-service {@code users} row and can
+     * never be linked to a customer (Section 14.1.1 ruling) - it is only useful for scenarios that
+     * do not need real customer ownership. Tests that need a genuine "view my own resource" proof
+     * use {@link SelfServiceSubscriber} instead, which provisions a fresh, linkable account.
      */
     public static String subscriberToken() {
         return tokenFor(AcceptanceConfig.KEYCLOAK_SUBSCRIBER_USERNAME, AcceptanceConfig.KEYCLOAK_SUBSCRIBER_PASSWORD);
@@ -40,6 +44,16 @@ public final class TokenProvider {
     /** Returns a cached or freshly fetched bearer token for an arbitrary seeded realm user. */
     public static String tokenFor(String username, String password) {
         return CACHE.computeIfAbsent(username, u -> fetchToken(u, password));
+    }
+
+    /**
+     * Always fetches a brand-new token, bypassing the cache. Required whenever a claim can change
+     * between logins for the same user (Feature 14.4: the {@code customerId} claim only appears
+     * once identity-to-customer linkage completes after the cached initial token was issued - see
+     * {@link SelfServiceSubscriber}).
+     */
+    public static String freshTokenFor(String username, String password) {
+        return fetchToken(username, password);
     }
 
     private static String fetchToken(String username, String password) {

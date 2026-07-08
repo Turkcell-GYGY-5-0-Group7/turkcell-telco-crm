@@ -36,14 +36,22 @@ public class GetQuotaQueryHandler implements QueryHandler<GetQuotaQuery, QuotaRe
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "No active quota found for subscriptionId: " + query.subscriptionId()));
 
-        verifyOwnership(query.principalId(), quota);
+        verifyOwnership(query.callerCustomerId(), query.callerIsAdmin(), quota);
 
         return QuotaResponse.from(quota);
     }
 
-    private void verifyOwnership(String principalId, Quota quota) {
-        if (principalId == null) {
-            return; // ADMIN - ownership check skipped
+    private void verifyOwnership(String callerCustomerId, boolean callerIsAdmin, Quota quota) {
+        if (callerIsAdmin) {
+            return; // staff bypass
+        }
+        if (callerCustomerId == null) {
+            // Caller has no linked customerId (unlinked subscriber, or identity-to-customer
+            // linkage, ADR-011, not yet established for this identity). Never treat a null
+            // resolved customerId as a bypass — fail-closed.
+            throw new AccessDeniedException(
+                    "Caller identity is not linked to a customer for subscriptionId: "
+                            + quota.getSubscriptionId());
         }
         if (quota.getCustomerId() == null) {
             // customerId not yet set (ProvisionQuotaCommandHandler stub, Sprint 09 pending).
@@ -52,7 +60,7 @@ public class GetQuotaQueryHandler implements QueryHandler<GetQuotaQuery, QuotaRe
                     "Subscription ownership not yet established for subscriptionId: "
                             + quota.getSubscriptionId());
         }
-        if (!quota.getCustomerId().toString().equals(principalId)) {
+        if (!callerCustomerId.equals(quota.getCustomerId().toString())) {
             throw new AccessDeniedException(
                     "Not authorized to view quota for subscriptionId: " + quota.getSubscriptionId());
         }

@@ -58,6 +58,8 @@ public class CreateTariffCommandHandler implements CommandHandler<CreateTariffCo
                 command.effectiveTo()
         );
 
+        tariff.activate();
+
         tariffRepository.save(tariff);
         versioningService.createInitialSnapshot(tariff);
 

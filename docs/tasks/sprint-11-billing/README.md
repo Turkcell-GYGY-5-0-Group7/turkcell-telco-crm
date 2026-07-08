@@ -43,6 +43,9 @@ Covers FR-21, FR-22, FR-23, FR-24.
   emits `invoice.generated.v1` (notification consumes it in Sprint 12), and on payment emits
   `invoice.paid.v1`.
 - The bill-run is idempotent per (subscriber, period) and meets the NFR-02 throughput target in a
-  load test.
+  load test. (Idempotency was covered here by `BillingAC02IntegrationTest`; the actual 100K-subscriber
+  NFR-02 load test was executed later, in Sprint 14 task 14.3.2 - see
+  `sprint-14-testing-and-hardening/14.3.2-bill-run-throughput-report.md` - 100,000 subscribers in
+  6m 20s, zero duplicate invoices.)
 - FR-21, FR-22, FR-23, FR-24 pass.
 </content>

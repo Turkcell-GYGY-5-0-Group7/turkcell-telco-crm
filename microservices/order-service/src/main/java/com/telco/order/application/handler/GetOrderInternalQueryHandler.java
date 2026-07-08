@@ -8,6 +8,7 @@ import com.telco.platform.common.exception.CommonErrorCode;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.cqrs.QueryHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
 
@@ -27,6 +28,7 @@ public class GetOrderInternalQueryHandler implements QueryHandler<GetOrderIntern
     }
 
     @Override
+    @Transactional(readOnly = true)
     public OrderResponse handle(GetOrderInternalQuery query) {
         Order order = orderRepository.findById(query.orderId())
                 .orElseThrow(() -> new ResourceNotFoundException(

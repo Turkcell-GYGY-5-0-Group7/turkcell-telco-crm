@@ -4,6 +4,7 @@ import com.telco.acceptance.support.AcceptanceConfig;
 import com.telco.acceptance.support.CdrEventProducer;
 import com.telco.acceptance.support.GatewayApi;
 import com.telco.acceptance.support.OnboardingSteps;
+import com.telco.acceptance.support.SelfServiceSubscriber;
 import com.telco.acceptance.support.TokenProvider;
 import io.restassured.response.Response;
 import org.junit.jupiter.api.DisplayName;
@@ -42,43 +43,43 @@ import static org.awaitility.Awaitility.await;
  *       invoice line.</li>
  * </ul>
  *
- * <p><b>Confirmed platform gap, flagged rather than worked around silently:</b>
- * {@code quota.threshold-reached.v1} and {@code quota.exceeded.v1}
- * ({@code usage-service QuotaThresholdReachedEvent}/{@code QuotaExceededEvent}) carry only
- * {@code subscriptionId}, {@code quotaId}, {@code usageType}, and a timestamp - never
- * {@code customerId}. {@code DomainEventNotificationConsumer.onQuotaEvent} nonetheless reads
- * {@code payload.getOrDefault("customerId", "unknown")}, so every quota-threshold notification in
- * the system today is recorded under the literal userId {@code "unknown"}, not the real customer.
- * This suite asserts against that actual (buggy) behaviour - proving the notification really does
- * fire - rather than the intended behaviour, and calls the gap out here and in the sprint 14.1.1
- * report for a domain-engineer/event-integration fix (thread {@code customerId} onto both quota
- * events, matching every other domain event in the catalog).
+ * <p><b>Stale test assertion, corrected (bug found via live acceptance testing, 2026-07-06):</b>
+ * this class previously asserted quota-threshold notifications land under the literal userId
+ * {@code "unknown"}, documenting what it believed was a "confirmed platform gap" -
+ * {@code quota.threshold-reached.v1}/{@code quota.exceeded.v1} supposedly never carrying
+ * {@code customerId}. That gap no longer exists in the application: {@code usage-service}'s
+ * {@code QuotaThresholdReachedEvent}/{@code QuotaExceededEvent} both already carry a
+ * {@code customerId} field (populated from the owning {@code Quota}, see their own javadoc -
+ * "so notification-service can route ... to the real customer instead of falling back to
+ * unknown"), and the raw Kafka payload confirms it is genuinely populated. The suite's own
+ * assertion had simply never been updated to match, so it was querying a bucket the real
+ * notification would never land in and would have timed out (or silently matched unrelated stale
+ * "unknown" entries from other, unrelated notification types) forever. Fixed to query by the
+ * subscription's real customerId.
  *
  * <p><b>Authentication:</b> onboarding's customer-facing steps (register, KYC document upload,
- * place/read the order) authenticate as the real seeded SUBSCRIBER user
- * ({@code subscriber@telco.local}). Every other call in this test stays ADMIN: KYC approval and
- * tariff creation are genuinely back-office actions; quota/usage-history reads, usage aggregation,
- * the bill-run trigger, and invoice reads are ADMIN either because they are explicitly
- * {@code hasRole('ADMIN')}-gated ({@code aggregate}, {@code triggerBillRun}) or because of the
- * ownership-linkage gap documented on {@link GatewayApi#getSubscriptionsByCustomer} (no seeded
- * system links a Keycloak subject to the {@code customerId} customer-service assigns at
- * registration). The notification-history assertions already require ADMIN regardless of that gap,
- * since they query the literal {@code "unknown"} bug value, not any real user id.
+ * place/read the order) authenticate as a real, freshly provisioned SUBSCRIBER
+ * ({@link SelfServiceSubscriber}), not the permanently-unlinkable seeded
+ * {@code subscriber@telco.local}. KYC approval, tariff creation, usage aggregation, and the
+ * bill-run trigger stay ADMIN (genuinely back-office actions); quota/usage-history reads, invoice
+ * reads, and the notification-history assertions now use the subscriber's own fresh, linked token -
+ * the identity-to-customer linkage gap documented on {@link GatewayApi#getSubscriptionsByCustomer}
+ * that used to force these onto ADMIN is closed (Feature 14.4).
  */
 @DisplayName("AC-03: Quota exhaustion and overage")
 class QuotaExhaustionAcceptanceIT {
 
     private static final int QUOTA_TOTAL_UNITS = 100;
-    private static final String NOTIFICATION_USERID_BUG_VALUE = "unknown";
 
     @Test
     @DisplayName("80 percent warning, 100 percent exhaustion, and post-exhaustion overage billed")
     void quotaExhaustionFlowsToBillingAsOverage() {
-        String subscriberToken = TokenProvider.subscriberToken();
         String adminToken = TokenProvider.adminToken();
+        SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
 
         OnboardingSteps.ActiveSubscription subscription = OnboardingSteps.onboardActiveSubscription(
-                subscriberToken, adminToken, new BigDecimal("19.90"), QUOTA_TOTAL_UNITS);
+                subscriber, adminToken, new BigDecimal("19.90"), QUOTA_TOTAL_UNITS);
+        String linkedToken = subscription.subscriberToken();
 
         try (CdrEventProducer cdrProducer = new CdrEventProducer()) {
 
@@ -88,15 +89,16 @@ class QuotaExhaustionAcceptanceIT {
                     .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                     .untilAsserted(() -> {
-                        Response quota = GatewayApi.getQuota(adminToken, subscription.subscriptionId());
+                        Response quota = GatewayApi.getQuota(linkedToken, subscription.subscriptionId());
                         quota.then().statusCode(200);
                         assertThat(quota.jsonPath().getLong("data.mbRemaining")).isEqualTo(20L);
                     });
 
-            await("80 percent warning notification recorded (see class javadoc: userId=\"unknown\")")
+            await("80 percent warning notification recorded")
                     .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
-                    .untilAsserted(() -> assertNotificationRecorded(adminToken, "QUOTA_80_PERCENT"));
+                    .untilAsserted(() -> assertNotificationRecorded(
+                            linkedToken, subscription.customerId().toString(), "QUOTA_80_PERCENT"));
 
             // 20 more units -> remaining = 0 -> exceeded crossed exactly once.
             cdrProducer.sendCdr(subscription.subscriptionId(), "DATA", 20);
@@ -104,15 +106,16 @@ class QuotaExhaustionAcceptanceIT {
                     .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                     .untilAsserted(() -> {
-                        Response quota = GatewayApi.getQuota(adminToken, subscription.subscriptionId());
+                        Response quota = GatewayApi.getQuota(linkedToken, subscription.subscriptionId());
                         quota.then().statusCode(200);
                         assertThat(quota.jsonPath().getLong("data.mbRemaining")).isEqualTo(0L);
                     });
 
-            await("quota exceeded notification recorded (see class javadoc: userId=\"unknown\")")
+            await("quota exceeded notification recorded")
                     .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
-                    .untilAsserted(() -> assertNotificationRecorded(adminToken, "QUOTA_EXCEEDED"));
+                    .untilAsserted(() -> assertNotificationRecorded(
+                            linkedToken, subscription.customerId().toString(), "QUOTA_EXCEEDED"));
 
             // Post-exhaustion usage is still metered (not blocked), recorded entirely as overage.
             cdrProducer.sendCdr(subscription.subscriptionId(), "DATA", 10);
@@ -124,7 +127,7 @@ class QuotaExhaustionAcceptanceIT {
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                     .untilAsserted(() -> {
                         Response history = GatewayApi.getUsageHistory(
-                                adminToken, subscription.subscriptionId(), historyFrom, historyTo);
+                                linkedToken, subscription.subscriptionId(), historyFrom, historyTo);
                         history.then().statusCode(200);
                         List<Map<String, Object>> content = history.jsonPath().getList("data.content");
                         assertThat(content).hasSize(3);
@@ -149,13 +152,13 @@ class QuotaExhaustionAcceptanceIT {
                     .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                     .untilAsserted(() -> {
                         GatewayApi.triggerBillRun(adminToken, periodStart, periodEnd).then().statusCode(202);
-                        Response invoices = GatewayApi.getInvoices(adminToken, subscription.customerId());
+                        Response invoices = GatewayApi.getInvoices(linkedToken, subscription.customerId());
                         invoices.then().statusCode(200);
                         List<Map<String, Object>> content = invoices.jsonPath().getList("data.content");
                         assertThat(content).isNotEmpty();
                     });
 
-            Response invoicesResponse = GatewayApi.getInvoices(adminToken, subscription.customerId());
+            Response invoicesResponse = GatewayApi.getInvoices(linkedToken, subscription.customerId());
             List<Map<String, Object>> invoices = invoicesResponse.jsonPath().getList("data.content");
             Map<String, Object> invoice = invoices.get(0);
 
@@ -167,8 +170,8 @@ class QuotaExhaustionAcceptanceIT {
         }
     }
 
-    private static void assertNotificationRecorded(String adminToken, String templateCode) {
-        Response history = GatewayApi.getNotificationHistory(adminToken, NOTIFICATION_USERID_BUG_VALUE);
+    private static void assertNotificationRecorded(String token, String userId, String templateCode) {
+        Response history = GatewayApi.getNotificationHistory(token, userId);
         history.then().statusCode(200);
         List<Map<String, Object>> content = history.jsonPath().getList("data.content");
         assertThat(content).anySatisfy(n -> {

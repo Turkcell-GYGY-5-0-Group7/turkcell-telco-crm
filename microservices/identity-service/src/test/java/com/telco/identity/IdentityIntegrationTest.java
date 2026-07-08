@@ -27,6 +27,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -90,7 +91,7 @@ class IdentityIntegrationTest {
         adminToken = jwtService.issue(ACTOR_ID.toString(), Set.of("ADMIN"));
         customerToken = jwtService.issue(UUID.randomUUID().toString(), Set.of("SUBSCRIBER"));
 
-        when(keycloakAdminClient.createUser(anyString(), anyString()))
+        when(keycloakAdminClient.createUser(anyString(), anyString(), anyString(), anyString(), any()))
                 .thenReturn(UUID.randomUUID().toString());
         doNothing().when(keycloakAdminClient).assignRealmRoles(anyString(), anySet());
         doNothing().when(keycloakAdminClient).removeRealmRoles(anyString(), anySet());
@@ -123,7 +124,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"username": "testuser", "email": "testuser@example.com"}
+                        {"username": "testuser", "email": "testuser@example.com", "firstName": "Test", "lastName": "User"}
                         """)
                 .retrieve()
                 .toEntity(Map.class);
@@ -145,7 +146,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"username": "audituser", "email": "audituser@example.com"}
+                        {"username": "audituser", "email": "audituser@example.com", "firstName": "Audit", "lastName": "User"}
                         """)
                 .retrieve()
                 .toEntity(String.class);
@@ -164,7 +165,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"username": "getuser", "email": "getuser@example.com"}
+                        {"username": "getuser", "email": "getuser@example.com", "firstName": "Get", "lastName": "User"}
                         """)
                 .retrieve()
                 .toEntity(Map.class);
@@ -190,7 +191,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"username": "listuser", "email": "listuser@example.com"}
+                        {"username": "listuser", "email": "listuser@example.com", "firstName": "List", "lastName": "User"}
                         """)
                 .retrieve()
                 .toEntity(String.class);
@@ -214,7 +215,7 @@ class IdentityIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body("""
-                        {"username": "roleuser", "email": "roleuser@example.com"}
+                        {"username": "roleuser", "email": "roleuser@example.com", "firstName": "Role", "lastName": "User"}
                         """)
                 .retrieve()
                 .toEntity(Map.class);

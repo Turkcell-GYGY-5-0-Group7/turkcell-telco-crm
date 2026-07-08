@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "UserDeletedV1",
+  "namespace": "com.telco.platform.events.identity",
+  "doc": "Emitted when a user is deleted (user.deleted.v1). Producer: identity-service.",
+  "fields": [
+    {
+      "name": "userId",
+      "type": "string",
+      "doc": "Unique user identifier (UUID)."
+    },
+    {
+      "name": "deletedAt",
+      "type": "string",
+      "doc": "Instant the user was deleted, ISO-8601 (UTC)."
+    }
+  ]
+}

@@ -8,9 +8,8 @@ server:
 spring:
   application:
     name: notification-service
-  data:
-    mongodb:
-      uri: ${NOTIFICATION_MONGO_URI:mongodb://localhost:27017/notification_db}
+  mongodb:
+    uri: ${NOTIFICATION_MONGO_URI:mongodb://localhost:27017/notification_db}
   datasource:
     url: ${NOTIFICATION_DB_URL:jdbc:postgresql://localhost:5432/notification_db}
     username: ${NOTIFICATION_DB_USER:notification}

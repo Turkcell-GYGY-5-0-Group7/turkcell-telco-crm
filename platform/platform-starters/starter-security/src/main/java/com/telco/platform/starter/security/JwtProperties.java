@@ -105,6 +105,12 @@ public class JwtProperties {
         /** Header carrying comma-separated roles. Defaults to {@link CorrelationConstants#HEADER_USER_ROLES}. */
         private String rolesHeader = CorrelationConstants.HEADER_USER_ROLES;
 
+        /**
+         * Header carrying the resolved customer-service {@code customerId} (identity-to-customer
+         * linkage, ADR-011). Defaults to {@link CorrelationConstants#HEADER_CUSTOMER_ID}.
+         */
+        private String customerIdHeader = CorrelationConstants.HEADER_CUSTOMER_ID;
+
         public boolean isEnabled() {
             return enabled;
         }
@@ -127,6 +133,14 @@ public class JwtProperties {
 
         public void setRolesHeader(String rolesHeader) {
             this.rolesHeader = rolesHeader;
+        }
+
+        public String getCustomerIdHeader() {
+            return customerIdHeader;
+        }
+
+        public void setCustomerIdHeader(String customerIdHeader) {
+            this.customerIdHeader = customerIdHeader;
         }
     }
 }

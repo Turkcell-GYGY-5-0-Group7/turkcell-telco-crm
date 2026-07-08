@@ -25,7 +25,9 @@ public class GetTicketQueryHandler implements QueryHandler<GetTicketQuery, Ticke
         Ticket ticket = ticketRepository.findByIdWithComments(query.ticketId())
                 .orElseThrow(() -> new ResourceNotFoundException("Ticket not found: " + query.ticketId()));
 
-        if (!query.callerIsAdmin() && !ticket.getCustomerId().equals(query.callerUserId())) {
+        if (!query.callerIsAdmin()
+                && (query.callerCustomerId() == null
+                        || !query.callerCustomerId().equals(ticket.getCustomerId().toString()))) {
             throw new AccessDeniedException("Access denied to ticket " + query.ticketId());
         }
         return TicketResponse.from(ticket);

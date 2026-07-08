@@ -1,0 +1,33 @@
+{
+  "type": "record",
+  "name": "TicketSlaBreachedV1",
+  "namespace": "com.telco.platform.events.ticket",
+  "doc": "Emitted when a support ticket's SLA is detected breached (ticket.sla-breached.v1). Producer: ticket-service.",
+  "fields": [
+    {
+      "name": "ticketId",
+      "type": "string",
+      "doc": "Unique ticket identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who owns the ticket."
+    },
+    {
+      "name": "category",
+      "type": "string",
+      "doc": "Ticket category."
+    },
+    {
+      "name": "priority",
+      "type": "string",
+      "doc": "Ticket priority."
+    },
+    {
+      "name": "slaDueAt",
+      "type": "string",
+      "doc": "SLA due instant that was breached, ISO-8601."
+    }
+  ]
+}

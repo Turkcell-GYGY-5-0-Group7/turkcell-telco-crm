@@ -1,8 +1,7 @@
 # notification-service staging overrides. Credentials injected via Kubernetes Secrets.
 spring:
-  data:
-    mongodb:
-      uri: ${NOTIFICATION_MONGO_URI}
+  mongodb:
+    uri: ${NOTIFICATION_MONGO_URI}
   datasource:
     url: ${NOTIFICATION_DB_URL}
     username: ${NOTIFICATION_DB_USER}

@@ -18,6 +18,12 @@ import java.util.UUID;
  * HTTP client for customer-service. Uses Spring's {@link RestClient} with a Resilience4j
  * {@link CircuitBreaker} for fault tolerance (starter-resilience not yet available; flagged
  * for migration to the platform starter when it ships).
+ *
+ * <p>Targets {@code GET /internal/customers/{customerId}}, a tokenless internal existence/status
+ * lookup (no JWT): {@code CustomerSecurityConfig} permits it explicitly, mirroring the
+ * already-public {@code /internal/orders/{orderId}} route's "internal endpoint, no PII, no
+ * authentication required" contract - the internal shape carries no PII and this client sends no
+ * token.
  */
 @Component
 public class CustomerServiceClient {
@@ -44,7 +50,7 @@ public class CustomerServiceClient {
         try {
             return CircuitBreaker.decorateCallable(circuitBreaker, () -> {
                 ApiResult<CustomerClientResponse> result = restClient.get()
-                        .uri("/api/v1/customers/{customerId}", customerId)
+                        .uri("/internal/customers/{customerId}", customerId)
                         .retrieve()
                         .body(RESPONSE_TYPE);
                 if (result == null || !result.success()) {

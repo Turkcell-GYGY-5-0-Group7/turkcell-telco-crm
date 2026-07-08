@@ -15,6 +15,8 @@ public final class CorrelationConstants {
     public static final String HEADER_USER_ID = "X-User-Id";
     /** HTTP header carrying the gateway-trusted comma-separated roles. */
     public static final String HEADER_USER_ROLES = "X-User-Roles";
+    /** HTTP header carrying the gateway-trusted, resolved customer-service {@code customerId}. */
+    public static final String HEADER_CUSTOMER_ID = "X-Customer-Id";
 
     private CorrelationConstants() {
     }
