@@ -55,10 +55,18 @@ jobs:
       # properties, see infra/docker/.env.example). Generated fresh per run and
       # exported to $GITHUB_ENV so every later step (compose + make) sees it -
       # never committed, never baked into an image.
+      #
+      # PSP_MOCK_FORCE_OUTCOME=SUCCESS forces payment-service's MockPspAdapter to always
+      # succeed for this run. Local dev leaves it unset (infra/docker/.env.example) and keeps
+      # the original ~10% random failure rate; this workflow's acceptance suite polls each
+      # saga to completion with a fixed timeout and the mock PSP's retry scheduler only opens
+      # its first retry window after an hour, so a real (if simulated) charge failure here
+      # has no fast recovery path and just burns the polling budget until the test times out.
       - name: Generate ENCRYPT_KEY and create infra .env
         run: |
           echo "ENCRYPT_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
           cp infra/docker/.env.example infra/docker/.env
+          echo "PSP_MOCK_FORCE_OUTCOME=SUCCESS" >> infra/docker/.env
 
       - name: Build platform + domain-service images
         run: |

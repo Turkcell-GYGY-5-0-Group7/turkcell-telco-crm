@@ -658,6 +658,12 @@ services:
 
   payment-service:
     <<: *app-common
+    environment:
+      <<: *app-env
+      # Unset (default) preserves MockPspAdapter's ~10% random charge failure for local dev.
+      # CI's acceptance workflow sets this to SUCCESS so the acceptance suite's saga-completion
+      # polling isn't racing a real (if simulated) payment failure with no fast retry path.
+      PSP_MOCK_FORCE_OUTCOME: ${PSP_MOCK_FORCE_OUTCOME:-}
     build:
       context: ../../
       dockerfile: microservices/payment-service/Dockerfile
