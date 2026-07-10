@@ -1,0 +1,13 @@
+# Grafana dashboard provider. Drop dashboard JSON files into ./dashboards to have them
+# auto-loaded. Left empty for now; service dashboards are added as services come online.
+apiVersion: 1
+
+providers:
+  - name: telco-dashboards
+    orgId: 1
+    folder: Telco CRM
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards

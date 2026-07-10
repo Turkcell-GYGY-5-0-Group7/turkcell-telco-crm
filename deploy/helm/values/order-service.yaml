@@ -1,0 +1,19 @@
+# order-service (port 9004). Domain service.
+serviceName: order-service
+containerPort: 9004
+service:
+  port: 9004
+
+image:
+  tag: latest
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  SPRING_PROFILES_ACTIVE: dev,docker
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco

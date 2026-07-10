@@ -1,0 +1,79 @@
+{{- $c := "otel-collector" -}}
+# OpenTelemetry Collector - OTLP ingest from services, fanning out traces -> Tempo,
+# metrics -> Prometheus scrape (:8889), logs -> Loki (ADR-012). Config reused verbatim
+# from infra/docker/observability/otel-collector; its exporter targets (tempo, loki)
+# already use in-cluster-compatible short DNS names.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+data:
+  otel-collector-config.yaml: |
+{{ .Files.Get "files/observability/otel-collector-config.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.observability.otelCollector.grpcPort }}
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: {{ .Values.observability.otelCollector.httpPort }}
+      targetPort: otlp-http
+    - name: metrics
+      port: {{ .Values.observability.otelCollector.metricsPort }}
+      targetPort: metrics
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get "files/observability/otel-collector-config.yaml" | sha256sum }}
+    spec:
+      containers:
+        - name: otel-collector
+          image: {{ .Values.observability.otelCollector.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config=/etc/otel/otel-collector-config.yaml
+          ports:
+            - name: otlp-grpc
+              containerPort: {{ .Values.observability.otelCollector.grpcPort }}
+            - name: otlp-http
+              containerPort: {{ .Values.observability.otelCollector.httpPort }}
+            - name: metrics
+              containerPort: {{ .Values.observability.otelCollector.metricsPort }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/otel
+              readOnly: true
+          resources:
+            {{- toYaml .Values.observability.otelCollector.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: otel-collector-config

@@ -1,0 +1,47 @@
+# discovery-server / Eureka (port 8761). Comes up independently of config-server
+# (keeps its own local config, ADR-010), so it needs no config-server bootstrap
+# env - only the Eureka basic-auth credentials. Its /actuator/health is reachable
+# without auth (the compose healthcheck curls it unauthenticated). It exposes only
+# health,info, so probes target /actuator/health rather than the liveness/readiness
+# sub-groups.
+serviceName: discovery-server
+containerPort: 8761
+service:
+  port: 8761
+
+image:
+  tag: latest
+
+probes:
+  startup:
+    path: /actuator/health
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 30
+  liveness:
+    path: /actuator/health
+    initialDelaySeconds: 0
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 6
+  readiness:
+    path: /actuator/health
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+config:
+  EUREKA_USERNAME: eureka
+
+secrets:
+  EUREKA_PASSWORD: eureka
+
+# Singleton Eureka registry: do not autoscale, and no PDB (single replica would
+# otherwise block node drains). Overrides the chart defaults (15.3).
+replicaCount: 1
+autoscaling:
+  enabled: false
+pdb:
+  enabled: false

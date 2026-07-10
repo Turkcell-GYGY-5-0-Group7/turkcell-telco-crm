@@ -1,0 +1,136 @@
+{{- $c := "grafana" -}}
+# Grafana - dashboards over Prometheus/Loki/Tempo (ADR-012). Datasource provisioning
+# is reused verbatim from infra/docker/observability/grafana; its datasource URLs
+# (prometheus, loki, tempo) already use in-cluster-compatible short DNS names. The
+# dashboard provider + JSON dashboards are mounted alongside, matching the compose layout.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-credentials
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+type: Opaque
+stringData:
+  GF_SECURITY_ADMIN_PASSWORD: {{ .Values.observability.grafana.adminPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+data:
+  datasources.yml: |
+{{ .Files.Get "files/observability/grafana/datasources.yml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+data:
+  dashboards.yml: |
+{{ .Files.Get "files/observability/grafana/dashboards.yml" | indent 4 }}
+{{- range $path, $_ := .Files.Glob "files/observability/grafana/dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.observability.grafana.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 472
+      containers:
+        - name: grafana
+          image: {{ .Values.observability.grafana.image | quote }}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_USERS_ALLOW_SIGN_UP
+              value: "false"
+          envFrom:
+            - secretRef:
+                name: grafana-credentials
+          ports:
+            - name: http
+              containerPort: {{ .Values.observability.grafana.port }}
+          volumeMounts:
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: dashboards
+              mountPath: /etc/grafana/provisioning/dashboards
+              readOnly: true
+            - name: data
+              mountPath: /var/lib/grafana
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          resources:
+            {{- toYaml .Values.observability.grafana.resources | nindent 12 }}
+      volumes:
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+        - name: data
+          persistentVolumeClaim:
+            claimName: grafana-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: grafana-data
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- if .Values.storageClass }}
+  storageClassName: {{ .Values.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.observability.grafana.storage | quote }}

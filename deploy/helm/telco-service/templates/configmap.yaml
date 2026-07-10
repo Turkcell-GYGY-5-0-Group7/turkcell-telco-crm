@@ -1,0 +1,15 @@
+{{- if .Values.config }}
+# Non-secret configuration (15.2.2). Projected into the pod via envFrom so each
+# key becomes an environment variable with the exact name the service reads.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "telco-service.configMapName" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+data:
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- end }}

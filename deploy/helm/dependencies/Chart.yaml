@@ -1,0 +1,21 @@
+apiVersion: v2
+name: telco-dependencies
+description: >-
+  Dev-grade in-cluster stateful dependencies for the Telco CRM platform, mirroring
+  the local Docker Compose stack (infra/docker/compose.yml). Provisions PostgreSQL,
+  Redis, MongoDB, Kafka (KRaft), Schema Registry, Kafka Connect (Debezium), MinIO,
+  Keycloak, and the observability stack (OpenTelemetry Collector, Tempo, Loki,
+  Prometheus, Grafana). Each dependency Service is named identically to its compose
+  service so that services running with the Spring 'docker' profile resolve them by
+  the same in-namespace short DNS names, unchanged. Intended for a Kind cluster.
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - telco-crm
+  - dependencies
+  - postgres
+  - kafka
+  - observability
+maintainers:
+  - name: Telco CRM DevOps

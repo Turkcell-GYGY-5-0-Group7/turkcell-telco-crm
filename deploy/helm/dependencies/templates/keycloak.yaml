@@ -1,0 +1,117 @@
+{{- $c := "keycloak" -}}
+# Keycloak - identity provider / JWT issuer (ADR-011). Backed by the dedicated
+# 'keycloak' Postgres database (created by the postgres init SQL). The telco-crm
+# realm is imported on start from a mounted ConfigMap (--import-realm). Services
+# fetch JWKS from http://keycloak:8080/realms/telco-crm/... , unchanged from compose.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: keycloak-credentials
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+type: Opaque
+stringData:
+  KC_BOOTSTRAP_ADMIN_USERNAME: {{ .Values.keycloak.adminUser | quote }}
+  KC_BOOTSTRAP_ADMIN_PASSWORD: {{ .Values.keycloak.adminPassword | quote }}
+  KC_DB_USERNAME: {{ .Values.keycloak.dbUser | quote }}
+  KC_DB_PASSWORD: {{ .Values.keycloak.dbPassword | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-realm
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+data:
+  realm-export.json: |-
+{{ .Files.Get "files/keycloak/realm-export.json" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.keycloak.httpPort }}
+      targetPort: http
+    - name: management
+      port: {{ .Values.keycloak.managementPort }}
+      targetPort: management
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
+    spec:
+      containers:
+        - name: keycloak
+          image: {{ .Values.keycloak.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - start-dev
+            - --import-realm
+          env:
+            - name: KC_HOSTNAME_STRICT
+              value: "false"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: "jdbc:postgresql://postgres:{{ .Values.postgres.port }}/keycloak"
+          envFrom:
+            - secretRef:
+                name: keycloak-credentials
+          ports:
+            - name: http
+              containerPort: {{ .Values.keycloak.httpPort }}
+            - name: management
+              containerPort: {{ .Values.keycloak.managementPort }}
+          volumeMounts:
+            - name: realm
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+      volumes:
+        - name: realm
+          configMap:
+            name: keycloak-realm

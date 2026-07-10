@@ -1,0 +1,152 @@
+# ---------------------------------------------------------------------------
+# telco-dependencies - dev-grade in-cluster stateful dependencies.
+#
+# Image tags are pinned to the SAME versions used by infra/docker/compose.yml.
+# Passwords carry dev-only defaults that mirror the compose ${X:-telco} defaults;
+# they are rendered into Kubernetes Secrets (never inlined into a workload spec).
+# For any non-dev cluster, override these at install time (helm --set / -f) or let
+# the 15.2.2 secrets layer supply pre-created Secrets. Do NOT commit real secrets.
+# ---------------------------------------------------------------------------
+
+# Namespace every dependency lands in. Same-namespace short-name DNS (postgres,
+# kafka, schema-registry, ...) is what the Spring 'docker' profile expects.
+namespace: telco
+
+# Guard so the namespace object is created exactly once by this chart. Set to
+# false if the namespace is provisioned externally (e.g. by a parent umbrella).
+createNamespace: true
+
+# Default StorageClass for PVCs (empty string = cluster default, which Kind provides
+# via the local-path provisioner). Override per-dependency below if needed.
+storageClass: ""
+
+# ------------------------------------------------------------------ PostgreSQL
+postgres:
+  image: postgres:17
+  # Superuser (POSTGRES_USER). Per-service DB users/passwords are created by the
+  # init SQL (files/postgres/*.sql), mirroring compose initdb - dev-only.
+  username: telco
+  password: telco
+  storage: 2Gi
+  port: 5432
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# ----------------------------------------------------------------------- Redis
+redis:
+  image: redis:8
+  password: telco
+  storage: 512Mi
+  port: 6379
+  resources:
+    requests: { cpu: 50m, memory: 64Mi }
+    limits: { cpu: 500m, memory: 256Mi }
+
+# --------------------------------------------------------------------- MongoDB
+# notification-service document store (ADR-006 exception). No auth, matching the
+# unauthenticated mongodb://mongo:27017/notification_db URI used by the service.
+mongo:
+  image: mongo:7
+  storage: 1Gi
+  port: 27017
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# ----------------------------------------------------------------------- Kafka
+# Single-node KRaft (broker + controller), mirroring compose kafka settings.
+kafka:
+  image: apache/kafka:4.0.0
+  storage: 2Gi
+  port: 9092          # INTERNAL listener consumed by in-cluster clients
+  controllerPort: 9093
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1536Mi }
+
+# ------------------------------------------------------------- Schema Registry
+schemaRegistry:
+  image: confluentinc/cp-schema-registry:7.9.0
+  port: 8081
+  resources:
+    requests: { cpu: 50m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 768Mi }
+
+# ------------------------------------------------- Kafka Connect (Debezium CDC)
+kafkaConnect:
+  image: quay.io/debezium/connect:3.1.0.Final
+  port: 8083
+  resources:
+    requests: { cpu: 100m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# ----------------------------------------------------------- MinIO object store
+minio:
+  image: minio/minio:RELEASE.2025-04-08T15-41-24Z
+  mcImage: minio/mc:RELEASE.2025-04-08T15-39-49Z
+  rootUser: minioadmin
+  rootPassword: minioadmin
+  bucket: kyc-documents
+  storage: 2Gi
+  apiPort: 9000
+  consolePort: 9090
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+# -------------------------------------------------------------------- Keycloak
+keycloak:
+  image: quay.io/keycloak/keycloak:26.1
+  adminUser: admin
+  adminPassword: admin
+  # Keycloak's own PostgreSQL database + user (created by the postgres init SQL).
+  dbUser: keycloak
+  dbPassword: keycloak
+  realm: telco-crm
+  httpPort: 8080
+  managementPort: 9000
+  resources:
+    requests: { cpu: 200m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+
+# ------------------------------------------------------------- Observability
+observability:
+  otelCollector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    grpcPort: 4317
+    httpPort: 4318
+    metricsPort: 8889
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+  tempo:
+    image: grafana/tempo:2.6.1
+    httpPort: 3200
+    otlpGrpcPort: 4317
+    storage: 1Gi
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+  loki:
+    image: grafana/loki:3.3.1
+    httpPort: 3100
+    storage: 1Gi
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    port: 9090
+    storage: 2Gi
+    resources:
+      requests: { cpu: 50m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 768Mi }
+  grafana:
+    image: grafana/grafana:11.4.0
+    adminPassword: admin
+    port: 3000
+    storage: 512Mi
+    resources:
+      requests: { cpu: 50m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }

@@ -1,0 +1,146 @@
+{{- $c := "postgres" -}}
+# PostgreSQL 17 - primary store for all Postgres-backed services + Keycloak DB.
+# wal_level=logical enables Debezium CDC (ADR-005). The init SQL (mirrored from
+# infra/docker/postgres/initdb) creates every per-service database + user and the
+# debezium replication role on first start.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+type: Opaque
+stringData:
+  POSTGRES_USER: {{ .Values.postgres.username | quote }}
+  POSTGRES_PASSWORD: {{ .Values.postgres.password | quote }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-initdb
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+data:
+  01-create-databases.sql: |
+{{ .Files.Get "files/postgres/01-create-databases.sql" | indent 4 }}
+  02-init-schemas.sql: |
+{{ .Files.Get "files/postgres/02-init-schemas.sql" | indent 4 }}
+---
+# Headless Service backing the StatefulSet's stable network identity.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.port }}
+      targetPort: postgres
+---
+# Stable client-facing Service. Name MUST equal the compose service name 'postgres'
+# so 'jdbc:postgresql://postgres:5432/...' resolves unchanged in-cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.port }}
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  serviceName: postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
+    spec:
+      containers:
+        - name: postgres
+          image: {{ .Values.postgres.image | quote }}
+          imagePullPolicy: IfNotPresent
+          args:
+            - postgres
+            - -c
+            - wal_level=logical
+            - -c
+            - max_wal_senders=10
+            - -c
+            - max_replication_slots=10
+            - -c
+            - max_connections=200
+          ports:
+            - name: postgres
+              containerPort: {{ .Values.postgres.port }}
+          envFrom:
+            - secretRef:
+                name: postgres-credentials
+          env:
+            - name: POSTGRES_DB
+              value: postgres
+            # Point PGDATA at a subdirectory: the mount root is not empty (lost+found
+            # on some provisioners), which would otherwise abort initdb.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.postgres.username }}"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "{{ .Values.postgres.username }}"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.postgres.resources | nindent 12 }}
+      volumes:
+        - name: initdb
+          configMap:
+            name: postgres-initdb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.storageClass }}
+        storageClassName: {{ .Values.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgres.storage | quote }}

@@ -14,7 +14,135 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-08 (Sprint 14, task 14.4 Identity-to-Customer Linkage: **DONE**. Sprint 14 is
+Last updated: 2026-07-08 (Sprint 15, Feature 15.5 Release Documentation **DONE** - all 5 Sprint 15
+features are now deliverable-complete and individually verified (5/5). Wrote `deploy/RUNBOOK.md`
+(prereqs, cluster bring-up with the exact verified kind/ingress-nginx/metrics-server commands,
+config/secrets, deploy for GHCR + local-Kind, access, HPA scaling, rollback, smoke test, observability,
+teardown, known follow-ups) and corrected two now-stale sections in `deploy/helm/README.md` (probes
+target /actuator/health; HPA/PDB ship enabled) to match the shipped charts. **IMPORTANT - sprint-level
+exit criteria are NOT yet fully met** (so this is deliverables-DONE, not a full sprint sign-off): the
+Sprint 15 exit criteria require "all MVP acceptance criteria hold in the DEPLOYED environment", which
+needs a fully-green 13-service in-cluster boot. That is blocked by the tracked, user-ratified-deferred
+follow-ups: (1) schema-registry exit-1 at the Confluent "Configuring" stage; (2) product-catalog 500
+on GET /api/v1/tariffs in-cluster; plus running the full acceptance suite against the deployed cluster.
+What IS proven live on Kind this sprint: images build + run non-root with healthchecks (15.1);
+Helm charts deploy discovery/config/gateway/product-catalog to Ready + gateway reachable via Ingress +
+13/14 deps up incl. all observability (15.2); HPA scale-out/in + PDB enforcement + zero-outage rolling
+deploy (15.3); helm-based deploy + live rollback + a working smoke test that correctly catches a bad
+deploy (15.4). Four real bugs were found and fixed live (only surfaceable on a real cluster):
+numeric-UID USER x13, kafka KRaft headless quorum, actuator-probe 401 crash-loop (all domain services),
+securityContext chart pin. Nothing committed yet (user choice); Kind cluster left running. NEXT to fully
+close Sprint 15 / the MVP: resolve the 2 domain follow-ups and run the deployed-environment acceptance
+pass (the CI Kind run is authored for this). Detail: `docs/tasks/todo.md` Wave 5 + `deploy/RUNBOOK.md`
+Section 11.
+
+Prior update, 2026-07-08 (Sprint 15, Feature 15.4 CI/CD Pipeline and Rollback **DONE** (4/5),
+mechanics live-verified; user ratified deferring one domain-service follow-up. Authored
+`.github/workflows/deploy.yml` (ephemeral Kind-in-CI, GitHub-Environment-gated, runs after CI images
+exist, GHCR imagePullSecret, deploys deps + 13 services via `helm upgrade --install`),
+`deploy/smoke/smoke-test.sh` (reusable: gateway health via Ingress + service readiness + Keycloak
+ROPC token + one authenticated read through the gateway), and `deploy/ROLLBACK.md`. actionlint +
+bash -n clean. 15.4.1 deploy-to-Kind path PROVEN (deps + discovery/config/gateway/product-catalog
+deployed and Ready). 15.4.2 rollback PROVEN LIVE: broken revision (bogus image tag) -> new pod
+NotReady while the old 2 pods kept serving (maxUnavailable:0, Ingress HTTP 200 throughout) ->
+`helm rollback` restored service, history logs "Rollback to N". 15.4.3 smoke script PROVEN end to end
+against the live stack - gateway health, all-4-service readiness, real Keycloak token, and full
+Ingress->gateway->JWT->Eureka->product-catalog routing all pass; it correctly FAILS on a bad response
+(caught product-catalog's 500) = the required "fails on broken -> rollback" behavior. FOURTH systemic
+bug found + fixed live here: the chart's default liveness/readiness probes hit
+/actuator/health/liveness + /readiness, but every service SecurityConfig permits only exact
+"/actuator/health" -> the sub-groups 401 -> liveness killed the pod -> EVERY domain service
+crash-looped; fixed the chart to probe /actuator/health (product-catalog then reached Ready).
+TRACKED FOLLOW-UPS (user-ratified defer; not deployment-artifact defects): (1) product-catalog returns
+500 on GET /api/v1/tariffs in-cluster (unhandled, @Cacheable path) - domain-engineer; (2) permit
+"/actuator/health/**" in the 10 SecurityConfigs to restore proper liveness/readiness split - security;
+(3) schema-registry Confluent "Configuring" exit-1 + full 13-service green boot - the CI Kind run;
+(4) CI builds only CHANGED images, so full-stack deploy needs the deploy.yml workflow_dispatch
+`image_tag=latest` override. 4 real bugs fixed live this sprint total (numeric-UID x13, kafka KRaft
+headless, actuator-probe 401 crash-loop, securityContext chart pin). Nothing committed yet
+(user choice); Kind cluster + deps + metrics-server + 4 services left running. Sprint 15 last item:
+15.5 Release Documentation (operations runbook). Detail: `docs/tasks/todo.md` Wave 4.
+
+Prior update, 2026-07-08 (Sprint 15, Feature 15.3 Autoscaling and Resilience **DONE** (3/5),
+LIVE-VERIFIED on the Kind cluster. Enhanced `deploy/helm/telco-service`: added an HPA `behavior`
+block (fast scaleUp, 60s scaleDown stabilization, 1 pod/30s), flipped chart defaults to
+autoscaling.enabled=true (min2/max5/target75%) + pdb.enabled=true (minAvailable1), with config-server
++ discovery-server overriding both OFF (singletons). helm lint/template clean (HPA+PDB render for
+domain services, 0 for the 2 infra singletons). Installed metrics-server (patched
+--kubelet-insecure-tls for Kind). 15.3.1 HPA proven on api-gateway with a real load generator: live
+SCALE-OUT 1->2->3->4(max) as CPU crossed target, then SCALE-IN 4->3->2->1(min) after the stabilization
+window per the scaleDown policy - full control loop (metrics->calc->replicas) end to end. (Note: the
+gateway's Redis rate limiter caps HTTP-driven CPU, so the demo threshold was tuned below real
+under-load utilization to make a genuine crossing observable - real metrics, not synthetic.) 15.3.2
+PDB proven: with 2 replicas + minAvailable1, first eviction returned 201, second returned 429 "Cannot
+evict pod as it would violate the pod's disruption budget"; a rolling restart held availableReplicas=2
+with HTTP 200 through the Ingress at every sample (strategy maxUnavailable:0/maxSurge:1) - no outage.
+(Incidental: hit + documented MSYS/Git-Bash path mangling of kubectl `--raw` URLs - use
+MSYS_NO_PATHCONV=1 + stdin body.) Sprint 15 next: 15.4 CI/CD Pipeline and Rollback (deploy stage,
+rollback, smoke tests - the full 13-service boot + schema-registry follow-up land here in the CI Kind
+run). Kind cluster + metrics-server left running. Detail: `docs/tasks/todo.md` Wave 3.
+
+Prior update, 2026-07-08 (Sprint 15, Feature 15.2 Kubernetes Manifests **DONE** (2/5),
+LIVE-VERIFIED on a real Kind cluster. Built two Helm charts: a reusable `deploy/helm/telco-service`
+(one release per service, 13 per-service values files - Deployment with probes/resources, Service,
+Ingress for the gateway, HPA/PDB templates shipped disabled = HPA-ready for 15.3) and
+`deploy/helm/dependencies` (46 objects mirroring the compose stack, dep Service names = compose names
+so the Spring `docker` profile resolves in-cluster unchanged). Config/secret model (15.2.2): each
+service's config/secret split derived from its compose env; secrets (ENCRYPT_KEY, *_PASSWORD,
+CUSTOMER_AES_KEY) -> K8s Secrets, non-secret -> ConfigMap, consumed via envFrom; no plaintext secret
+committed (dev-only defaults, marked). Both charts helm-lint + helm-template clean. Then did a REAL
+Kind verification (installed helm v4.2.2 + kind v0.33 locally): created a cluster + ingress-nginx,
+deployed discovery-server + config-server + api-gateway (all 1/1, probes passing) and the full
+dependency stack. The live run caught and FIXED two real bugs that only a cluster surfaces:
+(A) securityContext - all 13 Dockerfiles declared a NON-numeric `USER app`, which K8s runAsNonRoot
+rejects ("cannot verify user is non-root"); fixed to numeric `USER 10001` in every Dockerfile AND
+pinned runAsUser/runAsGroup/fsGroup=10001 in the chart (images from 15.1 need a rebuild to carry the
+Dockerfile change - CI 15.1.2 rebuilds fresh; the chart override already lets old images run).
+(B) kafka KRaft - the StatefulSet governing Service was ClusterIP with quorum voter `1@kafka:9093`
+(load-balanced), so the broker could not register with its own controller; fixed to a headless
+Service (clusterIP: None) + pod-FQDN quorum voter, confirmed kafka-0 1/1 after the fix. Gateway
+reachability proven end-to-end THROUGH the Ingress: `GET /actuator/health` via
+`Host: telco.local -> localhost:18080` returned HTTP 200 `{"status":"UP"}`, and `/api/v1/customers`
+returned 401 (gateway routing + security live). Dependency stack: 13/14 pods Running incl. ALL
+observability (otel-collector/tempo/loki/prometheus/grafana), postgres/redis/mongo/minio/keycloak/
+kafka/kafka-connect. TWO tracked follow-ups, deferred to the Wave 4 CI Kind run (not chart-architecture
+flaws): schema-registry exits 1 at the Confluent "Configuring" stage (isolated container-config
+detail), and the full 13-service boot + debezium connector registration + keycloak realm-import
+success are validated by 15.4.3's end-to-end smoke test. One reconciliation flagged for
+code-review/tech-lead at sprint close: config-server stays deployed serving the bulk (baked) config
+while secrets come from K8s Secrets - full config-server removal (pure ConfigMap-per-service) is
+post-MVP. The Kind cluster is left running for Wave 3 (15.3 HPA/PDB). Sprint 15 next: 15.3
+Autoscaling and Resilience. Detail in `docs/tasks/todo.md` (Wave 2 section).
+
+Prior update, 2026-07-08 (Sprint 15, Feature 15.1 Containerization **DONE** (1/5). Task 15.1.2 (CI
+image build + push) implemented: two jobs added to `.github/workflows/ci.yml` - a `changes` job
+(git-diff change detection: `platform/**`/`configs/**`/reactor-pom -> rebuild all 13, else per-service)
+and a matrix `build-push-images` job pushing each changed service to GHCR
+(`ghcr.io/<owner>/telco-<svc>`) tagged `sha-<12>` + Maven reactor version + `latest`, via GITHUB_TOKEN
+with job-scoped `packages: write` and gha layer cache. Runs ONLY on push to master (never PRs) and
+`needs` the test jobs, so a PR can't publish and a red build can't publish. Validated with
+`actionlint v1.7.7` (clean), a YAML parse, and a full logical trace of the five gate conditions.
+The one thing not runnable/authorized locally is the terminal proof that an image actually lands in
+GHCR - that happens on the first real merge to master (a live GHCR publish to the user's namespace was
+deliberately NOT performed). Sprint 15 next: Feature 15.2 (Kubernetes manifests / Helm) - the large
+greenfield block. Decisions locked in `docs/tasks/todo.md`: Kind, Helm, GHCR, ephemeral Kind-in-CI,
+self-authored in-cluster deps.
+
+Prior update, 2026-07-08 (Sprint 15 STARTED - moved from TODO to **IN PROGRESS**. Task 15.1.1
+(Production Dockerfiles) **DONE, verified**: all 13 in-scope MVP services (3 infra + 10 domain;
+reference-service/service-template/web-bff excluded) had multi-stage JRE-21 Dockerfiles but all ran
+as root with no healthcheck - a real gap against 15.1.1's acceptance criteria. Added a non-root `app`
+user (alpine `adduser -S` + `USER app`) and a `HEALTHCHECK` curling `/actuator/health` on each
+service's own port (config-server carries the basic-auth exception per its committed default creds;
+actuator health is exposed centrally in `microservices/configs/application.yml`). Verified for real,
+not statically: booted Docker, built the customer-service image (exit 0), ran it and confirmed
+`uid=100(app)` non-root plus the HEALTHCHECK baked into the image config. The AC's "reports healthy"
+end-state depends on config-server/Kafka/Postgres being up, so it is validated at stack level in
+15.2/15.4, not for a service in isolation. Feature 15.1 stays **IN PROGRESS** (15.1.2, the CI image
+build+push to GHCR, is next). Sprint 15 decisions locked: Kind, Helm, GHCR, ephemeral Kind-in-CI,
+self-authored in-cluster dep manifests mirroring compose - see `docs/tasks/todo.md`.
+
+Prior update, 2026-07-08 (Sprint 14, task 14.4 Identity-to-Customer Linkage: **DONE**. Sprint 14 is
 now **5/5, DONE**.
 
 Correction first: the immediately-prior entry below described the remaining blocker as the Keycloak
@@ -457,14 +585,18 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
-| [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | TODO | 0/5 |
+| [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 
-Totals (MVP, Sprints 01-15): 14 sprints DONE, 0 IN PROGRESS, 1 TODO. Features: 72 DONE / 0 IN PROGRESS
-/ 5 TODO / 0 BLOCKED (77 total; Sprint 14, task 14.4 Identity-to-Customer Linkage closed DONE on
-2026-07-08 - see the entry at the top of this file and
-`sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md` Step 8 - completing Sprint 14
-at 5/5, DONE).
+Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE / 0 IN PROGRESS
+/ 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -
+deliverables built and each individually verified (much of it live on a Kind cluster) - BUT its
+platform-level exit criteria ("all MVP AC hold in the DEPLOYED environment") are not yet fully met:
+a fully-green 13-service in-cluster boot + the deployed-environment acceptance run remain, blocked by
+two tracked, user-ratified-deferred follow-ups (schema-registry Confluent-config exit-1;
+product-catalog in-cluster 500 on the tariffs read). So the MVP is feature-complete and deployable,
+with a short, well-scoped integration tail before "runs green end-to-end in Kubernetes" is literally
+true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
 Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.

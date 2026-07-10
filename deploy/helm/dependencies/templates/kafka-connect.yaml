@@ -1,0 +1,87 @@
+{{- $c := "kafka-connect" -}}
+# Debezium Kafka Connect worker - streams the transactional outbox tables to Kafka
+# via Postgres logical replication (ADR-005, ADR-009). Mirrors compose kafka-connect
+# env, including the JSON converter + schemas-disabled settings used for the outbox
+# payload expansion. Connector registration itself is applied at runtime (see notes),
+# not baked into this chart.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-connect
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  selector:
+    {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.kafkaConnect.port }}
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka-connect
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "telco-deps.selectorLabels" (dict "component" $c) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
+    spec:
+      containers:
+        - name: kafka-connect
+          image: {{ .Values.kafkaConnect.image | quote }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Values.kafkaConnect.port }}
+          env:
+            - name: BOOTSTRAP_SERVERS
+              value: "kafka:{{ .Values.kafka.port }}"
+            - name: GROUP_ID
+              value: telco-connect
+            - name: CONFIG_STORAGE_TOPIC
+              value: _connect_configs
+            - name: OFFSET_STORAGE_TOPIC
+              value: _connect_offsets
+            - name: STATUS_STORAGE_TOPIC
+              value: _connect_statuses
+            - name: CONFIG_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: OFFSET_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: STATUS_STORAGE_REPLICATION_FACTOR
+              value: "1"
+            - name: KEY_CONVERTER
+              value: org.apache.kafka.connect.json.JsonConverter
+            - name: VALUE_CONVERTER
+              value: org.apache.kafka.connect.json.JsonConverter
+            - name: CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+            - name: CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE
+              value: "false"
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "curl -fsS http://localhost:{{ .Values.kafkaConnect.port }}/connectors >/dev/null"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 12
+          livenessProbe:
+            httpGet:
+              path: /connectors
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 10
+            failureThreshold: 6
+          resources:
+            {{- toYaml .Values.kafkaConnect.resources | nindent 12 }}
