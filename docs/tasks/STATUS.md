@@ -14,7 +14,42 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-08 (Sprint 15, Feature 15.5 Release Documentation **DONE** - all 5 Sprint 15
+Last updated: 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
+built, nothing IN PROGRESS, nothing DONE**. Sprint 16 (Web Frontend, post-MVP) was detailed: its 5
+feature task files (16.1-16.5) were authored, replacing the prior "to be authored when the sprint is
+scheduled" placeholder; Sprint 16 stays **TODO 0/5**. Seven brand-new post-MVP sprints were scaffolded
+end to end - each with a sprint README and Features table, and (except Sprint 20) a new Proposed-status
+ADR - so this single effort now covers 8 requested capabilities in total: BFF/web frontend (Sprint 16,
+above, ADR-022), Sprint 17 Distributed Locking (new `starter-lock` platform module, Redisson-backed,
+ADR-024 Proposed), Sprint 18 Secret Management (HashiCorp Vault, Kubernetes auth method + Secrets Store
+CSI driver, ADR-025 Proposed, extends/replaces Sprint 15's K8s-Secret-only model), Sprint 19 Service
+Mesh and mTLS (Linkerd + default-deny NetworkPolicies, ADR-026 Proposed, closes the mTLS deferral
+recorded in `docs/architecture/security-posture.md` Section 8, sequenced after Sprint 18 for
+operational reasons only - no hard technical dependency), Sprint 20 Chaos Engineering (Chaos Mesh fault
+injection - pod-kill/latency/network-partition - plus a game-day runbook on the existing Kind/Helm
+baseline; explicitly extends ADR-012/ADR-013 per a tech-lead ruling, no new ADR), Sprint 21
+Campaign/Catalog Validation (new `campaign-service`, CQRS+Mediator, port 9011 proposed, ADR-027
+Proposed - the buildable subset of the campaign/promotion engine already tracked in
+`docs/product/roadmap.md` Section 5 and `docs/product/TELCO-CRM-ADVANCED.md` Section 2.4), Sprint 22
+Invoice Dispute/Chargeback (new `dispute-service`, Domain Orchestration, port 9012 proposed, ADR-028
+Proposed - genuinely new scope, not previously listed in the roadmap or in ADVANCED.md), and Sprint 23
+SIM-Swap/Fraud Detection (new `fraud-service`, CQRS+Mediator, port 9013 proposed, ADR-029 Proposed - a
+deliberately narrowed, rule-based MVP subset of the streaming/ML fraud-service in ADVANCED.md
+Section 4.4). All 7 new sprints (17-23) are **TODO** with 0 features started; see the Sprint Rollup
+table below for exact per-sprint feature counts. No code was written, no service was scaffolded, and no
+ADR was ratified this session - every new ADR (022 already Accepted from a prior session; 024-029) is
+either already-Accepted (022) or Proposed pending tech-lead ratification before its sprint's build work
+starts. This entry, together with the matching `docs/product/roadmap.md` update (new Phase P6 -
+Post-MVP Depth, and a restructured Section 5 Post-MVP Candidates), is the reconciliation step that makes
+both documents the accurate, single source of truth for this newly documented (not yet built) scope.
+Detail: each sprint's own README under `docs/tasks/sprint-16-web-frontend/`,
+`docs/tasks/sprint-17-distributed-locking/`, `docs/tasks/sprint-18-secret-management/`,
+`docs/tasks/sprint-19-service-mesh-mtls/`, `docs/tasks/sprint-20-chaos-engineering/`,
+`docs/tasks/sprint-21-campaign-catalog-validation/`, `docs/tasks/sprint-22-dispute-chargeback/`,
+`docs/tasks/sprint-23-sim-swap-fraud/`, and the corresponding ADRs under `architecture/adr/`
+(ADR-022, ADR-024 through ADR-029).
+
+Prior update, 2026-07-08 (Sprint 15, Feature 15.5 Release Documentation **DONE** - all 5 Sprint 15
 features are now deliverable-complete and individually verified (5/5). Wrote `deploy/RUNBOOK.md`
 (prereqs, cluster bring-up with the exact verified kind/ingress-nginx/metrics-server commands,
 config/secrets, deploy for GHCR + local-Kind, access, HPA scaling, rollback, smoke test, observability,
@@ -587,6 +622,13 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
+| [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | TODO | 0/5 |
+| [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | TODO | 0/5 |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
+| [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | TODO | 0/5 |
+| [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | TODO | 0/5 |
+| [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | TODO | 0/6 |
+| [23](sprint-23-sim-swap-fraud/README.md) | fraud-service, SIM-swap/fraud detection (**post-MVP**) | TODO | 0/5 |
 
 Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE / 0 IN PROGRESS
 / 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -
@@ -597,7 +639,10 @@ two tracked, user-ratified-deferred follow-ups (schema-registry Confluent-config
 product-catalog in-cluster 500 on the tariffs read). So the MVP is feature-complete and deployable,
 with a short, well-scoped integration tail before "runs green end-to-end in Kubernetes" is literally
 true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
-Sprint 16 is post-MVP (ADR-022) and excluded from the MVP totals.
+Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
+ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
+and excluded from the MVP totals. All 8 are documentation/design only as of 2026-07-11 - TODO, not
+started. See Phase P6 below and [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.
@@ -619,6 +664,20 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-007 Revenue Cycle | P3 | Usage-driven billing (AC-02, AC-03) | 10, 11 |
 | EPIC-008 Engagement and Support | P4 | Notifications and ticketing | 12 |
 | EPIC-009 Hardening and Release | P5 | NFR targets, security, Kubernetes | 13, 14, 15 |
+| EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) | 16 |
+| EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Proposed) | 17 |
+| EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Proposed) | 18 |
+| EPIC-019 Zero-Trust Networking | P6 | Service mesh mTLS + default-deny NetworkPolicies (ADR-026 Proposed) | 19 |
+| EPIC-020 Chaos Engineering | P6 | Fault injection + game days, extends ADR-012/ADR-013 (no new ADR) | 20 |
+| EPIC-021 Campaign and Catalog Validation | P6 | `campaign-service`, dynamic pricing/redemption limits (ADR-027 Proposed) | 21 |
+| EPIC-022 Invoice Dispute and Chargeback | P6 | `dispute-service`, invoice dispute/PSP chargeback orchestration (ADR-028 Proposed) | 22 |
+| EPIC-023 SIM-Swap and Fraud Detection | P6 | `fraud-service`, rule-based fraud detection, MVP scope (ADR-029 Proposed) | 23 |
+
+Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23; all
+of EPIC-016 through EPIC-023 are TODO as of 2026-07-11 - documented and design-reviewed, not built. See
+[`docs/product/roadmap.md`](../product/roadmap.md) Section 3 ("P6 - Post-MVP Depth") for the phase
+detail and its explicit disambiguation from `docs/product/TELCO-CRM-ADVANCED.md`'s own P6-P11
+forward-looking phase lettering (Section 10 of that document), which this phase is distinct from.
 
 ## How to Update Status
 
