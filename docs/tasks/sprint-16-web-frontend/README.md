@@ -24,11 +24,11 @@ usage, invoices). Introduce a Web BFF to compose domain APIs for the UI. Built p
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 16.1 | Web BFF scaffold and gateway integration | TODO | (to be authored) |
-| 16.2 | SvelteKit app scaffold and routing | TODO | (to be authored) |
-| 16.3 | Keycloak Authorization Code + PKCE login | TODO | (to be authored) |
-| 16.4 | Onboarding wizard (register, KYC, order, pay) | TODO | (to be authored) |
-| 16.5 | Account views (subscriptions, usage, invoices) | TODO | (to be authored) |
+| 16.1 | Web BFF scaffold and gateway integration | TODO | [16.1-web-bff-scaffold-and-gateway-integration.md](16.1-web-bff-scaffold-and-gateway-integration.md) |
+| 16.2 | SvelteKit app scaffold and routing | TODO | [16.2-sveltekit-app-scaffold-and-routing.md](16.2-sveltekit-app-scaffold-and-routing.md) |
+| 16.3 | Keycloak Authorization Code + PKCE login | TODO | [16.3-keycloak-authorization-code-pkce-login.md](16.3-keycloak-authorization-code-pkce-login.md) |
+| 16.4 | Onboarding wizard (register, KYC, order, pay) | TODO | [16.4-onboarding-wizard.md](16.4-onboarding-wizard.md) |
+| 16.5 | Account views (subscriptions, usage, invoices) | TODO | [16.5-account-views.md](16.5-account-views.md) |
 
 ## Sprint Deliverables
 
