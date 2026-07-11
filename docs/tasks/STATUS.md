@@ -14,7 +14,31 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
+Last updated: 2026-07-12 (Sprint 15 exit-criteria follow-ups - **two of three RESOLVED live on Kind;
+one remains**. Reopened the two tracked deployment blockers on the live Kind cluster and closed both
+with evidence. (1) schema-registry in-cluster crash-loop: the originally-recorded root cause
+(KafkaStore-init timeout, "add a wait-for-kafka init-container") was DISPROVEN by the actual crashed-pod
+evidence and the pre-approved fix was correctly NOT applied. Real, live-confirmed root cause: a
+Kubernetes service-link env collision - the Service named `schema-registry` makes kubelet inject
+`SCHEMA_REGISTRY_PORT=tcp://<ip>:8081`, which cp-schema-registry's entrypoint reads as the deprecated
+PORT setting and hard-exits 1 in the configure stage before Kafka is ever contacted (zero log4j output
+was the tell). Fix: `enableServiceLinks: false` on the schema-registry Deployment pod spec
+(`deploy/helm/dependencies/templates/schema-registry.yaml`); verified live Running 1/1, 0 restarts,
+`/subjects` serving. (2) product-catalog 500 on GET /api/v1/tariffs in-cluster: ENVIRONMENTAL, not a
+code defect - the list endpoint is uncached and the earlier 500 occurred only during a
+thrashing/partial-wave cluster state; returned HTTP 200 with the correct ApiResult shape once the
+dependency layer was healthy. No code change. Incidental live finding: kafka-0's exit-143 churn was a
+liveness-probe kill under single-node CPU pressure (HPAs had inflated app replicas 5x), cleared by
+pinning the api-gateway + product-catalog HPAs to 1/1 - no chart change. The dependency layer + config/
+discovery/gateway/product-catalog are all Running 1/1. STILL REMAINING (the one item between
+"feature-complete + deployable" and "AC proven green in Kubernetes"): the full 13-service in-cluster
+boot - the other 9 domain services are not yet imaged/deployed on the local node and the 10 Debezium
+outbox connectors are not registered - then the deployed-environment AC-01/02/03 run. Detail:
+`docs/tasks/todo.md` ("Closing the Sprint 15 exit-criteria tail"), `docs/tasks/lessons.md` (2026-07-12
+entry), and `docs/tasks/sprint-15-deployment/README.md` (Exit-Criteria Follow-Ups). Nothing committed
+yet (user choice); the Kind cluster is left running.
+
+Prior update, 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
 built, nothing IN PROGRESS, nothing DONE**. Sprint 16 (Web Frontend, post-MVP) was detailed: its 5
 feature task files (16.1-16.5) were authored, replacing the prior "to be authored when the sprint is
 scheduled" placeholder; Sprint 16 stays **TODO 0/5**. Seven brand-new post-MVP sprints were scaffolded
@@ -634,11 +658,15 @@ Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE 
 / 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -
 deliverables built and each individually verified (much of it live on a Kind cluster) - BUT its
 platform-level exit criteria ("all MVP AC hold in the DEPLOYED environment") are not yet fully met:
-a fully-green 13-service in-cluster boot + the deployed-environment acceptance run remain, blocked by
-two tracked, user-ratified-deferred follow-ups (schema-registry Confluent-config exit-1;
-product-catalog in-cluster 500 on the tariffs read). So the MVP is feature-complete and deployable,
-with a short, well-scoped integration tail before "runs green end-to-end in Kubernetes" is literally
-true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
+a fully-green 13-service in-cluster boot + the deployed-environment acceptance run remain. Of the two
+tracked deployment blockers, BOTH were RESOLVED live on 2026-07-12 (schema-registry exit-1 -> a K8s
+service-link env collision, fixed with `enableServiceLinks: false`; product-catalog in-cluster 500 ->
+environmental, returns 200 on a healthy dependency layer, no code change). The one item still standing
+is the always-deferred full 13-service boot itself: the other 9 domain services are not yet imaged/
+deployed on the local node and the 10 Debezium outbox connectors are not registered, after which the
+deployed-environment AC-01/02/03 run can execute. So the MVP is feature-complete and deployable, with a
+short, well-scoped integration tail (the full boot) before "runs green end-to-end in Kubernetes" is
+literally true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
 Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
 ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
 and excluded from the MVP totals. All 8 are documentation/design only as of 2026-07-11 - TODO, not

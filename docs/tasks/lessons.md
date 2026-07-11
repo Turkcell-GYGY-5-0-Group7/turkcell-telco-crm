@@ -340,3 +340,30 @@ Format:
   `subscriptions.msisdn` for `ACTIVE`/`SUSPENDED` rows), or a blind reset will collide with a real
   uniqueness constraint the moment the pool reissues an in-use value. Verify via a join, not an
   assumption, before resetting shared test-environment state.
+
+## 2026-07-12 - do not pre-commit to a fix from a root cause inferred without the live artifact
+- Mistake: the Sprint 15 schema-registry follow-up was diagnosed (by a static/log-less analysis) as a
+  Kafka-startup-ordering / KafkaStore-init-timeout race, and a `wait-for-kafka` init-container was
+  pre-approved as the fix. The actual crashed-pod evidence, captured live, showed a completely
+  different root cause: Kubernetes injects `SCHEMA_REGISTRY_PORT=tcp://<clusterIP>:8081` (service-link
+  env for the Service named `schema-registry` on port 8081), and cp-schema-registry's `configure`
+  script treats any set `SCHEMA_REGISTRY_PORT` as the deprecated `PORT` setting and hard-exits 1 in the
+  configure stage, BEFORE any Kafka connection is attempted. The init-container would have done
+  nothing. The failure produced zero log4j output (logs stop at "Configuring ..."), which is itself the
+  tell that death is in the entrypoint script, not the JVM/KafkaStore init.
+- Rule: when the diagnosis session could not read the actual failing artifact (crashed-pod log, real
+  stack trace), the proposed fix is a hypothesis, not a decision - gate applying it on capturing the
+  live artifact first, and have the executing agent STOP and re-report if the evidence contradicts the
+  hypothesis (it did, and stopping here saved shipping a no-op chart edit). "No log4j output at all"
+  means look at the container entrypoint/configure stage, not the application.
+- Confluent-on-Kubernetes specifics worth remembering: (1) set `enableServiceLinks: false` on any
+  cp-* Deployment whose Service name uppercases into an env var the image's own entrypoint reads
+  (`schema-registry` -> `SCHEMA_REGISTRY_PORT` collides with the deprecated PORT setting). (2) Kafka
+  (KRaft) exec liveness probes that spawn a full JVM (`kafka-broker-api-versions.sh`, 10s timeout)
+  will SIGTERM-kill (exit 143) a healthy broker under single-node CPU pressure, producing a churn loop
+  that looks like a broker failure but is really node resource starvation - relieve node pressure
+  (scale HPA-inflated app deployments to 1) before concluding the broker or its chart is broken.
+- Also: a product-catalog in-cluster 500 on GET /api/v1/tariffs, previously attributed to a "@Cacheable
+  path", was purely environmental (thrashing/partial-wave deps); it returned clean 200 once the
+  dependency layer was healthy. Diagnose in-cluster 5xx against a HEALTHY dependency layer before
+  attributing it to service code - a partial-wave deploy produces misleading transient 500s.
