@@ -51,6 +51,17 @@ state, update the sprint `README.md` and `STATUS.md` together.
 | 14 | [sprint-14-testing-and-hardening/](sprint-14-testing-and-hardening/README.md) | 14 | integration/contract tests, security, performance, AC validation | 15 |
 | 15 | [sprint-15-deployment/](sprint-15-deployment/README.md) | 15 | Dockerfiles, Kubernetes, HPA, CI/CD, rollback | - |
 | 16 | [sprint-16-web-frontend/](sprint-16-web-frontend/README.md) | 16 | Web frontend (SvelteKit) + web-bff (post-MVP, ADR-022) | - |
+| 17 | [sprint-17-distributed-locking/](sprint-17-distributed-locking/README.md) | 17 | Distributed locking, Redis/Redisson `starter-lock` (post-MVP, ADR-024 Proposed) | - |
+| 18 | [sprint-18-secret-management/](sprint-18-secret-management/README.md) | 18 | Secret management, HashiCorp Vault (post-MVP, ADR-025 Proposed) | 19 |
+| 19 | [sprint-19-service-mesh-mtls/](sprint-19-service-mesh-mtls/README.md) | 19 | Service mesh and mTLS, Linkerd (post-MVP, ADR-026 Proposed) | - |
+| 20 | [sprint-20-chaos-engineering/](sprint-20-chaos-engineering/README.md) | 20 | Chaos engineering, Chaos Mesh (post-MVP, extends ADR-012/013) | - |
+| 21 | [sprint-21-campaign-catalog-validation/](sprint-21-campaign-catalog-validation/README.md) | 21 | Campaign and catalog validation, new campaign-service (post-MVP, ADR-027 Proposed) | - |
+| 22 | [sprint-22-dispute-chargeback/](sprint-22-dispute-chargeback/README.md) | 22 | Invoice dispute and chargeback, new dispute-service (post-MVP, ADR-028 Proposed) | - |
+| 23 | [sprint-23-sim-swap-fraud/](sprint-23-sim-swap-fraud/README.md) | 23 | SIM-swap and fraud detection, new fraud-service (post-MVP, ADR-029 Proposed) | - |
+
+Sprints 16-23 are post-MVP (see `docs/product/roadmap.md` Section 5 / Phase P6). Their ADRs
+(024-029) are Status: Proposed, pending tech-lead ratification, and every feature in these sprints
+is still TODO - the task files describe planned work, not built work.
 
 Task IDs are hierarchical: `epic.feature.task` (for example `6.2.3`); subtasks add a fourth level
 (`6.2.3.1`). The epic number equals the sprint number.
