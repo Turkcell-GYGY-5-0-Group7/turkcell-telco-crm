@@ -1,0 +1,32 @@
+# Grants Vault's own ServiceAccount the `system:auth-delegator` ClusterRole
+# (task 18.2.1, ADR-025 Section 1). This is the standard Vault-Kubernetes-auth
+# prerequisite: it lets Vault call the Kubernetes TokenReview API to validate
+# the JWTs presented by other pods' ServiceAccounts when they `vault write
+# auth/kubernetes/login`. Without it, `vault write auth/kubernetes/config`
+# succeeds but every subsequent login attempt fails with a permission error
+# from the Kubernetes API server.
+#
+# The subchart's ServiceAccount name resolves to the release name ("vault")
+# via `vault.serviceAccount.name` (`vault.fullname`, since Release.Name
+# already contains the subchart name "vault") - see
+# charts/vault-0.34.0.tgz's templates/_helpers.tpl. This binding is
+# cluster-scoped (ClusterRoleBinding, not RoleBinding) because
+# `system:auth-delegator` itself is defined as a ClusterRole and the
+# Kubernetes TokenReview/SubjectAccessReview APIs it grants access to are
+# non-namespaced.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ .Release.Name }}-auth-delegator
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: telco-crm
+    app.kubernetes.io/name: vault
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:auth-delegator
+subjects:
+  - kind: ServiceAccount
+    name: vault
+    namespace: {{ .Release.Namespace }}

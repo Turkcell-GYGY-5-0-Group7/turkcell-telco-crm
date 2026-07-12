@@ -1,0 +1,105 @@
+# telco-vault values (ADR-025 Section 1): standalone Vault server, Integrated
+# Storage (Raft), single node, Vault Agent sidecar injector disabled. All keys
+# below nest under `vault:` to reach the vendored `hashicorp/vault` subchart
+# declared in Chart.yaml.
+#
+# Vault is a singleton at this platform's current scale, the same posture
+# deploy/helm/README.md's "HPA / PDB" section already documents for
+# config-server/discovery-server: one replica, no HPA, no PodDisruptionBudget
+# (a PDB on a single replica would otherwise block node drains).
+#
+# This is a dev-grade in-cluster dependency - the same "dev-grade in-cluster
+# dependency, hardened later" posture the `dependencies` chart already takes
+# for Postgres/Redis/Kafka (TLS disabled on the listener; a 3-5 node HA Raft
+# cluster with cloud auto-unseal is the documented production upgrade path,
+# not required at this scale). Unseal is manual/Shamir - see
+# deploy/RUNBOOK.md's "Vault initialization and unseal" section. No unseal
+# key or root token is ever committed here or anywhere else in the repo.
+vault:
+  injector:
+    # ADR-025 Section 1 explicitly rejects the Vault Agent sidecar injector in
+    # favor of the Secrets Store CSI Driver + Vault CSI provider (Feature
+    # 18.3, not this feature). Do not enable - it is a different
+    # secret-delivery model than the platform has chosen, and none of the 13
+    # services' pods are annotated for injection.
+    enabled: false
+
+  server:
+    # Standalone server (single Vault process), NOT the chart's replicated HA
+    # mode, per ADR-025 Section 1 ("standalone, Integrated Storage (Raft),
+    # single node").
+    standalone:
+      enabled: true
+
+    ha:
+      # Replication / leader election stays off - this is a single node, not
+      # an HA cluster.
+      enabled: false
+      # Unused while ha.enabled=false; pinned to 1 for clarity/singleton
+      # intent, mirroring config-server/discovery-server's `replicaCount: 1`
+      # override (deploy/helm/README.md "HPA / PDB").
+      replicas: 1
+      raft:
+        # Integrated Storage (Raft) as the storage backend (ADR-025 Section
+        # 1). The upstream hashicorp/vault chart only exposes a Raft storage
+        # HCL block under `server.ha.raft.config` - setting `raft.enabled:
+        # true` swaps the rendered server config from the chart's default
+        # "storage file" (single-node, non-Raft) block to this "storage raft"
+        # block. `server.ha.enabled: false` above still keeps the chart in
+        # single-pod standalone mode (see the upstream chart's
+        # `vault.mode`/`vault.config` helpers: pod mode is governed by
+        # `server.ha.enabled` alone, replicas stays 1, and there is no
+        # leader election / Consul / external HA backend involved).
+        enabled: true
+        setNodeId: true
+        config: |
+          ui = true
+
+          listener "tcp" {
+            tls_disable = 1
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+          }
+
+          storage "raft" {
+            path = "/vault/data"
+          }
+
+          service_registration "kubernetes" {}
+
+      # No PDB: Vault is a single-replica singleton (deploy/helm/README.md
+      # "HPA / PDB" - a PDB on one replica blocks node drains, the same
+      # reasoning applied there to config-server/discovery-server).
+      disruptionBudget:
+        enabled: false
+
+    # Raft's data directory needs a PVC even in standalone mode.
+    dataStorage:
+      enabled: true
+      size: 1Gi
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # No Ingress/LoadBalancer for this dev-grade deployment; reach the Vault UI
+  # (if ever needed) via `kubectl -n telco port-forward svc/vault 8200:8200`.
+  ui:
+    enabled: false
+
+  # Vault CSI provider (Feature 18.3, ADR-025 Section 1). Distinct from the
+  # injector disabled above: the CSI provider is the DaemonSet the Secrets
+  # Store CSI Driver (deploy/helm/csi-driver/) calls out to over its gRPC
+  # provider socket to actually fetch secret material from Vault for each
+  # service's SecretProviderClass. It ships as an optional sub-block of the
+  # upstream hashicorp/vault chart itself (not a separately published chart),
+  # so it is enabled here rather than in deploy/helm/csi-driver/ - see that
+  # chart's Chart.yaml for the split rationale. Requires
+  # deploy/helm/csi-driver/ to be installed first (the provider registers
+  # against the driver's already-created CSI provider socket directory).
+  csi:
+    enabled: true

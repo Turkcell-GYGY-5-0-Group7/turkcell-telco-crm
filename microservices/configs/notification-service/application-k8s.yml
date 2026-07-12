@@ -1,0 +1,21 @@
+# notification-service Kubernetes (in-cluster Helm) overrides, activated as
+# SPRING_PROFILES_ACTIVE=dev,k8s (Feature 18.5, ADR-025 Section 4). Replaces the `docker` profile for
+# in-cluster deployment: same in-cluster hostnames as application-docker.yml (kept, non-secret,
+# including the Mongo URI - the primary store, unauthenticated in this stack and therefore not a
+# credential ADR-025 scopes in), but the PostgreSQL outbox database's username/password are read from
+# the pod environment (Vault-sourced via the CSI-synced Secret, 18.5.1/18.5.3) instead of the committed
+# `notification`/`notification` plaintext the `docker` profile bakes in.
+spring:
+  mongodb:
+    uri: mongodb://mongo:27017/notification_db
+  datasource:
+    url: jdbc:postgresql://postgres:5432/notification_db
+    username: ${NOTIFICATION_DB_USER}
+    password: ${NOTIFICATION_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
