@@ -72,8 +72,49 @@ config: {}
 
 # Secret environment -> rendered into the per-service Secret (15.2.2).
 # Keys are used verbatim as env var names (passwords, encryption/PII keys,
-# tokens). Values here are DEV-ONLY defaults; override in prod.
+# tokens). Values here are DEV-ONLY defaults; override in prod. IGNORED when
+# vault.enabled is true (see below) - the Secret comes from the CSI sync
+# instead, but carries the exact same key names.
 secrets: {}
+
+# Vault-backed secret delivery (Feature 18.3, ADR-025 Section 1). When false
+# (the default - local/dev, matches Sprint 15 exactly), `templates/secret.yaml`
+# renders a static Secret from `secrets:` above, unchanged from before this
+# feature. When true, `templates/secret.yaml` renders nothing;
+# `templates/secretproviderclass.yaml` instead renders a `SecretProviderClass`
+# that the CSI volume mounted by `templates/deployment.yaml` triggers on pod
+# start, and the Secrets Store CSI Driver's `secretObjects` sync materializes
+# a Kubernetes Secret of the exact same name (`<service>-secret`) and key
+# names as the static model - `envFrom.secretRef` in deployment.yaml is
+# byte-for-byte unchanged either way.
+vault:
+  enabled: false
+
+  # In-cluster Vault Service DNS (deploy/helm/vault installs the release named
+  # "vault" into the "telco" namespace - short-name DNS resolves in-cluster,
+  # same posture as every other in-cluster dependency this chart already
+  # depends on, e.g. config-server/discovery-server).
+  address: http://vault.telco.svc.cluster.local:8200
+
+  # Vault Kubernetes-auth role name (18.2.3) - defaults to serviceName, which
+  # is how every one of the 13 `auth/kubernetes/role/<service>` roles was
+  # named (deploy/helm/vault/bootstrap-k8s-auth.sh).
+  role: ""
+
+  # Which of this service's secret keys sync from Vault, and where each one
+  # lives in Vault KV v2 (relative to the `secret/` mount enabled by 18.2.2).
+  # `key` is the resulting `<service>-secret` data key (must match the
+  # `secrets:` keys used in the static/dev model above - see
+  # deploy/helm/README.md's secret-key table). `path` + `field` is the Vault
+  # KV v2 object and field within it. Populated per service in
+  # deploy/helm/values/<service>.yaml; empty here so vault.enabled=true with
+  # no overrides renders an (intentionally) empty SecretProviderClass rather
+  # than guessing at a service's keys.
+  secretKeys: []
+  # secretKeys:
+  #   - key: CONFIG_SERVER_PASSWORD    # -> <service>-secret data key
+  #     path: customer-service/app      # -> secret/data/customer-service/app
+  #     field: CONFIG_SERVER_PASSWORD   # -> field name inside that KV v2 object
 
 # Probes. All three target /actuator/health, NOT the /actuator/health/liveness
 # and /actuator/health/readiness sub-groups: every service's SecurityConfig

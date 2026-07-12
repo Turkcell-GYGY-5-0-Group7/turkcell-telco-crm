@@ -1,0 +1,25 @@
+apiVersion: v2
+name: telco-vault
+description: >-
+  HashiCorp Vault, in-cluster, as the platform's centralized secret store
+  (ADR-025). Wraps the official `hashicorp/vault` chart, pinned to standalone
+  mode with Integrated Storage (Raft), single node, and the Vault Agent
+  sidecar injector disabled (ADR-025 Section 1 rejects the injector in favor
+  of the Secrets Store CSI Driver + Vault CSI provider, see Feature 18.3).
+  Intended for a Kind cluster, mirroring the "dev-grade in-cluster dependency,
+  hardened later" posture the `dependencies` chart already takes for
+  Postgres/Redis/Kafka.
+type: application
+version: 0.1.0
+appVersion: "2.0.3"
+keywords:
+  - telco-crm
+  - vault
+  - secrets
+  - security
+maintainers:
+  - name: Telco CRM DevOps
+dependencies:
+  - name: vault
+    version: 0.34.0
+    repository: https://helm.releases.hashicorp.com

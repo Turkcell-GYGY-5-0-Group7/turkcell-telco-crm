@@ -1,7 +1,7 @@
 # ADR-025 Secrets and Key Management (HashiCorp Vault)
 
-Status: Proposed
-Date: 2026-07-11
+Status: Accepted
+Date: 2026-07-11 (ratified 2026-07-12 by tech-lead)
 
 ---
 

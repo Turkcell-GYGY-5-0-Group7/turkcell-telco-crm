@@ -1,0 +1,28 @@
+apiVersion: v2
+name: telco-csi-driver
+description: >-
+  Secrets Store CSI Driver (Feature 18.3, ADR-025 Section 1), the delivery
+  mechanism that syncs Vault-sourced secrets into native Kubernetes Secrets
+  for every `telco-service` release's `SecretProviderClass`. Wraps the
+  upstream `secrets-store-csi-driver` chart (kubernetes-sigs), the same
+  vendored-dependency pattern `deploy/helm/vault/Chart.yaml` (18.1.1) uses for
+  `hashicorp/vault`. The companion Vault CSI provider DaemonSet is NOT a
+  separate upstream chart - HashiCorp ships it as an optional `csi.enabled`
+  sub-block of the `hashicorp/vault` chart itself (see
+  `deploy/helm/vault/values.yaml`'s `vault.csi` block, enabled by this
+  feature) - so this chart installs only the driver half; the provider half
+  is an `helm upgrade` of the existing `vault` release (18.1).
+type: application
+version: 0.1.0
+appVersion: "1.6.0"
+keywords:
+  - telco-crm
+  - vault
+  - secrets
+  - csi
+maintainers:
+  - name: Telco CRM DevOps
+dependencies:
+  - name: secrets-store-csi-driver
+    version: 1.6.0
+    repository: https://kubernetes-sigs.github.io/secrets-store-csi-driver/charts
