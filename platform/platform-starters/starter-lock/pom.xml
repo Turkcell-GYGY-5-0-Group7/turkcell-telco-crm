@@ -1,0 +1,110 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco.platform</groupId>
+        <artifactId>platform-starters</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>starter-lock</artifactId>
+    <name>starter-lock</name>
+    <description>Auto-configures a Redisson-backed DistributedLock (ADR-024). Strictly optional per ADR-018.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-lock</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <!-- Plain Redisson client, not redisson-spring-boot-starter: the platform owns the
+             AutoConfiguration and property surface (ADR-024 Section 2). -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Test-scope only: proves LockErrorCode.LOCK_ACQUISITION_FAILED-carrying
+             DependencyFailureException maps to HTTP 503 via starter-api's existing
+             GlobalExceptionHandler, with no handler code change (17.1.3, ADR-024 Section 5). Not a
+             production dependency: services adding starter-lock do not get starter-api transitively. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- GlobalExceptionHandler references Spring Security's own AccessDeniedException; every real
+             service carries this transitively via starter-security. Test-scope only, to mirror that. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <!-- Packages src/test/java/.../testsupport (RedisContainerSupport, feature 17.2.1) as a
+                     test-jar artifact so 17.3 (subscription-service) and 17.4 (billing-service) can add
+                     it as a test-scope dependency instead of duplicating Testcontainers Redis setup,
+                     mirroring platform-event-contracts' identical test-jar precedent. -->
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>test-jar</id>
+                        <goals>
+                            <goal>test-jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

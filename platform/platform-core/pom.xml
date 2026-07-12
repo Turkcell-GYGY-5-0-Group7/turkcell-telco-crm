@@ -22,6 +22,7 @@
         <module>mediator</module>
         <module>outbox</module>
         <module>inbox</module>
+        <module>lock</module>
     </modules>
 
 </project>

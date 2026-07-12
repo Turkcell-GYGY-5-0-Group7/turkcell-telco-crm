@@ -33,6 +33,11 @@
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-kafka</artifactId>
         </dependency>
+        <!-- Guards the MSISDN reservation-expiry reaper across replicas (feature 17.3, ADR-024). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-lock</artifactId>
+        </dependency>
 
         <!-- Per-service OpenAPI / Swagger UI (ARC-08). -->
         <dependency>
@@ -75,6 +80,15 @@
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Shared Testcontainers Redis harness (feature 17.2.1), reused by the reaper's
+             multi-instance concurrency test (feature 17.3.2) instead of duplicating setup. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-lock</artifactId>
             <type>test-jar</type>
             <scope>test</scope>
         </dependency>

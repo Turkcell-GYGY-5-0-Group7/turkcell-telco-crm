@@ -4,3 +4,21 @@ spring:
     url: ${TEST_SUBSCRIPTION_DB_URL:jdbc:postgresql://localhost:5432/subscription_test_db}
     username: ${TEST_SUBSCRIPTION_DB_USER:subscription_test}
     password: ${TEST_SUBSCRIPTION_DB_PASSWORD:subscription_test}
+
+telco:
+  platform:
+    # Off by default under the shared "test" profile: unlike starter-kafka's listener containers,
+    # Redisson connects eagerly at startup and would fail context refresh for every Spring-context
+    # test in this module that doesn't run a Redis container. Tests that actually exercise the
+    # reaper's locking (feature 17.3) re-enable this explicitly and point it at a Testcontainers Redis.
+    # starter-lock's test-jar supplies a real in-JVM DistributedLock substitute whenever this is
+    # false, so every other Spring-context test still gets a working bean without needing Redis.
+    lock:
+      enabled: false
+  subscription:
+    msisdn-reaper:
+      # Off by default under the shared "test" profile: this is a production background job with no
+      # bearing on most tests, and its @Scheduled first tick fires almost immediately at context
+      # startup, which would race against whatever those tests assert about msisdn_pool state. A
+      # test that wants the bean (e.g. a concurrency IT calling tick() directly) re-enables it.
+      enabled: false

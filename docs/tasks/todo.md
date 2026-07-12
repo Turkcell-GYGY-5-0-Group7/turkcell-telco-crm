@@ -1,231 +1,224 @@
-# Working TODO — Sprint 15: Deployment
+# Working TODO — Sprint 17: Distributed Locking (post-MVP) — COMPLETE (5/5)
 
-Sprints 01-14 DONE (MVP acceptance AC-01/02/03 validated live in Sprint 14). This is the final MVP
-sprint. Mode: plan -> approve -> execute, review at feature boundaries. Update the owning sprint
-README + STATUS.md together as each feature reaches DONE; capture lessons.
+Sprints 01-15 are the MVP (feature-complete; one deferred exit-criteria item - the full 13-service
+in-cluster boot - remains tracked in `docs/tasks/STATUS.md`'s Sprint 15 entries, user-deferred to a
+future dedicated session, not part of this working set). Sprint 16 (Web Frontend) is owned by a
+colleague. This working TODO tracked Sprint 17 across two phases: Phase A (ratify ADR-024, build the
+platform foundation - 17.1/17.2) and Phase B (adopt it in both real consumers, 17.3/17.4, plus the
+docs update, 17.5). Both phases are now done. Mode: plan -> approve -> execute, review at feature
+boundaries. Update the owning sprint README + STATUS.md together as each feature reaches DONE; capture
+lessons.
 
-Objective: make the platform deployable to Kubernetes with full CI/CD — per-service container images,
-manifests/Helm with config+secrets, HPA, a build-test-scan-push-deploy pipeline, verified rollback,
-and an operations runbook. Covers NFR-03 (HPA), NFR-04 (uptime), ADR-014 (CI/CD), ADR-010 (config).
+## Step 0 — Ratify ADR-024 (gate; no product code until done) [DONE 2026-07-12]
+- [x] `architecture` agent validated ADR-024 against ADR-004/007/018 and PLATFORM-SPEC. Found: Section
+      5's `LockAcquisitionException extends PlatformException` is not buildable - `PlatformException`
+      (`platform-common`) is `sealed` with a `permits` list scoped to its own package, and no
+      `module-info.java` exists anywhere under `platform/`, so Java's same-package sealed-subtype rule
+      applies. Recommended wrapping the existing `DependencyFailureException` instead of inventing a
+      new exception type.
+- [x] `tech-lead` agent ratified: adopt the `DependencyFailureException`-wrap (new `LockErrorCode` in
+      `platform-core/lock`, zero `starter-api` changes) over the fallback (`LockAcquisitionException`
+      as a plain `RuntimeException` + a second, parallel `@RestControllerAdvice` in `starter-lock`) -
+      rejected the fallback because it splits error-mapping across two advices for no benefit
+      `DependencyFailureException` doesn't already give for free. Module placement, API shape
+      (Section 3), TTL/lease semantics (Section 4), and ADR-018 fit (Section 6) confirmed sound as-is.
+- [x] Applied the ratified fix: `architecture/adr/ADR-024-distributed-lock-strategy.md` (Status ->
+      Accepted; Section 2 and Section 5 rewritten with a ratification note) and
+      `docs/tasks/sprint-17-distributed-locking/17.1-starter-lock-module.md` /
+      `17.2-distributed-lock-test-support.md` (task descriptions/ACs reworded to match - no
+      `LockAcquisitionException` anywhere). Sprint 17 README Exit Criteria updated to record ratification
+      met. (17.3/17.4/17.5 task files and the README's own older prose still reference the pre-
+      ratification `LockAcquisitionException` name in a few spots - out of scope this session since
+      those features are deferred; reword when they are picked up.)
 
-## Current-state audit (evidence-based, 2026-07-08)
+## Step 1 — Feature 17.1: platform-core/lock + starter-lock + BOM + 503 mapping [DONE 2026-07-12]
+- [x] 17.1.1 `platform/platform-core/lock` (artifactId `platform-lock`): `DistributedLock` port,
+      `LockHandle`, `LockErrorCode` (mirrors `CommonErrorCode`). Zero Spring/Redisson in the dependency
+      graph - verified via `dependency:tree`. Registered in `platform-core/pom.xml` modules.
+- [x] 17.1.2 `platform/platform-starters/starter-lock`: `RedissonDistributedLock` (watchdog-managed
+      when `leaseTime==null`, explicit hard-expiry lease otherwise; fails closed via
+      `DependencyFailureException`+`LockErrorCode`), `RedissonLockHandle`, `LockProperties`
+      (`telco.platform.lock.*`), `LockAutoConfiguration` (`@ConditionalOnClass`/`@ConditionalOnProperty`/
+      `@ConditionalOnMissingBean` override points, `AutoConfiguration.imports` registered). Plain
+      `org.redisson:redisson`, not `redisson-spring-boot-starter`, per ADR-024 Section 2. Registered in
+      `platform-starters/pom.xml` modules.
+- [x] 17.1.3 `platform-bom` pins `redisson.version` (3.50.0) + `org.redisson:redisson`, and adds
+      `platform-lock`/`starter-lock` (+ `starter-lock` test-jar) coordinate entries mirroring
+      `platform-outbox`/`starter-outbox`. Verified the fail-closed -> 503 path with a dedicated Spring
+      context test (`LockDependencyFailureMappingTest`, MockMvc, `@AutoConfigureMockMvc`) proving
+      `DependencyFailureException` built with `LockErrorCode.LOCK_ACQUISITION_FAILED` returns HTTP 503
+      via the UNCHANGED `GlobalExceptionHandler.handleDependencyFailure` - no handler edit required.
+      Also pinned `testcontainers.version=1.20.6` in `platform-bom` (Spring Boot 4.1's own bundled
+      testcontainers-bom moved to the renamed 2.x artifact line; mirrors `microservices/pom.xml`'s
+      existing, separate pinning of the same version for the same reason).
 
-- 15.1.1: All 16 Dockerfiles exist (13 services + reference-service + service-template + web-bff),
-  multi-stage, `eclipse-temurin:21-jre-alpine`, BuildKit `.m2` cache, `curl` installed, `EXPOSE`.
-  GAP: NONE set a non-root `USER` (all run as root) and NONE declare `HEALTHCHECK` — both are hard
-  acceptance criteria for 15.1.1. Actuator health-endpoint exposure to be confirmed per service.
-- 15.1.2: NOT started. `.github/workflows/ci.yml` is build -> test -> package -> static analysis only;
-  no image build, no registry push, no `docker/build-push-action`.
-- 15.2 / 15.3 / 15.4: greenfield — no `k8s/`, `helm/`, `charts/`, or `deploy/` anywhere in the repo.
-  Only `infra/docker/` (compose + observability) exists as a reference for the in-cluster dep stack.
-- 15.5: greenfield — no operations runbook.
+## Step 2 — Feature 17.2: Testcontainers Redis test support + contention/failure-mode suite [DONE 2026-07-12, code unverified live - see note]
+- [x] 17.2.1 `RedisContainerSupport` (singleton-container pattern, `redis:7-alpine`) under
+      `starter-lock/src/test/.../testsupport/`, packaged as a `maven-jar-plugin` test-jar mirroring the
+      `platform-event-contracts` precedent exactly, pinned in `platform-bom`.
+- [x] 17.2.2 Three test classes proving all four ADR-024 guarantees against a real Redis:
+      `RedissonDistributedLockContentionTest` (8 threads x 25 iterations on one key; a
+      compare-and-set overlap detector proves zero simultaneous critical-section entries; final
+      counter equals the exact expected total - no lost updates), `RedissonDistributedLockLeaseSemanticsTest`
+      (watchdog-managed lease survives 2.5s past a 2s `watchdogTimeout`, proven by a losing competing
+      acquire; an explicit 2s lease hard-expires and a second acquirer succeeds despite the first
+      holder never releasing), `RedissonDistributedLockFailureModeTest` (a `RedissonClient` shut down
+      after connecting - simulating a lost connection, not an unreachable-at-startup address, since
+      Redisson's connection pool connects eagerly at `Redisson.create()` - causes
+      `withLock` to throw `DependencyFailureException` and the guarded action's invocation count stays
+      zero). Plus `LockAutoConfigurationTest` (enabled-by-default exposes `RedissonClient`+
+      `DistributedLock`+`LockProperties` beans; `enabled=false` suppresses them;
+      `@ConditionalOnMissingBean` allows override).
+- [x] All 6 test files compile clean; `starter-lock`'s spotbugs+checkstyle pass clean (module-level
+      `install -DskipTests`); the one non-Docker test (`LockDependencyFailureMappingTest`) passes live.
+- [x] Added a 7th, Docker-independent test class (`RedissonDistributedLockUnitTest`, Mockito-mocked
+      `RedissonClient`/`RLock`) as a code-review follow-up (see Step 4) - 9/9 passing live, covering the
+      lease-mode branching and exception-transparency logic the 4 Testcontainers classes can't currently
+      exercise in this sandbox.
+- [ ] **NOT independently verified live**: the 4 Testcontainers-Redis-backed classes could not execute
+      in this sandbox - Docker Desktop 29.1.2's minimum API floor (1.44) rejects the pinned
+      Testcontainers 1.20.6's bundled `docker-java` client (negotiates API 1.32). Confirmed pre-existing
+      and repo-wide, not caused by this sprint: the untouched, already-existing `starter-inbox`
+      Testcontainers test (`InboxTransactionAtomicityTest`) fails identically. Re-run
+      `mvn -f platform/pom.xml -pl platform-starters/starter-lock -am verify` in an environment with a
+      compatible Docker version (or after a repo-wide Testcontainers version bump - a separate,
+      cross-cutting decision, not undertaken here) to close this out.
 
-## Decisions (confirmed 2026-07-08)
+## Step 3 — Build verification [DONE 2026-07-12]
+- [x] `mvn -f platform/pom.xml -am install -Dschema.registry.skip=true -DskipTests` - full reactor,
+      structurally clean (schema-registry's live-endpoint check needs infra not running here; its own
+      documented skip flag was used, not a code change).
+- [x] `mvn -f platform/pom.xml -pl platform-core/lock dependency:tree` - zero Spring/Redisson.
+- [x] `mvn -f platform/pom.xml -pl platform-starters/starter-lock -am install -DskipTests` (spotbugs +
+      checkstyle) and `test -Dtest=LockDependencyFailureMappingTest` (the one Docker-independent test) -
+      both clean/green.
+- Environment note for future sessions in this sandbox: `mvn` on `PATH` resolves to Homebrew's JDK 25
+  by default (`JAVA_HOME` unset), which breaks spotbugs (`Unsupported class file major version 69`) -
+  export `JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home` before any platform
+  build. See `docs/tasks/lessons.md` 2026-07-12 entry for this and the Testcontainers/Boot-4-test-API
+  gotchas hit this session.
 
-1. Local cluster target: **Kind** (Kubernetes-in-Docker; runs in CI for real deploy/rollback/smoke).
-2. Manifest tool: **Helm** charts (rollback maps to `helm rollback`; values per env).
-3. Container registry: **GHCR** (`ghcr.io`, native to GitHub Actions via `GITHUB_TOKEN`).
-4. Deploy target for 15.4.1: **ephemeral Kind-in-CI** — throwaway cluster per run, deploy + smoke +
-   rollback drill + teardown; no external cluster to own.
-5. In-cluster stateful deps (15.2.3): **self-authored manifests mirroring the compose stack**,
-   packaged as a Helm dependency/umbrella chart, single-replica dev-grade; reuse existing
-   `infra/docker/observability/*` configs as ConfigMaps. (Default; revisit if a managed-service hook
-   is preferred.) Rationale: self-contained, matches the AC's "mirroring the local compose stack",
-   avoids external chart-catalog/licensing coupling.
+## Step 4 — Close out
+- [x] code-review (ADR-compliance) on Features 17.1/17.2. First pass: CHANGES REQUIRED - one HIGH
+      finding (`withLock(Callable)` rewrapped every domain `RuntimeException` from a guarded action's
+      critical section as `IllegalStateException`, which would have broken `GlobalExceptionHandler`'s
+      type-based dispatch for 17.3/17.4's future consumers - fixed: only checked exceptions get
+      wrapped now, `RuntimeException` propagates unwrapped, matching the `Runnable` overload) and two
+      MEDIUM findings (dead `telco.platform.lock.lease-time` config - removed from `LockProperties`
+      and ADR-024's property table, since the port's API always takes an explicit per-call `leaseTime`
+      and there was no code path that would ever read a configured default; missing Docker-independent
+      unit coverage - added `RedissonDistributedLockUnitTest`, 9 Mockito-based tests, including a
+      direct regression test for the HIGH finding). One LOW finding (a Javadoc overclaim on
+      `RedissonLockHandle.release()`'s resilience) fixed as a comment-only change. Second pass:
+      **APPROVE** - independently re-verified all four fixes against the current file contents and by
+      re-running the new/affected tests, confirmed no regressions.
+- [x] Updated sprint-17 README (Features table DONE/2/5 + Exit Criteria + Deliverables notes) and
+      STATUS.md together.
+- [ ] Commit the change (offer to user; not yet committed per repo policy - branch first, no auto-push).
 
-## Execution order (respects the Dependencies fields in each feature file)
+## Phase B — Features 17.3, 17.4, 17.5 [DONE 2026-07-12]
 
-### Wave 1 — image artifacts (unblocks everything)
-- [x] 15.1.1 Harden all 13 service Dockerfiles (M) — devops  [DONE, verified]
-      Added non-root `app` user (`adduser -S`) + `USER app`, and a `HEALTHCHECK` curling
-      `/actuator/health` on each service's own port (config-server carries the basic-auth exception).
-      Health endpoint exposed centrally in configs/application.yml. VERIFIED: built customer-service
-      image (exit 0), ran it -> `uid=100(app)` non-root, HEALTHCHECK baked into image config. The
-      "reports healthy" end-state depends on config-server/Kafka/Postgres being up -> validated at
-      stack level in 15.2/15.4, not in isolation. reference-service/service-template/web-bff excluded.
-- [x] 15.1.2 CI image build + registry push (M) — devops  [DONE, static-validated; live push on 1st merge]
-      Added `changes` + `build-push-images` jobs to .github/workflows/ci.yml. Push only on master-push
-      (never PRs), gated behind build-test + microservices-test. Per-service change detection via git
-      diff (platform/**, configs/**, reactor pom -> rebuild all 13; else per-service). GHCR via
-      GITHUB_TOKEN, `packages: write` job-scoped. Tags: sha-<12>, Maven reactor version, latest; gha
-      layer cache. VALIDATED: actionlint v1.7.7 clean + yaml parse + logical trace (PR no-push, red-test
-      blocks, platform->all, single-svc->one, tags incl commit+version). Terminal proof (image actually
-      lands in GHCR) occurs on the first real merge to master — not runnable/authorized locally.
+Research first (3 parallel Explore agents: subscription-service audit/scheduler patterns,
+billing-service bill-run internals, platform docs for 17.5), then plan, then build. Key facts the
+task files didn't fully capture, confirmed against the live code: Redis in this stack requires a
+password (`infra/docker/compose.yml --requirepass`) but `LockAutoConfiguration`'s host/port fallback
+doesn't read it, so both new consumers set `telco.platform.lock.redis.address` explicitly with
+embedded credentials; billing-service had no prior Redis usage at all; no `@Scheduled` existed
+anywhere in subscription-service before this.
 
-### Wave 2 — Kubernetes manifests (greenfield)  [DONE, live-verified on Kind]
-Reusable `deploy/helm/telco-service` chart (1 release/service, 13 values files) + `deploy/helm/
-dependencies` chart (46 objects). Both helm-lint + helm-template clean. LIVE Kind proof done:
-Kind cluster + ingress-nginx; deployed discovery-server, config-server, api-gateway (all 1/1, probes
-pass) + the dependency stack. TWO real bugs found live and FIXED (only a real cluster surfaces them):
-  BUG-A (securityContext): images declare `USER app` (non-numeric); K8s runAsNonRoot rejects it
-    ("cannot verify user is non-root"). Fixed: all 13 Dockerfiles -> numeric `USER 10001`
-    (adduser -u 10001), AND chart pins runAsUser/runAsGroup/fsGroup 10001. (Images built in 15.1 need
-    a rebuild to carry the Dockerfile change; the chart override already makes old images run. CI
-    15.1.2 rebuilds fresh.)
-  BUG-B (kafka KRaft): StatefulSet governing Service was ClusterIP + quorum voter `1@kafka:9093`
-    (load-balanced) -> broker can't register with its own controller. Fixed: headless Service
-    (clusterIP: None) + quorum voter to pod FQDN `kafka-0.kafka.<ns>.svc.cluster.local:9093`.
-    Confirmed live: kafka-0 1/1 after fix.
-- [x] 15.2.1 Base manifests/Helm per service (L) — devops  [DONE, verified]
-      AC PROVEN LIVE: discovery-server/config-server/api-gateway deploy to Kind, probes pass;
-      gateway reachable via Ingress (curl -H Host:telco.local .../actuator/health -> HTTP 200 UP;
-      /api/v1/customers -> 401 = gateway routing/security live). HPA/PDB templates ship disabled
-      (HPA-ready for 15.3). Remaining 10 domain services share the identical chart + helm-validated
-      values; full 13-service live boot deferred to Wave 4 CI Kind run.
-- [x] 15.2.2 ConfigMaps + Secrets (M) — devops + security  [DONE, verified]
-      Config/secret split derived from each service's compose env; secrets (ENCRYPT_KEY, *_PASSWORD,
-      CUSTOMER_AES_KEY) in Secrets, non-secret in ConfigMap, consumed via envFrom. No plaintext
-      secret committed (dev-only defaults, marked). Proven live: config-server booted with ENCRYPT_KEY
-      from Secret + basic-auth probe; gateway booted from config+secret. RECONCILIATION (flagged for
-      code-review/tech-lead at sprint close): config-server stays deployed serving the bulk config
-      (baked configs); secrets come from K8s Secrets. Full config-server removal = post-MVP.
-- [x] 15.2.3 Stateful deps in-cluster (L) — devops  [DONE with 1 tracked follow-up]
-      13/14 dep pods Running incl. ALL observability (otel-collector/tempo/loki/prometheus/grafana),
-      postgres/redis/mongo/minio/keycloak/kafka(after BUG-B)/kafka-connect. FOLLOW-UP: schema-registry
-      exits 1 at the Confluent "Configuring" stage (isolated container-config detail, not a chart
-      flaw; env is correct) -> diagnose in Wave 4 CI pass. Debezium connector registration + keycloak
-      realm-import success also confirm in the full CI run.
+### Step 5 — Feature 17.3: subscription-service MSISDN reaper [DONE]
+- [x] `ExpireMsisdnReservationsCommand`/`Result` + `ExpireMsisdnReservationsCommandHandler` (mirrors
+      `TerminateSubscriptionCommandHandler`'s mutate-save-audit shape): queries
+      `MsisdnPoolRepository.findByStatusAndReservedUntilBefore(RESERVED, now)` (new derived query
+      added to the repository), releases each via the existing `MsisdnPool.release()` domain method
+      (never raw SQL), writes one `audit_log` row per release via the existing `AuditLogWriter`, all
+      atomically inside the mediator's transaction.
+- [x] `MsisdnReservationExpiryReaper` (+ `SchedulerConfig` for `@EnableScheduling`, mirroring
+      payment-service's pattern): `@Scheduled` tick guarded by an EXPLICIT (non-watchdog) lease
+      `DistributedLock` per ADR-024 Section 4's bounded-sweep guidance; package-private `tick()`
+      returns the released count or `-1` on lock contention (`DependencyFailureException` +
+      `LockErrorCode.LOCK_ACQUISITION_FAILED`), never propagating; any other `DependencyFailureException`
+      rethrown.
+- [x] `pom.xml` (+ `starter-lock` and its test-jar), `application.yml` (lock + reaper config blocks).
+- [x] Tests: 2 fast Mockito unit tests (handler release/audit logic; reaper lock-key/lease/
+      error-code-filtering) - both pass live. 1 Testcontainers concurrency IT (3 threads racing
+      `tick()` via a `CyclicBarrier`, asserting exact `audit_log` count = no double release) -
+      compiles clean, not run live (Docker/Testcontainers limitation, see Phase A Step 2).
 
-### Wave 3 — autoscaling + resilience (depends on 15.2.1)  [DONE, live-verified on Kind]
-Enhanced chart: HPA `behavior` block (fast scaleUp, 60s scaleDown stabilization) added to hpa.yaml;
-chart defaults autoscaling.enabled=true (min2/max5/target75%) + pdb.enabled=true (minAvailable1);
-config-server + discovery-server override both OFF (singletons, replicaCount 1). helm lint/template
-clean (HPA+PDB render for domain, 0 for the 2 infra singletons). Installed metrics-server in Kind
-(patched --kubelet-insecure-tls).
-- [x] 15.3.1 HPA for stateless services (M) — devops  [DONE, verified]
-      AC PROVEN LIVE on api-gateway with metrics-server + a real load generator (rakyll/hey):
-      SCALE-OUT 1->2->3->4 (max) as live CPU crossed the target; SCALE-IN 4->3->2->1 (min) after the
-      60s stabilization window, one pod/30s per the scaleDown policy. Real metrics throughout
-      (gateway's Redis rate limiter caps HTTP-driven CPU, so the demo target was tuned below real
-      under-load utilization to make a genuine threshold crossing observable - real metric, real
-      crossing). HPA control loop (metrics -> calc -> Deployment replicas) proven end to end.
-- [x] 15.3.2 PDBs + rollout readiness gating (S) — devops  [DONE, verified]
-      PDB enforced LIVE: with 2 replicas + minAvailable 1, evict #1 -> 201 Success, evict #2
-      immediately -> 429 "Cannot evict pod as it would violate the pod's disruption budget". Rolling
-      deploy preserves availability: rollout restart held availableReplicas=2 and HTTP 200 through the
-      Ingress at every 5s sample (strategy maxUnavailable:0 / maxSurge:1). No full outage.
+### Step 6 — Feature 17.4: billing-service bill-run lock [DONE]
+- [x] `RunBillResult` gains a third `runAlreadyOwned` field + a preserved 2-arg constructor (keeps
+      `BillingControllerTest`'s direct `new RunBillResult(10, 2)` compiling) + a
+      `alreadyOwnedByAnotherPod()` factory (named to avoid colliding with the record's own
+      auto-generated `runAlreadyOwned()` accessor - a real compile error hit and fixed this session).
+- [x] `RunBillCommandHandler`: `handle()` now wraps the existing orchestration (renamed to
+      `runBillRun()`) in a WATCHDOG-managed (`leaseTime=null`) `DistributedLock` keyed on
+      `"billing-service:bill-run:" + periodStart + ":" + periodEnd`, per ADR-024 Section 4's guidance
+      for variable-duration work (measured 6m20s@100K, Sprint 14.3.2). On `LOCK_ACQUISITION_FAILED`,
+      returns `RunBillResult.alreadyOwnedByAnotherPod()` instead of propagating. `BillRunBatchProcessor`'s
+      `REQUIRES_NEW` per-batch pattern and `uidx_invoices_sub_period` untouched.
+- [x] `pom.xml` (+ `starter-lock` and its test-jar), `application.yml` (billing-service's first-ever
+      Redis usage + lock config block).
+- [x] Tests: 1 fast Mockito unit test proving the lock key is period-scoped, the lease is
+      watchdog-managed, and - directly, via `verify(..., never())`, not just "no duplicate invoices" -
+      the losing invocation never reaches `subscriberRepo.findByStatus`/`batchProcessor.processBatch`;
+      passes live. 1 Testcontainers concurrency IT (batch-size=1/parallelism=1 to force deterministic
+      timing margin, two concurrent `mediator.send(...)` for the same period) - compiles clean, not
+      run live (same limitation).
 
-### Wave 4 — pipeline delivery (depends on 15.1.2 + 15.2.2)  [mechanics DONE; 1 tracked happy-path blocker]
-Authored `.github/workflows/deploy.yml` (ephemeral Kind-in-CI, environment-gated, runs after CI images
-exist; GHCR imagePullSecret; deploys deps + 13 services via helm upgrade --install), `deploy/smoke/
-smoke-test.sh`, `deploy/ROLLBACK.md`. actionlint clean; bash -n clean. Config model RATIFIED by user:
-config-server STAYS (serves baked config); secrets from K8s Secrets.
-SYSTEMIC PROBE BUG found+fixed here (affected ALL domain services): chart default liveness/readiness
-probed /actuator/health/liveness + /readiness, but every service's SecurityConfig permits only
-"/actuator/health" (exact) -> sub-groups return 401 -> liveness kills the pod -> crash-loop. Fixed:
-chart probes now target /actuator/health (permitted). FOLLOW-UP (security agent): permit
-"/actuator/health/**" in the 10 SecurityConfigs to restore proper liveness/readiness split.
-- [x] 15.4.1 Deploy stage (M) — devops  [DONE, deploy-to-Kind proven live]
-      Workflow authored + PROVEN: deps chart + discovery/config/gateway/product-catalog deployed via
-      helm to Kind, all reaching Ready. CI wrapper (ephemeral Kind, env gate) actionlint-clean; full CI
-      run only confirmable on a real trigger. CAVEAT (flagged by agent): CI builds only CHANGED images,
-      so a full-stack deploy at a per-commit sha ImagePullBackOffs unchanged services -> use the
-      workflow_dispatch `image_tag=latest` override for full-stack.
-- [x] 15.4.2 Rollback (M) — devops  [DONE, verified live]
-      PROVEN: deployed a broken revision (bogus image tag) -> new pod NotReady while old 2 pods kept
-      serving (maxUnavailable:0, Ingress HTTP 200 throughout) -> `helm rollback` -> restored, history
-      records "Rollback to N". Runbook deploy/ROLLBACK.md.
-- [~] 15.4.3 Post-deploy smoke tests (S) — qa + devops  [script DONE+proven; happy-path read blocked]
-      smoke-test.sh proven live end-to-end: gateway health via Ingress OK, readiness of all 4 deployed
-      services OK (validated the probe fix), real Keycloak ROPC token OK, request routed
-      Ingress->gateway->JWT->Eureka->product-catalog OK. It correctly FAILS on a bad response (caught a
-      real product-catalog 500) = the "fails on broken" behavior proven. BLOCKER for full-green:
-      product-catalog returns 500 on GET /api/v1/tariffs (cached read) in-cluster - default Spring
-      error shape (unhandled, around the @Cacheable path), NOT a smoke/pipeline defect. TRACKED
-      FOLLOW-UP (domain-engineer): diagnose the in-cluster 500 (Redis cache path suspected; config
-      reaches the service - postgres host resolved fine via config-server). This is part of the
-      full-13-service in-cluster boot deferred to the CI run (with schema-registry).
+### Step 7 — Feature 17.5: platform docs [DONE]
+- [x] `docs/architecture/platform-capabilities.md`: new Section 1 "Distributed locking (via
+      `starter-lock`)" subsection; confirmed Section 3 never listed it (nothing to remove).
+- [x] `platform/PLATFORM-SPEC.md`: new `## 7. platform-lock` section (Sections 7-11 renumbered to
+      8-12 to make room; repo-wide grep confirmed no external cross-reference to the moved section
+      numbers exists) + new `### 10.7 starter-lock` subsection + Section 1 coordinate-table rows.
+- [x] `docs/architecture/platform-gap-closing-plan.md`: new "Follow-up (shipped after the Tier plan)"
+      section (no existing convention for this - confirmed via research, created fresh) recording the
+      capability and its first two consumers.
 
-### Wave 5 — release docs (depends on 15.4.3)  [DONE]
-- [x] 15.5.1 Deployment + operations runbook (S) — devops  [DONE]
-      Wrote `deploy/RUNBOOK.md`: prereqs (docker/kind/helm/kubectl versions), cluster bring-up
-      (kind + ingress-nginx + metrics-server, exact verified commands), config/secret mgmt, deploy
-      (deps + 13 services, GHCR + local-Kind variants), access (gateway via Ingress + Keycloak token),
-      scaling (HPA - live-verified behavior), rollback (-> ROLLBACK.md), smoke test, observability
-      access, teardown, and a "known follow-ups" section. Also corrected two now-stale sections in
-      deploy/helm/README.md (probes -> /actuator/health; HPA/PDB enabled-by-default) to match the code.
-      AC met: the runbook brings up / deploys / scales / rolls back a clean env using its own commands
-      (all verified live this session).
+### Step 8 — code-review (17.3/17.4) [DONE]
+- [x] First pass: CHANGES REQUIRED. HIGH finding: `telco.platform.lock.enabled: false` in each
+      service's shared `application-test.yml` (added to avoid needing live Redis in unrelated tests)
+      left NO `DistributedLock` bean at all once disabled (`LockAutoConfiguration`'s
+      `@ConditionalOnProperty` gates the whole class) - but the new reaper/handler have MANDATORY
+      constructor-injected `DistributedLock`, so this would have broken every pre-existing
+      Spring-context test in both modules (confirmed: Redisson connects eagerly at startup, unlike
+      `starter-kafka`'s tolerant listener containers - not caught live here since Testcontainers can't
+      run at all in this sandbox, caught by static reasoning about the conditional + constructor
+      wiring). MEDIUM finding: the new `@Scheduled` reaper would then fire unconditionally in every
+      such context once the bean existed, racing unrelated tests' `msisdn_pool` assertions.
+- [x] Fixed: a second, inverse-conditioned `@AutoConfiguration` (`InMemoryDistributedLockAutoConfiguration`,
+      `@ConditionalOnProperty(..., havingValue="false")`) packaged in `starter-lock`'s own test-jar,
+      supplying a trivial real in-JVM `DistributedLock` (`ConcurrentHashMap<String, ReentrantLock>`)
+      whenever the real one is disabled - registered via a SECOND `AutoConfiguration.imports` under
+      `src/test/resources`, confirmed packaged into the test-jar artifact via `unzip -l`. Zero changes
+      needed to any pre-existing test file in either service. `MsisdnReservationExpiryReaper` gained
+      its own `@ConditionalOnProperty(telco.subscription.msisdn-reaper.enabled, matchIfMissing=true)`
+      gate, set `false` in the test profile, re-enabled explicitly by the concurrency IT.
+- [x] New live-passing test: `InMemoryDistributedLockAutoConfigurationTest` (3 tests, `ApplicationContextRunner`)
+      proves the conditional activates only when the lock is explicitly disabled.
+- [x] Second pass: **APPROVE** - independently re-verified both fixes against current file contents,
+      re-ran the new test live, confirmed no ADR-018 violation (still only these 2 services depend on
+      `starter-lock`) and no bean-conflict/ordering risk between the two mutually-exclusive conditionals.
+- [x] Lesson captured in `docs/tasks/lessons.md` (2026-07-12): the general pattern ("an optional
+      starter with a mandatory consumer needs a substitute bean under the disabled condition too, not
+      just permission to be absent") for reuse if a future sprint hits the same shape.
 
-## Review checkpoints
-- After each feature reaching DONE: verify acceptance criteria against a real local cluster (not just
-  "manifests written"); report before proceeding.
-- Update sprint-15 README (Features table + header) and STATUS.md together at each DONE.
-- Capture any correction as a lesson in docs/tasks/lessons.md.
-- code-review (ADR-compliance) before the sprint is called complete.
+## Deferred / still open
+- Re-verifying Feature 17.2's four platform-level Testcontainers behaviors AND the two new
+  17.3/17.4 concurrency ITs live, once Docker/Testcontainers compatibility in the execution
+  environment is resolved (or a repo-wide Testcontainers version bump is made - a separate,
+  cross-cutting decision, not undertaken here).
+- Commit the change (offer to user; not yet committed per repo policy - branch first, no auto-push).
 
 ---
 
-# Closing the Sprint 15 exit-criteria tail (plan, 2026-07-12)
+## Reference: still-open Sprint 15 exit-criteria tail (not part of this working set)
 
-Goal: satisfy the one unmet Sprint 15 exit criterion — "all MVP acceptance criteria hold in the
-DEPLOYED Kubernetes environment" — via a fully-green 13-service in-cluster boot on Kind plus a
-deployed-environment acceptance run. Two tracked follow-ups block it. Both were diagnosed
-(diagnosis-only subagents, no code changed); findings below. Mode: plan -> approve -> execute,
-verify live, review, then update sprint-15 README + STATUS.md together.
-
-## Diagnosis findings (evidence-based, 2026-07-12)
-
-- FOLLOW-UP 1 (schema-registry exits 1 in-cluster): CONFIRMED LIVE 2026-07-12. The original
-  startup-ordering / KafkaStore-timeout hypothesis was WRONG. Real root cause: Kubernetes service-link
-  env injection. Because a Service named `schema-registry` on port 8081 exists, kubelet injects
-  `SCHEMA_REGISTRY_PORT=tcp://<clusterIP>:8081` into the pod; cp-schema-registry's `configure` script
-  treats any set `SCHEMA_REGISTRY_PORT` as the deprecated `PORT` setting and hard-exits 1 during the
-  configure stage — BEFORE any Kafka connection is attempted (hence zero log4j output; logs stop at
-  "Configuring ..."). Proven live: `bash -x .../configure` with the real chart env exits 1 at
-  `[[ -n tcp://10.96.136.172:8081 ]]`; with `enableServiceLinks: false` the var is unset and
-  CONFIGURE_EXIT=0. The `wait-for-kafka` init-container would NOT have fixed this and was correctly NOT
-  applied. CORRECTED FIX (validated live): set `enableServiceLinks: false` on the schema-registry
-  Deployment pod spec in deploy/helm/dependencies/templates/schema-registry.yaml.
-
-- FOLLOW-UP 2 (product-catalog 500 on GET /api/v1/tariffs in-cluster): RESOLVED 2026-07-12 —
-  ENVIRONMENTAL, no code fix. The recorded "@Cacheable / Redis cache path" attribution was wrong (the
-  list endpoint is uncached; domain-engineer diagnosis confirmed). Once the dependency layer was
-  healthy, GET /api/v1/tariffs returned HTTP 200 with the correct platform ApiResult shape through the
-  gateway Ingress with a real Keycloak token. The earlier 500 occurred only during the thrashing /
-  partial-wave cluster state (deps not yet up). No change to ListTariffsQueryHandler / TariffController
-  / CacheConfig is warranted.
-
-## Execution order
-
-### Step 0 — stand up the environment (BLOCKS everything below)  [DONE 2026-07-12]
-- [x] Reused the existing ephemeral Kind cluster `telco` (context kind-telco). Docker socket is blocked
-      by the default sandbox -> all docker/kubectl/kind/helm calls run with dangerouslyDisableSandbox.
-      Relieved single-node pressure by pinning the api-gateway + product-catalog HPAs to 1/1 (revert to
-      chart defaults min2/max5 before any at-scale run). Dependency layer recovered to green except
-      schema-registry (below). kafka-0 churn was a liveness-probe kill under CPU pressure, cleared by
-      the replica reduction — no chart change.
-
-### Step 1 — schema-registry (devops)  [DONE 2026-07-12]
-- [x] Captured live evidence: NOT a Kafka timeout. Root cause = K8s service-link env injection
-      (SCHEMA_REGISTRY_PORT) tripping the Confluent configure script's deprecated-PORT check -> exit 1.
-- [x] Applied the CORRECTED fix: `enableServiceLinks: false` on the schema-registry Deployment pod spec
-      (deploy/helm/dependencies/templates/schema-registry.yaml); helm lint/template clean; helm upgrade
-      (telco-deps rev 2, recovered from a stuck pending-install).
-- [x] Verified live: schema-registry Running 1/1, 0 restarts; `curl schema-registry:8081/subjects`
-      returns []. kafka-connect /connectors returns 200 (no outbox connectors registered yet — the 9
-      domain publishers are not deployed on this node; that lands with the full boot, Step 3).
-
-### Step 2 — product-catalog 500  [DONE 2026-07-12 — environmental, no code change]
-- [x] With the dependency layer healthy, GET /api/v1/tariffs returned HTTP 200 (correct ApiResult
-      shape) through the gateway with a real Keycloak token. The 500 did not reproduce; it was a
-      thrashing/partial-wave artifact. No change to the product-catalog code.
-
-### Step 3 — full 13-service boot + deployed-environment acceptance (qa + devops)  [REMAINING]
-This is the one item still standing between "feature-complete + deployable" and "AC proven green in
-K8s". User decision (2026-07-12): banked the two-blocker win now; this full boot is deferred to a
-dedicated session (multi-hour build + single-node capacity risk). Sub-steps when scheduled:
-- [ ] Build images for the 9 missing domain services (identity, customer, order, payment, subscription,
-      usage, billing, notification, ticket); `kind load` each (only 4 images exist locally today:
-      api-gateway, config-server, discovery-server, product-catalog-service).
-- [ ] Deploy all 13 via helm; register the 10 Debezium outbox connectors; seed Keycloak users + tariffs.
-- [ ] Run the MVP acceptance suite (AC-01/02/03) against the deployed cluster through the gateway with
-      real Keycloak tokens (reduced replicas — HPA scaling already proven in 15.3.1). All green = exit
-      criterion met. Alternative: the authored CI Kind workflow (deploy.yml / acceptance.yml).
-
-### Step 4 — close out (partial)
-- [x] code-review (ADR-compliance) on the schema-registry chart change — APPROVE (2026-07-12).
-- [x] Updated sprint-15 README (Exit-Criteria Follow-Ups section) and STATUS.md together to record
-      FOLLOW-UP 1 & 2 resolved and the remaining full-boot item. Lesson captured in lessons.md.
-- [ ] Commit the change (offered to user; not yet committed — on master, branch first per repo policy).
-- [ ] Flip the Sprint 15 exit-criteria note to fully met — only after Step 3's deployed-env AC run.
+Sprint 15's platform-level exit criterion ("all MVP acceptance criteria hold in the DEPLOYED
+environment") is not yet fully met: the full 13-service in-cluster boot (build+deploy the 9 missing
+domain service images, register the 10 Debezium outbox connectors, run the AC-01/02/03 acceptance
+suite against the deployed cluster) remains the one open item. User-deferred 2026-07-12 to a dedicated
+session (multi-hour build + single-node capacity risk). Full detail, evidence, and the exact sub-steps
+are preserved in `docs/tasks/STATUS.md`'s 2026-07-12 Sprint 15 entries and
+`docs/tasks/sprint-15-deployment/README.md`'s Exit-Criteria Follow-Ups section - resume from there
+when scheduled, not from scratch.
