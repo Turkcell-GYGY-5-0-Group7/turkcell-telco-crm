@@ -33,6 +33,12 @@ spec:
       labels:
         {{- include "telco-deps.componentLabels" (dict "ctx" . "component" $c) | nindent 8 }}
     spec:
+      # Disable Kubernetes service-link env injection. The Service named
+      # "schema-registry" otherwise injects SCHEMA_REGISTRY_PORT=tcp://<ip>:8081,
+      # which cp-schema-registry's entrypoint reads as the deprecated PORT setting
+      # and hard-exits 1 in /etc/confluent/docker/configure before Kafka is ever
+      # contacted. Turning off service links removes the collision.
+      enableServiceLinks: false
       containers:
         - name: schema-registry
           image: {{ .Values.schemaRegistry.image | quote }}

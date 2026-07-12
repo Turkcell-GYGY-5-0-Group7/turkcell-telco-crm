@@ -153,3 +153,79 @@ chart probes now target /actuator/health (permitted). FOLLOW-UP (security agent)
 - Update sprint-15 README (Features table + header) and STATUS.md together at each DONE.
 - Capture any correction as a lesson in docs/tasks/lessons.md.
 - code-review (ADR-compliance) before the sprint is called complete.
+
+---
+
+# Closing the Sprint 15 exit-criteria tail (plan, 2026-07-12)
+
+Goal: satisfy the one unmet Sprint 15 exit criterion — "all MVP acceptance criteria hold in the
+DEPLOYED Kubernetes environment" — via a fully-green 13-service in-cluster boot on Kind plus a
+deployed-environment acceptance run. Two tracked follow-ups block it. Both were diagnosed
+(diagnosis-only subagents, no code changed); findings below. Mode: plan -> approve -> execute,
+verify live, review, then update sprint-15 README + STATUS.md together.
+
+## Diagnosis findings (evidence-based, 2026-07-12)
+
+- FOLLOW-UP 1 (schema-registry exits 1 in-cluster): CONFIRMED LIVE 2026-07-12. The original
+  startup-ordering / KafkaStore-timeout hypothesis was WRONG. Real root cause: Kubernetes service-link
+  env injection. Because a Service named `schema-registry` on port 8081 exists, kubelet injects
+  `SCHEMA_REGISTRY_PORT=tcp://<clusterIP>:8081` into the pod; cp-schema-registry's `configure` script
+  treats any set `SCHEMA_REGISTRY_PORT` as the deprecated `PORT` setting and hard-exits 1 during the
+  configure stage — BEFORE any Kafka connection is attempted (hence zero log4j output; logs stop at
+  "Configuring ..."). Proven live: `bash -x .../configure` with the real chart env exits 1 at
+  `[[ -n tcp://10.96.136.172:8081 ]]`; with `enableServiceLinks: false` the var is unset and
+  CONFIGURE_EXIT=0. The `wait-for-kafka` init-container would NOT have fixed this and was correctly NOT
+  applied. CORRECTED FIX (validated live): set `enableServiceLinks: false` on the schema-registry
+  Deployment pod spec in deploy/helm/dependencies/templates/schema-registry.yaml.
+
+- FOLLOW-UP 2 (product-catalog 500 on GET /api/v1/tariffs in-cluster): RESOLVED 2026-07-12 —
+  ENVIRONMENTAL, no code fix. The recorded "@Cacheable / Redis cache path" attribution was wrong (the
+  list endpoint is uncached; domain-engineer diagnosis confirmed). Once the dependency layer was
+  healthy, GET /api/v1/tariffs returned HTTP 200 with the correct platform ApiResult shape through the
+  gateway Ingress with a real Keycloak token. The earlier 500 occurred only during the thrashing /
+  partial-wave cluster state (deps not yet up). No change to ListTariffsQueryHandler / TariffController
+  / CacheConfig is warranted.
+
+## Execution order
+
+### Step 0 — stand up the environment (BLOCKS everything below)  [DONE 2026-07-12]
+- [x] Reused the existing ephemeral Kind cluster `telco` (context kind-telco). Docker socket is blocked
+      by the default sandbox -> all docker/kubectl/kind/helm calls run with dangerouslyDisableSandbox.
+      Relieved single-node pressure by pinning the api-gateway + product-catalog HPAs to 1/1 (revert to
+      chart defaults min2/max5 before any at-scale run). Dependency layer recovered to green except
+      schema-registry (below). kafka-0 churn was a liveness-probe kill under CPU pressure, cleared by
+      the replica reduction — no chart change.
+
+### Step 1 — schema-registry (devops)  [DONE 2026-07-12]
+- [x] Captured live evidence: NOT a Kafka timeout. Root cause = K8s service-link env injection
+      (SCHEMA_REGISTRY_PORT) tripping the Confluent configure script's deprecated-PORT check -> exit 1.
+- [x] Applied the CORRECTED fix: `enableServiceLinks: false` on the schema-registry Deployment pod spec
+      (deploy/helm/dependencies/templates/schema-registry.yaml); helm lint/template clean; helm upgrade
+      (telco-deps rev 2, recovered from a stuck pending-install).
+- [x] Verified live: schema-registry Running 1/1, 0 restarts; `curl schema-registry:8081/subjects`
+      returns []. kafka-connect /connectors returns 200 (no outbox connectors registered yet — the 9
+      domain publishers are not deployed on this node; that lands with the full boot, Step 3).
+
+### Step 2 — product-catalog 500  [DONE 2026-07-12 — environmental, no code change]
+- [x] With the dependency layer healthy, GET /api/v1/tariffs returned HTTP 200 (correct ApiResult
+      shape) through the gateway with a real Keycloak token. The 500 did not reproduce; it was a
+      thrashing/partial-wave artifact. No change to the product-catalog code.
+
+### Step 3 — full 13-service boot + deployed-environment acceptance (qa + devops)  [REMAINING]
+This is the one item still standing between "feature-complete + deployable" and "AC proven green in
+K8s". User decision (2026-07-12): banked the two-blocker win now; this full boot is deferred to a
+dedicated session (multi-hour build + single-node capacity risk). Sub-steps when scheduled:
+- [ ] Build images for the 9 missing domain services (identity, customer, order, payment, subscription,
+      usage, billing, notification, ticket); `kind load` each (only 4 images exist locally today:
+      api-gateway, config-server, discovery-server, product-catalog-service).
+- [ ] Deploy all 13 via helm; register the 10 Debezium outbox connectors; seed Keycloak users + tariffs.
+- [ ] Run the MVP acceptance suite (AC-01/02/03) against the deployed cluster through the gateway with
+      real Keycloak tokens (reduced replicas — HPA scaling already proven in 15.3.1). All green = exit
+      criterion met. Alternative: the authored CI Kind workflow (deploy.yml / acceptance.yml).
+
+### Step 4 — close out (partial)
+- [x] code-review (ADR-compliance) on the schema-registry chart change — APPROVE (2026-07-12).
+- [x] Updated sprint-15 README (Exit-Criteria Follow-Ups section) and STATUS.md together to record
+      FOLLOW-UP 1 & 2 resolved and the remaining full-boot item. Lesson captured in lessons.md.
+- [ ] Commit the change (offered to user; not yet committed — on master, branch first per repo policy).
+- [ ] Flip the Sprint 15 exit-criteria note to fully met — only after Step 3's deployed-env AC run.
