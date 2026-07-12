@@ -10,10 +10,41 @@ image:
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/product-catalog-service/application-k8s.yml),
+  # which reads DB credentials from the environment instead.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/product-catalog-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  CATALOG_DB_USER: product_catalog
+  CATALOG_DB_PASSWORD: product_catalog
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/product-catalog-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: product-catalog-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: product-catalog-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: product-catalog-service/app
+      field: REDIS_PASSWORD
+    - key: CATALOG_DB_USER
+      path: product-catalog-service/db-credentials
+      field: username
+    - key: CATALOG_DB_PASSWORD
+      path: product-catalog-service/db-credentials
+      field: password

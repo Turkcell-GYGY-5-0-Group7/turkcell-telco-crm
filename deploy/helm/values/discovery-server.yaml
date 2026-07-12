@@ -45,3 +45,14 @@ autoscaling:
   enabled: false
 pdb:
   enabled: false
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/discovery-server role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: EUREKA_PASSWORD
+      path: discovery-server/app
+      field: EUREKA_PASSWORD

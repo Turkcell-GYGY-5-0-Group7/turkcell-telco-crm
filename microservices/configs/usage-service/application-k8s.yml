@@ -1,0 +1,23 @@
+# usage-service Kubernetes (in-cluster Helm) overrides, activated as SPRING_PROFILES_ACTIVE=dev,k8s
+# (Feature 18.5, ADR-025 Section 4). Replaces the `docker` profile for in-cluster deployment: same
+# in-cluster hostnames/client URLs as application-docker.yml (kept, non-secret - including the
+# product-catalog-service client URL fix from the 2026-07-06 docker-profile bug), but the DB
+# username/password are read from the pod environment (Vault-sourced via the CSI-synced Secret,
+# 18.5.1/18.5.3) instead of the committed `usage`/`usage` plaintext the `docker` profile bakes in.
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/usage_db
+    username: ${USAGE_DB_USER}
+    password: ${USAGE_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+telco:
+  clients:
+    product-catalog-service:
+      url: http://product-catalog-service:9003

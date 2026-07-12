@@ -27,7 +27,11 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        # Roll the pods whenever the projected config/secret changes.
+        # Roll the pods whenever the projected config/secret changes. When
+        # vault.enabled, secret.yaml renders nothing (static, 0 bytes) so this
+        # checksum stays constant across Vault-side rotations - the CSI
+        # volume mount below is what re-triggers the sync, on every pod
+        # (re)start, independent of this annotation (18.3.3).
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
@@ -35,6 +39,20 @@ spec:
         {{- end }}
     spec:
       serviceAccountName: {{ include "telco-service.serviceAccountName" . }}
+      {{- if .Values.vault.enabled }}
+      volumes:
+        # CSI-mounted, read-only: mounting this on pod start is what triggers
+        # the Secrets Store CSI Driver's secretObjects sync (18.3.2's
+        # SecretProviderClass) into the <service>-secret Kubernetes Secret
+        # consumed unchanged below via envFrom.secretRef (18.3.3, ADR-025
+        # Section 1's zero-blast-radius claim).
+        - name: secrets-store
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: {{ include "telco-service.fullname" . }}
+      {{- end }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -72,6 +90,12 @@ spec:
             - secretRef:
                 name: {{ include "telco-service.secretName" . }}
             {{- end }}
+          {{- if .Values.vault.enabled }}
+          volumeMounts:
+            - name: secrets-store
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          {{- end }}
           startupProbe:
             httpGet:
               path: {{ .Values.probes.startup.path }}
