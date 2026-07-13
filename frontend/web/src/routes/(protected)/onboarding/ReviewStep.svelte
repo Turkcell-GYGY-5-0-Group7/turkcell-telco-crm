@@ -1,28 +1,39 @@
 <script lang="ts">
 	// Step 4: order review + placement (16.4.2). Read-only summary of everything
-	// captured so far; the page's primary action places the order (with a
-	// generated Idempotency-Key) via the BFF. Placement errors surface here.
+	// captured so far; the page's primary action places the order (with a generated
+	// Idempotency-Key) via the BFF. Placement errors - including customer-service's
+	// verbatim rejection of the identity number - surface here.
+	//
+	// Placing the order is the wizard's ONLY write. The charge then happens
+	// server-side off `order.created.v1` (TELCO-CRM-MVP Section 9.2), so this step is
+	// followed directly by the polled activation result: there is no payment step.
+	// On a retry after a failed saga the customer already exists, so the order is
+	// re-placed through the BFF's `customerId` reuse path (no re-registration).
 	import type { Addon, Tariff } from '$lib/api/client';
 	import type { RegistrationForm } from '$lib/onboarding/wizard';
 	import { formatMoney } from '$lib/onboarding/money';
 
 	let {
 		form,
+		documentLabel,
 		filename,
 		tariff,
 		addons,
 		total,
 		currency,
 		placing,
+		reusingCustomer,
 		error
 	}: {
 		form: RegistrationForm;
+		documentLabel: string;
 		filename: string;
 		tariff: Tariff | null;
 		addons: Addon[];
 		total: number;
 		currency: string;
 		placing: boolean;
+		reusingCustomer: boolean;
 		error: string;
 	} = $props();
 </script>
@@ -32,10 +43,16 @@
 
 	<dl class="summary">
 		<dt>Customer</dt>
-		<dd>{form.fullName} - {form.email} - {form.phoneNumber}</dd>
+		<dd>{form.firstName} {form.lastName}</dd>
+
+		<dt>Identity number</dt>
+		<dd>{form.identityNumber}</dd>
+
+		<dt>Date of birth</dt>
+		<dd>{form.dateOfBirth || '-'}</dd>
 
 		<dt>KYC document</dt>
-		<dd>{filename || 'None'}</dd>
+		<dd>{filename ? `${documentLabel} - ${filename}` : 'None'}</dd>
 
 		<dt>Tariff</dt>
 		<dd>
@@ -54,6 +71,18 @@
 		<dt>Monthly total</dt>
 		<dd><strong>{formatMoney(total, currency)}</strong></dd>
 	</dl>
+
+	<p class="hint">
+		Placing the order starts your activation: we charge the first month and activate your line
+		automatically, and this wizard follows the real order status until it is done.
+	</p>
+
+	{#if reusingCustomer}
+		<p class="hint">
+			You are already registered, so this places a new order for your existing customer record - you
+			will not be registered twice.
+		</p>
+	{/if}
 
 	{#if placing}
 		<p class="hint">Placing your order...</p>

@@ -1,12 +1,14 @@
 // Framework-agnostic order/saga status classification and polling (16.4.2).
 //
-// The onboarding saga (order-service, ADR-009) is eventually consistent: after
-// payment the order transitions through the saga until it either activates the
-// subscription or compensates (refund + order CANCELLED). The wizard's final
-// step must reflect the TRUE terminal state sourced from polling, never an
-// optimistic "payment succeeded => activated" assumption. This module owns the
-// classification and the poll loop as pure/injectable logic so both are unit
-// testable in Node with a fake clock - no real timers, DOM, or backend.
+// The onboarding saga (order-service, ADR-009 / TELCO-CRM-MVP Section 9.2) is
+// eventually consistent and entirely event-driven once the order is placed:
+// order.created.v1 -> payment-service charges -> payment.completed.v1 -> order
+// CONFIRMED -> subscription-service activates -> subscription.activated.v1 ->
+// order FULFILLED. Compensation on failure refunds and moves the order to
+// CANCELLED/FAILED. Polling the order is therefore the ONLY honest source of the
+// wizard's final state - the browser performs no payment call to infer it from.
+// This module owns the classification and the poll loop as pure/injectable logic
+// so both are unit testable in Node with a fake clock - no timers, DOM, or backend.
 
 import type { OrderStatus } from '$lib/api/client';
 
@@ -14,31 +16,26 @@ import type { OrderStatus } from '$lib/api/client';
 export type OrderOutcome = 'pending' | 'activated' | 'failed';
 
 /**
- * Statuses that mean the onboarding saga finished successfully and the
- * subscription is live (order-service / subscription-service semantics).
+ * The ONLY status that means the saga finished successfully and the subscription is
+ * live. order-service's state machine (`OrderStatus`: PENDING, CONFIRMED, FULFILLED,
+ * CANCELLED, FAILED) reaches FULFILLED when it consumes `subscription.activated.v1`.
+ * CONFIRMED is deliberately NOT here: it only means payment completed, with the
+ * subscription not yet activated (and the saga still able to compensate), so treating
+ * it as success would declare activation that has not happened.
  */
-const ACTIVATED_STATUSES = new Set(['ACTIVE', 'ACTIVATED', 'CONFIRMED', 'COMPLETED']);
+const ACTIVATED_STATUSES = new Set(['FULFILLED']);
 
 /**
- * Statuses that mean the saga terminated unsuccessfully and compensation ran
- * (payment failure -> refund -> order CANCELLED, or KYC rejection -> REJECTED).
- * Includes the KYC-specific rejection variants so an identity rejection is a
- * recognised terminal failure the wizard can offer a corrective path for (16.4.3).
+ * Statuses that mean the saga terminated unsuccessfully: FAILED (payment failure) and
+ * CANCELLED (compensation - refund, then the order is cancelled - or a customer
+ * cancellation). Both are terminal in order-service's state machine.
  */
-const FAILED_STATUSES = new Set([
-	'CANCELLED',
-	'CANCELED',
-	'FAILED',
-	'COMPENSATED',
-	'REJECTED',
-	'KYC_REJECTED',
-	'KYC_FAILED'
-]);
+const FAILED_STATUSES = new Set(['CANCELLED', 'FAILED']);
 
 /**
- * Map a raw order status to a terminal/in-progress outcome. Unknown or
- * in-progress statuses (e.g. PENDING_PAYMENT, PROCESSING) are treated as
- * `pending` so polling continues rather than declaring a premature result.
+ * Map a raw order status to a terminal/in-progress outcome. In-progress statuses
+ * (PENDING, CONFIRMED) and any unknown status are treated as `pending` so polling
+ * continues rather than declaring a premature result.
  */
 export function classifyOrderStatus(status: string | null | undefined): OrderOutcome {
 	const normalized = (status ?? '').trim().toUpperCase();
@@ -57,6 +54,13 @@ export interface PollResult {
 	/** The last status observed. */
 	status: string;
 	outcome: OrderOutcome;
+	/**
+	 * The customer the order belongs to, as reported by order-service. This is the
+	 * wizard's only real source for the id of the customer the BFF registered (the
+	 * order response carries none), and it feeds the BFF's `customerId` reuse path
+	 * when an order has to be placed again. Empty only if polling never succeeded.
+	 */
+	customerId: string;
 	/** Number of status fetches performed (>= 1). */
 	attempts: number;
 	/** True when the attempt budget was exhausted before a terminal outcome. */
@@ -96,14 +100,23 @@ export async function pollOrderStatus(
 	const sleep = options.sleep ?? defaultSleep;
 
 	let lastStatus = '';
+	let lastCustomerId = '';
 	for (let attempt = 1; attempt <= maxAttempts; attempt++) {
 		const current = await fetchStatus(orderId);
 		lastStatus = current.status;
+		lastCustomerId = current.customerId ?? '';
 		const outcome = classifyOrderStatus(current.status);
 		options.onTick?.({ status: current.status, outcome, attempts: attempt });
 
 		if (isTerminalOutcome(outcome)) {
-			return { orderId, status: current.status, outcome, attempts: attempt, timedOut: false };
+			return {
+				orderId,
+				status: current.status,
+				outcome,
+				customerId: lastCustomerId,
+				attempts: attempt,
+				timedOut: false
+			};
 		}
 		if (attempt < maxAttempts) {
 			await sleep(delayMs);
@@ -114,6 +127,7 @@ export async function pollOrderStatus(
 		orderId,
 		status: lastStatus,
 		outcome: classifyOrderStatus(lastStatus),
+		customerId: lastCustomerId,
 		attempts: maxAttempts,
 		timedOut: true
 	};

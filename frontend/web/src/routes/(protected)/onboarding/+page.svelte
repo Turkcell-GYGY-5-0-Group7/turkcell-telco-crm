@@ -1,70 +1,96 @@
 <script lang="ts">
-	// Onboarding wizard (subtask 16.4.2): register -> KYC -> plan -> review/order
-	// -> pay -> polled activation, all within /onboarding. This page is the thin
-	// SvelteKit adapter: it holds reactive state and orchestrates the single BFF
-	// client, while ordering, validation, status classification, and polling live
+	// Onboarding wizard (subtask 16.4.2): register -> KYC -> plan -> review/order ->
+	// polled activation, all within /onboarding. This page is the thin SvelteKit
+	// adapter: it holds reactive state and orchestrates the single BFF client, while
+	// ordering, validation, request shaping, status classification, and polling live
 	// in the framework-agnostic $lib/onboarding modules (unit tested in Node).
 	//
-	// The final step reflects the TRUE saga outcome by POLLING GET /api/v1/orders/
-	// {id} until a terminal state, never an optimistic "payment ok => activated".
-	// Browser-only APIs (crypto, File, fetch) run only inside handlers / onMount,
-	// so the adapter-node build (this group is ssr=false) does not break.
+	// Placing the order is the ONLY write. Charging is event-driven (order.created.v1
+	// -> payment-service charges -> payment.completed.v1 -> subscription activates ->
+	// order FULFILLED, TELCO-CRM-MVP Section 9.2), so the wizard never calls
+	// POST /api/v1/payments: that endpoint is payment-service's ADMIN-only manual
+	// override and a browser call would double-charge the order. The final step
+	// reflects the TRUE saga outcome by POLLING GET /api/v1/orders/{id} until a
+	// terminal state (FULFILLED / CANCELLED / FAILED).
+	//
+	// Browser-only APIs (crypto, File, fetch) run only inside handlers / onMount, so
+	// the adapter-node build (this group is ssr=false) does not break.
 	import { onMount } from 'svelte';
 	import {
 		ApiError,
 		api,
 		type Addon,
+		type KycDocumentType,
 		type OnboardingCatalog,
 		type OnboardingOrderResult,
 		type Tariff
 	} from '$lib/api/client';
 	import {
 		computeMonthlyTotal,
+		isKycValid,
 		isRegistrationValid,
 		nextStep,
 		prevStep,
+		type KycForm,
 		type RegistrationForm,
 		type WizardStep
 	} from '$lib/onboarding/wizard';
+	import { buildRegisterOrderRequest, buildReuseOrderRequest } from '$lib/onboarding/order-request';
 	import { pollOrderStatus, type PollResult } from '$lib/onboarding/order-status';
 	import {
-		buildPaymentAttempt,
 		recoveryActionFor,
+		shouldReuseCustomer,
 		type RecoveryAction
 	} from '$lib/onboarding/recovery';
-	import { readFileAsBase64 } from '$lib/onboarding/file';
+	import { shouldRefreshSessionAfterOnboarding } from '$lib/onboarding/link-state';
+	import {
+		MAX_KYC_FILE_BYTES,
+		formatBytes,
+		readFileAsBase64,
+		validateKycFile
+	} from '$lib/onboarding/file';
+	import { renewSession } from '$lib/auth/oidc';
 	import WizardProgress from './WizardProgress.svelte';
 	import RegisterStep from './RegisterStep.svelte';
 	import KycStep from './KycStep.svelte';
 	import CatalogStep from './CatalogStep.svelte';
 	import ReviewStep from './ReviewStep.svelte';
-	import PaymentStep from './PaymentStep.svelte';
 	import ResultStep from './ResultStep.svelte';
 
+	// Exactly the BFF's CustomerRegistration fields; INDIVIDUAL is the only type the
+	// MVP registers (customer-service validates identityNumber as a TCKN either way).
 	const registration: RegistrationForm = $state({
-		fullName: '',
-		nationalId: '',
-		email: '',
-		phoneNumber: ''
+		type: 'INDIVIDUAL',
+		firstName: '',
+		lastName: '',
+		identityNumber: '',
+		dateOfBirth: ''
 	});
 
-	let step = $state<WizardStep>('register');
+	const kyc: KycForm = $state({ type: 'ID_CARD', file: null });
 
-	let kycFile = $state<File | null>(null);
-	let kycFilename = $state('');
+	const DOCUMENT_LABELS: Record<KycDocumentType, string> = {
+		ID_CARD: 'Identity card',
+		PASSPORT: 'Passport'
+	};
+
+	let step = $state<WizardStep>('register');
 
 	let catalog = $state<OnboardingCatalog | null>(null);
 	let catalogLoading = $state(false);
 	let catalogError = $state('');
-	let selectedTariffId = $state('');
-	let selectedAddonIds = $state<string[]>([]);
+	let selectedTariffCode = $state('');
+	let selectedAddonCodes = $state<string[]>([]);
 
 	let order = $state<OnboardingOrderResult | null>(null);
 	let placing = $state(false);
 	let placeError = $state('');
 
-	let paying = $state(false);
-	let payError = $state('');
+	// The customer the BFF registered. The order response does NOT carry it, so it is
+	// learned from the polled order (order-service's OrderResponse.customerId) and then
+	// used for the BFF's reuse path on a retry - re-registering the same TCKN would be
+	// rejected by customer-service.
+	let customerId = $state('');
 
 	let polling = $state(false);
 	let pollLiveStatus = $state('');
@@ -73,10 +99,10 @@
 	let pollError = $state('');
 
 	const selectedTariff = $derived<Tariff | null>(
-		catalog?.tariffs.find((tariff) => tariff.tariffId === selectedTariffId) ?? null
+		catalog?.tariffs.find((tariff) => tariff.code === selectedTariffCode) ?? null
 	);
 	const selectedAddons = $derived<Addon[]>(
-		catalog?.addons.filter((addon) => selectedAddonIds.includes(addon.addonId)) ?? []
+		catalog?.addons.filter((addon) => selectedAddonCodes.includes(addon.code)) ?? []
 	);
 	const monthlyTotal = $derived(computeMonthlyTotal(selectedTariff, selectedAddons));
 	const currency = $derived(selectedTariff?.currency ?? catalog?.tariffs[0]?.currency ?? 'TRY');
@@ -98,29 +124,41 @@
 		}
 	}
 
-	function onSelectTariff(tariffId: string) {
-		selectedTariffId = tariffId;
+	function onSelectTariff(tariffCode: string) {
+		selectedTariffCode = tariffCode;
+		// Addons are bound to a tariff (AddonOption.tariffCode); drop any that no longer apply.
+		selectedAddonCodes = selectedAddonCodes.filter((code) =>
+			catalog?.addons.some((addon) => addon.code === code && addon.tariffCode === tariffCode)
+		);
 	}
 
-	function onToggleAddon(addonId: string) {
-		selectedAddonIds = selectedAddonIds.includes(addonId)
-			? selectedAddonIds.filter((id) => id !== addonId)
-			: [...selectedAddonIds, addonId];
+	function onToggleAddon(addonCode: string) {
+		selectedAddonCodes = selectedAddonCodes.includes(addonCode)
+			? selectedAddonCodes.filter((code) => code !== addonCode)
+			: [...selectedAddonCodes, addonCode];
+	}
+
+	function onKycType(type: KycDocumentType) {
+		kyc.type = type;
 	}
 
 	function onKycFile(file: File | null) {
-		kycFile = file;
-		kycFilename = file?.name ?? '';
+		kyc.file = file;
 	}
+
+	const kycFilename = $derived(kyc.file?.name ?? '');
+	const reusingCustomer = $derived(shouldReuseCustomer(customerId));
 
 	const canAdvance = $derived.by(() => {
 		switch (step) {
 			case 'register':
 				return isRegistrationValid(registration);
 			case 'kyc':
-				return kycFile !== null;
+				// Already-registered customers re-order through the reuse path: the BFF skips
+				// register + KYC entirely, so a fresh document is not required.
+				return reusingCustomer || isKycValid(kyc);
 			case 'catalog':
-				return selectedTariffId !== '' && !catalogLoading && catalog !== null;
+				return selectedTariffCode !== '' && !catalogLoading && catalog !== null;
 			default:
 				return true;
 		}
@@ -134,34 +172,38 @@
 		step = prevStep(step);
 	}
 
+	/**
+	 * Place the order through the BFF and immediately start polling for the saga's
+	 * terminal outcome. First placement takes the REGISTER path (customer + KYC
+	 * document); a retry after a failure takes the REUSE path (customerId only). Each
+	 * placement carries a FRESH Idempotency-Key so a retry is a genuinely new order
+	 * rather than a replay of the failed one (order-service returns the original order
+	 * for a repeated key).
+	 */
 	async function placeOrder() {
 		if (placing) return;
 		placing = true;
 		placeError = '';
 		try {
-			const kycDocument = kycFile
-				? {
-						filename: kycFile.name,
-						contentType: kycFile.type || 'application/octet-stream',
-						content: await readFileAsBase64(kycFile)
-					}
-				: undefined;
+			const request = reusingCustomer
+				? buildReuseOrderRequest({
+						customerId,
+						tariffCode: selectedTariffCode,
+						addonCodes: selectedAddonCodes
+					})
+				: buildRegisterOrderRequest({
+						registration,
+						kycDocument: await readKycDocument(),
+						tariffCode: selectedTariffCode,
+						addonCodes: selectedAddonCodes
+					});
 
-			order = await api.placeOnboardingOrder(
-				{
-					tariffId: selectedTariffId,
-					addonIds: selectedAddonIds,
-					customer: {
-						fullName: registration.fullName.trim(),
-						email: registration.email.trim(),
-						phoneNumber: registration.phoneNumber.trim(),
-						nationalId: registration.nationalId.trim()
-					},
-					kycDocument
-				},
-				globalThis.crypto.randomUUID()
-			);
-			step = 'payment';
+			order = await api.placeOnboardingOrder(request, globalThis.crypto.randomUUID());
+
+			// No payment call: the charge is triggered server-side by order.created.v1.
+			// The wizard's job from here is to report the real outcome, so it polls.
+			step = 'result';
+			await startPolling(order.orderId);
 		} catch (error) {
 			placeError = describeError(error, 'Could not place the order.');
 		} finally {
@@ -169,39 +211,38 @@
 		}
 	}
 
-	async function pay() {
-		if (paying || !order) return;
-		paying = true;
-		payError = '';
-		try {
-			// A fresh idempotency key per attempt: a retry after a failed charge must
-			// NOT replay the previous key (payment-service would return the original
-			// failure), so both the first charge and any retry go through here.
-			await api.submitPayment(buildPaymentAttempt(order, monthlyTotal));
-			// Payment accepted by the PSP - but activation is decided by the saga.
-			// Advance to the result step and poll for the TRUE terminal outcome.
-			step = 'result';
-			await startPolling(order.orderId);
-		} catch (error) {
-			payError = describeError(error, 'Payment could not be processed. You can try again.');
-		} finally {
-			paying = false;
+	/**
+	 * Read the captured file into the BFF's KycDocument shape (type/fileName/contentType/content).
+	 * The size/type policy is re-applied here as the last gate before the bytes go on the wire:
+	 * the KYC step already blocks an oversize document, and this makes it impossible for any other
+	 * path (a restored draft, a back-navigation) to slip one past.
+	 */
+	async function readKycDocument() {
+		const file = kyc.file;
+		const check = validateKycFile(file);
+		if (!check.valid) {
+			throw new Error(check.message);
 		}
+		if (!file) {
+			throw new Error('A KYC document is required to register.');
+		}
+		return {
+			type: kyc.type,
+			fileName: file.name,
+			contentType: file.type || 'application/octet-stream',
+			content: await readFileAsBase64(file)
+		};
 	}
 
 	// -- failure/compensation recovery (16.4.3) ------------------------------
 
-	// The honest recovery path for a terminal failure, derived from the polled
-	// saga status: a compensated/cancelled order offers a payment retry; a KYC
-	// rejection routes back to re-verify identity. Non-failures offer nothing.
+	// The honest recovery path for a terminal failure, derived from the polled saga
+	// status. A CANCELLED/FAILED order is terminal and already refunded, and the browser
+	// has no payment call to retry, so the only real path is a NEW order for the same
+	// customer. Non-failures offer nothing.
 	const recoveryAction = $derived<RecoveryAction>(
 		pollResult && pollResult.outcome === 'failed' ? recoveryActionFor(pollResult.status) : 'none'
 	);
-
-	function resetPaymentState() {
-		paying = false;
-		payError = '';
-	}
 
 	function resetPollState() {
 		polling = false;
@@ -212,38 +253,25 @@
 	}
 
 	/**
-	 * Retry payment on the SAME order after a payment failure/compensation. Routes
-	 * back to the payment step; the next `pay()` builds a fresh idempotency key so
-	 * the charge is attempted anew rather than replaying the failed one.
+	 * Re-place the order after a failed saga. The customer (and their KYC document)
+	 * already exist, so the wizard routes back to review, where placing the order takes
+	 * the BFF's reuse path with a fresh Idempotency-Key.
 	 */
-	function retryPayment() {
-		resetPollState();
-		payError = '';
-		step = 'payment';
-	}
-
-	/**
-	 * Corrective path for a KYC rejection: route back to the KYC step to re-upload
-	 * a document. Registration details and the chosen plan are preserved; the
-	 * rejected document and the failed order/poll are cleared so a fresh order is
-	 * placed once a new document is provided.
-	 */
-	function restartKyc() {
+	function retryOrder() {
 		order = null;
-		kycFile = null;
-		kycFilename = '';
-		resetPaymentState();
+		placeError = '';
 		resetPollState();
-		step = 'kyc';
+		step = 'review';
 	}
 
 	/**
-	 * Full restart: keep the typed details and plan for convenience but drop the
-	 * failed order/payment/poll so the wizard places a brand-new order from the top.
+	 * Full restart: keep the typed details and plan for convenience but drop the failed
+	 * order/poll so the wizard places a brand-new order from the top. The customer id is
+	 * kept when one is known, so a restart still reuses the existing registration.
 	 */
 	function startOver() {
 		order = null;
-		resetPaymentState();
+		placeError = '';
 		resetPollState();
 		step = 'register';
 	}
@@ -261,6 +289,24 @@
 					pollAttempts = attempts;
 				}
 			});
+			// order-service is the only source that names the customer behind this order.
+			if (pollResult.customerId) {
+				customerId = pollResult.customerId;
+			}
+
+			// STALE TOKEN: the access token in hand was issued BEFORE this customer
+			// existed, so it still carries `customerId: null` - and every BFF account
+			// read (/bff/v1/home|account|invoices) would be refused 403 by the
+			// self-scoping guard even though onboarding just succeeded. identity-service
+			// mints the claim once it consumes `customer.registered.v1`, so a fresh token
+			// carries the link: renew now, through the ONE existing silent-renew path, so
+			// the dashboard the user lands on is loaded with a linked identity. Best
+			// effort - `renewSession` never throws, and if it yields a token that still
+			// has no link, the account pages fall back to the onboarding CTA (they retry
+			// a renew once themselves) instead of looping.
+			if (shouldRefreshSessionAfterOnboarding(pollResult)) {
+				await renewSession();
+			}
 		} catch (error) {
 			pollError = describeError(error, 'Could not confirm activation.');
 		} finally {
@@ -268,11 +314,51 @@
 		}
 	}
 
+	/**
+	 * Surface the SERVER's own message when it sent one (ADR-015 error envelope) - a
+	 * rejected TCKN, for example, arrives as customer-service's 400 relayed by the BFF.
+	 * Inventing a friendlier message would hide why the request actually failed.
+	 *
+	 * A `fetch` rejection is a different animal: it is NOT an `ApiError` (there is no
+	 * response at all), it is a bare `TypeError` whose message is the browser's internal
+	 * "Failed to fetch"/"NetworkError when attempting to fetch resource". Showing that
+	 * text to a user is meaningless, so it is translated into the two things that actually
+	 * cause it here: the request never reached the server, or it was cut off mid-upload
+	 * (a document too large for the server to accept). See {@link describeNetworkFailure}.
+	 */
 	function describeError(error: unknown, fallback: string): string {
 		if (error instanceof ApiError) {
-			return `${fallback} (HTTP ${error.status})`;
+			const detail = error.serverMessage;
+			return detail
+				? `${fallback} ${detail} (HTTP ${error.status})`
+				: `${fallback} (HTTP ${error.status})`;
+		}
+		if (isNetworkFailure(error)) {
+			return `${fallback} ${describeNetworkFailure()}`;
+		}
+		if (error instanceof Error && error.message) {
+			return `${fallback} ${error.message}`;
 		}
 		return fallback;
+	}
+
+	/**
+	 * True for a transport-level failure: `fetch` rejects with a `TypeError` (not an
+	 * `ApiError`) when the connection is refused, dropped, or reset - which is exactly what
+	 * a server-aborted oversize upload looks like from the browser.
+	 */
+	function isNetworkFailure(error: unknown): boolean {
+		return error instanceof TypeError;
+	}
+
+	/** The human-readable cause of a transport failure while placing the order. */
+	function describeNetworkFailure(): string {
+		return (
+			`The server could not be reached, so nothing was submitted. ` +
+			`This usually means the connection dropped, or the identity document was too large to upload ` +
+			`(the limit is ${formatBytes(MAX_KYC_FILE_BYTES)}). Check your connection, re-attach a smaller ` +
+			`document if needed, and try again.`
+		);
 	}
 
 	const showBack = $derived(step === 'kyc' || step === 'catalog' || step === 'review');
@@ -286,14 +372,19 @@
 		{#if step === 'register'}
 			<RegisterStep form={registration} />
 		{:else if step === 'kyc'}
-			<KycStep filename={kycFilename} onFileSelected={onKycFile} />
+			<KycStep
+				documentType={kyc.type}
+				file={kyc.file}
+				onTypeSelected={onKycType}
+				onFileSelected={onKycFile}
+			/>
 		{:else if step === 'catalog'}
 			<CatalogStep
 				{catalog}
 				loading={catalogLoading}
 				error={catalogError}
-				{selectedTariffId}
-				{selectedAddonIds}
+				{selectedTariffCode}
+				{selectedAddonCodes}
 				total={monthlyTotal}
 				{currency}
 				{onSelectTariff}
@@ -302,16 +393,16 @@
 		{:else if step === 'review'}
 			<ReviewStep
 				form={registration}
+				documentLabel={DOCUMENT_LABELS[kyc.type]}
 				filename={kycFilename}
 				tariff={selectedTariff}
 				addons={selectedAddons}
 				total={monthlyTotal}
 				{currency}
 				{placing}
+				{reusingCustomer}
 				error={placeError}
 			/>
-		{:else if step === 'payment'}
-			<PaymentStep {order} total={monthlyTotal} {currency} submitting={paying} error={payError} />
 		{:else if step === 'result'}
 			<ResultStep
 				{polling}
@@ -320,8 +411,7 @@
 				result={pollResult}
 				error={pollError}
 				recovery={recoveryAction}
-				onRetryPayment={retryPayment}
-				onRestartKyc={restartKyc}
+				onRetryOrder={retryOrder}
 				onStartOver={startOver}
 			/>
 		{/if}
@@ -329,9 +419,7 @@
 
 	<div class="actions">
 		{#if showBack}
-			<button type="button" class="secondary" onclick={goBack} disabled={placing || paying}>
-				Back
-			</button>
+			<button type="button" class="secondary" onclick={goBack} disabled={placing}> Back </button>
 		{/if}
 
 		{#if step === 'register' || step === 'kyc' || step === 'catalog'}
@@ -342,8 +430,6 @@
 			<button type="button" class="primary" onclick={placeOrder} disabled={placing}>
 				Place order
 			</button>
-		{:else if step === 'payment'}
-			<button type="button" class="primary" onclick={pay} disabled={paying}>Pay now</button>
 		{/if}
 	</div>
 </section>

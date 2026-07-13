@@ -92,6 +92,18 @@ infra-apps: ## Start core + platform + all 10 domain services
 infra-up-full-stack: ## Start the full acceptance stack (core + auth + platform + apps)
 	$(INFRA) up-full-stack
 
+.PHONY: infra-sprint16-e2e-build
+infra-sprint16-e2e-build: ## Build the images the Sprint 16 E2E subset needs (first-time only)
+	$(INFRA) sprint16-e2e-build
+
+.PHONY: infra-sprint16-e2e
+infra-sprint16-e2e: ## Start ONLY the Sprint 16 E2E subset (the full stack does not fit in RAM)
+	$(INFRA) sprint16-e2e
+
+.PHONY: infra-sprint16-connectors
+infra-sprint16-connectors: ## Register only the Debezium connectors the Sprint 16 E2E needs
+	$(INFRA) sprint16-connectors
+
 .PHONY: infra-down
 infra-down: ## Stop all infra containers (keeps data volumes)
 	$(INFRA) down

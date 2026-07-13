@@ -25,6 +25,87 @@
 # First-time platform build (images are cached after first run):
 #   docker compose --profile platform build
 #   docker compose --profile apps build
+#
+# ---------------------------------------------------------------------------
+# MEMORY BUDGET (single developer machine)
+#
+# Why every JVM here is explicitly capped: a JVM with no -Xmx sizes its heap from
+# the HOST's RAM (MaxRAMPercentage of ~15.7 GB), not from what Docker can spare.
+# The full stack is 23 containers, ~15 of them JVMs; each one independently decided
+# it could have multiple GB of heap. Running them together drove free memory to
+# 0.6 GB and OOM-hung the Docker engine (API returned 500s until Docker Desktop was
+# restarted). Every JVM below therefore gets an explicit heap cap, overridable from
+# infra/docker/.env. Do not remove these caps to "fix" a slow service - raise the
+# one cap that needs it.
+#
+# THE REAL CEILING IS THE DOCKER VM, NOT THE HOST. The host has 15.7 GB, but every
+# container runs inside Docker Desktop's Linux VM, which is hard-capped. Measure it -
+# do not guess:
+#
+#   docker info --format '{{.MemTotal}}'   ->  8171184128 bytes = 7793 MiB = 7.61 GiB
+#
+# That 7.61 GiB is the absolute ceiling for ALL containers combined. The VM's own
+# kernel + dockerd + containerd take ~400-500 MB of it, leaving roughly 7.3 GB for
+# containers. Budget below targets ~6.8 GB so the engine keeps a real reserve: it was
+# running the VM down to near-zero free that hung the Docker API in the first place.
+# (Raise the ceiling if you want more comfort: set memory= in %USERPROFILE%\.wslconfig
+# and `wsl --shutdown`. Nothing here depends on that.)
+#
+# Budget for the SPRINT 16 E2E SUBSET (see "Sprint 16 E2E subset" below).
+# JVM RSS is heap + metaspace + code cache + thread stacks + direct buffers + GC
+# native, so each estimate sits well above its -Xmx.
+#
+#   container                  heap cap (-Xmx)   est. RSS
+#   -------------------------  ---------------   --------
+#   postgres                   n/a (native)        350 MB
+#   redis                      n/a (native)         40 MB
+#   minio                      n/a (native)        200 MB
+#   kafka                      320m                620 MB
+#   kafka-connect              448m                780 MB   (Debezium, saga path)
+#   keycloak                   256m                500 MB
+#   config-server              160m                330 MB
+#   discovery-server           160m                320 MB
+#   api-gateway                256m                470 MB
+#   7 domain services          192m each          2800 MB   (400 MB each)
+#   web-bff                    192m                380 MB
+#   -------------------------  ---------------   --------
+#   TOTAL (18 long-lived containers)              6790 MB  ~= 6.63 GB
+#
+# Plus two short-lived one-shots that exit (createbuckets ~20 MB, keycloak-config
+# ~150 MB JVM). Startup peak is therefore ~6.95 GB, inside the ~7.3 GB usable, with
+# ~350 MB of engine reserve left. It fits - but only just, and only for this subset.
+# Do not start observability/tools/mongo/identity/notification/ticket alongside it.
+#
+# These heaps are sized for a functional single-user E2E walk-through, not for load.
+# If one service genuinely OOMEs, raise that ONE cap in infra/docker/.env rather than
+# widening them all. The SvelteKit dev server runs on the HOST, outside this VM, so it
+# does not draw on this budget.
+# ---------------------------------------------------------------------------
+#
+# Sprint 16 E2E subset (fits the budget above):
+#   make -C infra sprint16-e2e            # or, equivalently:
+#   docker compose --env-file .env -f compose.yml \
+#     --profile platform --profile auth --profile apps up -d \
+#     postgres redis kafka kafka-connect minio createbuckets \
+#     keycloak keycloak-config config-server discovery-server api-gateway \
+#     product-catalog-service customer-service order-service payment-service \
+#     subscription-service usage-service billing-service web-bff
+#   make -C infra sprint16-connectors     # register only the 7 needed connectors
+#
+# Deliberately EXCLUDED from that subset (still available for other work):
+#   identity-service      realm users are pre-seeded by the Keycloak realm import
+#   notification-service  not on the onboarding happy path
+#   ticket-service        not on the onboarding happy path
+#   mongo                 notification-service's store only (ADR-006)
+#   kafka-ui              a debugging tool, not a dependency
+#   schema-registry       NOT required at runtime. Per ADR-019 Amendment A2 the
+#                         outbox publishes plain JSON, and every connector in
+#                         kafka-connect/connectors/*.json uses StringConverter +
+#                         JsonConverter with value.converter.schemas.enable=false.
+#                         No service config or POM references a schema registry or
+#                         an Avro (de)serializer. The .avsc files are design-time
+#                         governance artifacts, not a runtime dependency.
+#   observability stack   prometheus/grafana/loki/tempo/otel-collector
 # ---------------------------------------------------------------------------
 
 name: ${COMPOSE_PROJECT_NAME:-telco-crm}
@@ -46,6 +127,16 @@ x-app-env: &app-env
   EUREKA_USERNAME: ${EUREKA_USERNAME:-eureka}
   EUREKA_PASSWORD: ${EUREKA_PASSWORD:-eureka}
   REDIS_PASSWORD: ${REDIS_PASSWORD:-telco}
+  # Cap the JVM heap. Without this each Spring service sizes its heap from the HOST's RAM
+  # (MaxRAMPercentage of ~15 GB) and balloons, which OOM-hangs the Docker engine when the
+  # whole stack runs on one developer machine. SerialGC keeps thread/heap overhead low for
+  # these small heaps. Heap alone is not the whole footprint, so metaspace, code cache,
+  # direct buffers and thread stacks are capped too - that is what makes RSS predictable
+  # (see the MEMORY BUDGET block at the top of this file). 192m of heap is ample for a
+  # functional E2E walk-through - these services idle well under 120m - and 8 of them run
+  # at once, so every 64m here costs 512m of VM. Raise it via JAVA_TOOL_OPTIONS in
+  # infra/docker/.env if a service actually OOMEs.
+  JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--Xms96m -Xmx192m -XX:+UseSerialGC -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=64m -Xss512k}
 
 x-app-depends: &app-depends
   config-server:
@@ -170,6 +261,10 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # The image defaults to a host-RAM-sized heap (~1 GB+), which is far more than a
+      # single-node dev broker with a handful of low-volume topics needs, and which helps
+      # OOM-hang the Docker engine when the whole stack runs on one machine.
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms192m -Xmx320m}
     volumes:
       - kafka-data:/var/lib/kafka/data
     healthcheck:
@@ -180,6 +275,10 @@ services:
     networks: [telco]
 
   # ----------------------------------------------------------- Schema Registry
+  # NOT on the runtime path: per ADR-019 Amendment A2 the outbox publishes plain JSON and
+  # every Debezium connector uses JsonConverter (schemas.enable=false), so nothing in the
+  # stack talks to this at runtime. Kept for schema-governance tooling and future Avro work;
+  # it is simply not started by the Sprint 16 E2E subset. Heap is capped for when it is.
   schema-registry:
     image: confluentinc/cp-schema-registry:${SCHEMA_REGISTRY_VERSION:-7.9.0}
     container_name: telco-schema-registry
@@ -193,6 +292,8 @@ services:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      # Image default is a host-RAM-sized heap; see the MEMORY BUDGET block at the top.
+      SCHEMA_REGISTRY_HEAP_OPTS: ${SCHEMA_REGISTRY_HEAP_OPTS:--Xms128m -Xmx256m}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/subjects >/dev/null || exit 1"]
       interval: 15s
@@ -201,6 +302,11 @@ services:
     networks: [telco]
 
   # ------------------------------------------------- Kafka Connect (Debezium)
+  # Delivers the transactional outbox to Kafka (ADR-009); the onboarding saga does not
+  # complete without it. It does NOT depend on schema-registry: the converters below (and
+  # in every connectors/*.json) are JsonConverter with schemas disabled, so there is no
+  # registry lookup on any code path. The former depends_on schema-registry was dead weight
+  # that dragged an extra ~400 MB JVM into every `up`, so it is gone (ADR-019 Amendment A2).
   kafka-connect:
     image: quay.io/debezium/connect:${DEBEZIUM_CONNECT_VERSION:-3.1.0.Final}
     container_name: telco-kafka-connect
@@ -208,12 +314,13 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-      schema-registry:
-        condition: service_healthy
     ports:
       - "${KAFKA_CONNECT_PORT:-8083}:8083"
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
+      # Debezium's connect image defaults to -Xms1G -Xmx1G; see the MEMORY BUDGET block at
+      # the top. Kept the most generous of the infra heaps: this is the saga's critical path.
+      KAFKA_HEAP_OPTS: ${KAFKA_CONNECT_HEAP_OPTS:--Xms256m -Xmx448m}
       GROUP_ID: telco-connect
       CONFIG_STORAGE_TOPIC: _connect_configs
       OFFSET_STORAGE_TOPIC: _connect_offsets
@@ -263,6 +370,9 @@ services:
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-eureka}
       KEYCLOAK_URI: http://keycloak:8080
       KEYCLOAK_JWKS_URI: ${KEYCLOAK_JWKS_URI:-http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs}
+      # Heap cap: see the MEMORY BUDGET block at the top of this file. Serving static YAML
+      # to ~12 clients needs very little heap.
+      JAVA_TOOL_OPTIONS: ${CONFIG_SERVER_JAVA_TOOL_OPTIONS:--Xms64m -Xmx160m -XX:+UseSerialGC -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=96m -Xss512k}
     volumes:
       - ../../microservices/configs:/configs:ro
     healthcheck:
@@ -290,6 +400,9 @@ services:
     environment:
       EUREKA_USERNAME: ${EUREKA_USERNAME:-eureka}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-eureka}
+      # Heap cap: see the MEMORY BUDGET block at the top of this file. A registry holding
+      # ~12 instances needs very little heap.
+      JAVA_TOOL_OPTIONS: ${DISCOVERY_SERVER_JAVA_TOOL_OPTIONS:--Xms64m -Xmx160m -XX:+UseSerialGC -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=96m -Xss512k}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8761/actuator/health | grep -q UP || exit 1"]
       interval: 15s
@@ -303,6 +416,11 @@ services:
   # and Eureka registration are guaranteed before traffic is accepted.
   # Keycloak JWKS is fetched lazily on first token validation; gateway starts
   # successfully even when the auth profile is not active.
+  # Also tagged with the "apps" profile for the same reason as config-server
+  # above: web-bff depends_on this service (it is web-bff's only egress, ADR-022)
+  # and Compose does not auto-activate a dependency's profile across a differing
+  # profile boundary, so `--profile apps` alone must still bring it up
+  # (verified: `docker compose --profile apps config`).
   api-gateway:
     build:
       context: ../../
@@ -310,7 +428,7 @@ services:
     image: telco-api-gateway:local
     container_name: telco-api-gateway
     restart: *restart
-    profiles: [platform]
+    profiles: [platform, apps]
     depends_on:
       config-server:
         condition: service_healthy
@@ -331,6 +449,10 @@ services:
       EUREKA_USERNAME: ${EUREKA_USERNAME:-eureka}
       EUREKA_PASSWORD: ${EUREKA_PASSWORD:-eureka}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-telco}
+      # Heap cap: see the MEMORY BUDGET block at the top of this file. Sized above the domain
+      # services because every request in the stack transits here, and Netty's direct buffers
+      # (capped separately below) sit outside the heap.
+      JAVA_TOOL_OPTIONS: ${API_GATEWAY_JAVA_TOOL_OPTIONS:--Xms96m -Xmx256m -XX:+UseSerialGC -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=96m -XX:MaxDirectMemorySize=96m -Xss512k}
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health | grep -q UP || exit 1"]
       interval: 15s
@@ -429,6 +551,12 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-keycloak}
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      # Keycloak's own JAVA_OPTS default to -XX:MaxRAMPercentage=70, i.e. ~11 GB of heap on a
+      # 15.7 GB host - one of the biggest contributors to the OOM-hang (see the MEMORY BUDGET
+      # block at the top). JAVA_OPTS_APPEND is appended AFTER that default, so an explicit
+      # -Xmx wins over MaxRAMPercentage. Metaspace is capped high because Keycloak loads a lot
+      # of classes.
+      JAVA_OPTS_APPEND: ${KEYCLOAK_JAVA_OPTS_APPEND:--Xms96m -Xmx256m -XX:MaxMetaspaceSize=256m}
     volumes:
       - ./keycloak/realm:/opt/keycloak/data/import:ro
     networks: [telco]
@@ -458,6 +586,10 @@ services:
     environment:
       KC_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # kcadm.sh is another JVM that would otherwise size its heap from host RAM. It is
+      # short-lived, but it runs concurrently with Keycloak's own startup - i.e. exactly at
+      # the stack's peak memory moment. A tiny heap is plenty for a couple of admin calls.
+      JAVA_OPTS_APPEND: ${KEYCLOAK_CONFIG_JAVA_OPTS_APPEND:--Xms32m -Xmx96m}
     networks: [telco]
 
   # -------------------------------------------------- Prometheus (observability)
@@ -709,6 +841,37 @@ services:
       - "${TICKET_SERVICE_PORT:-9010}:9010"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:9010/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  # ---------------------------------------------------------------------------
+  # web-bff (apps profile, port 9020). Simple Service Layer, fully stateless:
+  # no Postgres, no Kafka, no Redis - its single egress is the API gateway over
+  # HTTP (ADR-022). It therefore overrides *app-depends instead of inheriting it,
+  # and depends only on config-server, discovery-server and api-gateway. Docker-
+  # network addresses (gateway base-url, Keycloak) come from configs/web-bff/
+  # application-docker.yml served by config-server, NOT from container env.
+  # ---------------------------------------------------------------------------
+  web-bff:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/web-bff/Dockerfile
+    image: telco-web-bff:local
+    container_name: telco-web-bff
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    ports:
+      - "${WEB_BFF_PORT:-9020}:9020"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9020/actuator/health | grep -q UP || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 15

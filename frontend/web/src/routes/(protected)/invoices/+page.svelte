@@ -12,10 +12,18 @@
 	// Browser-only APIs (URL.createObjectURL, anchor click) are reached only inside
 	// the click handler via $lib/account/download; this page's group is ssr=false.
 	//
-	// Loading, error and empty states are handled honestly; the read is scoped
-	// server-side to the caller (16.5.1) and the client sends no id, only page/size.
+	// Loading, not-yet-onboarded, error and empty states are handled honestly; the
+	// read is scoped server-side to the caller (16.5.1) and the client sends no id,
+	// only page/size. A user who has not onboarded has no linked customer record, so
+	// that self-scoping guard refuses the read with 403 - an expected first-run state,
+	// classified by `loadLinkedResource` (with one silent renew + retry, for the token
+	// that predates the customerId claim) and answered with an onboarding CTA rather
+	// than a red HTTP error. Real failures still show as errors.
 	import { onMount } from 'svelte';
 	import { ApiError, api, type InvoiceList, type InvoiceSummary } from '$lib/api/client';
+	import { renewSession } from '$lib/auth/oidc';
+	import { loadLinkedResource } from '$lib/onboarding/link-state';
+	import NotOnboardedNotice from '$lib/onboarding/NotOnboardedNotice.svelte';
 	import { triggerBlobDownload } from '$lib/account/download';
 	import { invoicePdfFilename } from '$lib/account/invoice';
 	import InvoiceRow from '$lib/account/InvoiceRow.svelte';
@@ -26,6 +34,7 @@
 	let page = $state(0);
 	let loading = $state(true);
 	let error = $state('');
+	let notOnboarded = $state(false);
 
 	// Per-invoice download state, keyed by invoiceId, so one row's spinner/error
 	// never blocks another's download button.
@@ -43,17 +52,23 @@
 	async function load(target: number) {
 		loading = true;
 		error = '';
-		try {
-			result = await api.getInvoices(target, PAGE_SIZE);
-			page = result.page;
-		} catch (err) {
+		notOnboarded = false;
+		const loaded = await loadLinkedResource(() => api.getInvoices(target, PAGE_SIZE), {
+			renewSession
+		});
+		if (loaded.state === 'loaded') {
+			result = loaded.data;
+			page = loaded.data.page;
+		} else if (loaded.state === 'unlinked') {
+			result = null;
+			notOnboarded = true;
+		} else {
 			error =
-				err instanceof ApiError
-					? `Could not load your invoices. (HTTP ${err.status})`
+				loaded.error instanceof ApiError
+					? `Could not load your invoices. (HTTP ${loaded.error.status})`
 					: 'Could not load your invoices.';
-		} finally {
-			loading = false;
 		}
+		loading = false;
 	}
 
 	function goPrev() {
@@ -91,6 +106,10 @@
 			<p>{error}</p>
 			<button type="button" onclick={() => load(page)}>Retry</button>
 		</div>
+	{:else if notOnboarded}
+		<NotOnboardedNotice
+			message="You have not completed onboarding yet, so no invoices have been issued to you. Your monthly invoices will be listed here once your subscription is activated."
+		/>
 	{:else if result && result.invoices.length > 0}
 		<table>
 			<thead>

@@ -9,16 +9,27 @@
 	//   - unknown       -> the initial session probe (and the SSR render): neutral.
 	//   - anonymous      -> a welcome + Sign in prompt; NO getHome call (it would 401).
 	//   - authenticated  -> a single api.getHome() -> the dashboard summary, with
-	//                       loading / error / empty states handled.
+	//                       loading / not-yet-onboarded / error / empty states handled.
 	// The dashboard is a SUMMARY with links into /account and /invoices; it does not
 	// reproduce those full views.
+	//
+	// An authenticated user who has NOT onboarded has no linked customer record, so
+	// the BFF's self-scoping guard correctly rejects GET /bff/v1/home with 403. That
+	// is this app's most common first-run state, not a fault: `loadLinkedResource`
+	// classifies it (and, once, silently renews the token first, to cover the token
+	// minted before identity-service consumed customer.registered.v1) and the page
+	// answers with a welcome + onboarding CTA. Genuine failures - a 500, a network
+	// error, any non-403 - still surface as the real error.
 	import { ApiError, api, type HomeDashboard } from '$lib/api/client';
-	import { authState, login } from '$lib/auth/oidc';
+	import { authState, login, renewSession } from '$lib/auth/oidc';
+	import { loadLinkedResource } from '$lib/onboarding/link-state';
+	import NotOnboardedNotice from '$lib/onboarding/NotOnboardedNotice.svelte';
 	import DashboardSummary from '$lib/home/DashboardSummary.svelte';
 
 	let home = $state<HomeDashboard | null>(null);
 	let loading = $state(false);
 	let error = $state('');
+	let notOnboarded = $state(false);
 	let signingIn = $state(false);
 
 	// Non-reactive guard so the effect loads once per authenticated transition and
@@ -38,6 +49,7 @@
 		} else {
 			home = null;
 			error = '';
+			notOnboarded = false;
 			loading = false;
 		}
 	});
@@ -45,16 +57,23 @@
 	async function load() {
 		loading = true;
 		error = '';
-		try {
-			home = await api.getHome();
-		} catch (err) {
+		notOnboarded = false;
+		home = null;
+		// One silent renew + one retry is attempted ONLY on the unlinked (403) path,
+		// and only once - if the refreshed token still carries no customerId we fall
+		// back to the onboarding CTA rather than looping.
+		const result = await loadLinkedResource(() => api.getHome(), { renewSession });
+		if (result.state === 'loaded') {
+			home = result.data;
+		} else if (result.state === 'unlinked') {
+			notOnboarded = true;
+		} else {
 			error =
-				err instanceof ApiError
-					? `Could not load your dashboard. (HTTP ${err.status})`
+				result.error instanceof ApiError
+					? `Could not load your dashboard. (HTTP ${result.error.status})`
 					: 'Could not load your dashboard.';
-		} finally {
-			loading = false;
 		}
+		loading = false;
 	}
 
 	async function signIn() {
@@ -80,6 +99,10 @@
 				<p>{error}</p>
 				<button type="button" onclick={() => load()}>Retry</button>
 			</div>
+		{:else if notOnboarded}
+			<NotOnboardedNotice
+				message="You have not completed onboarding yet, so there is no account to show. Once you have registered, chosen a plan, and your subscription is activated, your dashboard will appear here."
+			/>
 		{:else if home}
 			<DashboardSummary {home} />
 		{/if}

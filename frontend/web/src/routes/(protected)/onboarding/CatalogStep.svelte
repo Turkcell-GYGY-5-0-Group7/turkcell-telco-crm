@@ -2,6 +2,11 @@
 	// Step 3: tariff + addon selection (16.4.2). Reads the UI-shaped catalog the
 	// BFF composes (GET /bff/v1/onboarding/catalog); one tariff is required, addons
 	// are optional. The running monthly total is computed by the wizard model.
+	//
+	// The catalog identifies both tariffs and addons by CODE (BFF `TariffOption.code`
+	// / `AddonOption.code`) - there is no id in this contract - and the order request
+	// carries those codes. Addons are filtered to the ones bound to the selected
+	// tariff (`AddonOption.tariffCode`), which is how the BFF composes them.
 	import type { OnboardingCatalog } from '$lib/api/client';
 	import { formatMoney } from '$lib/onboarding/money';
 
@@ -9,8 +14,8 @@
 		catalog,
 		loading,
 		error,
-		selectedTariffId,
-		selectedAddonIds,
+		selectedTariffCode,
+		selectedAddonCodes,
 		total,
 		currency,
 		onSelectTariff,
@@ -19,13 +24,17 @@
 		catalog: OnboardingCatalog | null;
 		loading: boolean;
 		error: string;
-		selectedTariffId: string;
-		selectedAddonIds: string[];
+		selectedTariffCode: string;
+		selectedAddonCodes: string[];
 		total: number;
 		currency: string;
-		onSelectTariff: (tariffId: string) => void;
-		onToggleAddon: (addonId: string) => void;
+		onSelectTariff: (tariffCode: string) => void;
+		onToggleAddon: (addonCode: string) => void;
 	} = $props();
+
+	const availableAddons = $derived(
+		catalog?.addons.filter((addon) => addon.tariffCode === selectedTariffCode) ?? []
+	);
 </script>
 
 <div class="step-body">
@@ -38,14 +47,14 @@
 	{:else if catalog}
 		<fieldset>
 			<legend>Tariff</legend>
-			{#each catalog.tariffs as tariff (tariff.tariffId)}
+			{#each catalog.tariffs as tariff (tariff.code)}
 				<label class="option">
 					<input
 						type="radio"
 						name="tariff"
-						value={tariff.tariffId}
-						checked={selectedTariffId === tariff.tariffId}
-						onchange={() => onSelectTariff(tariff.tariffId)}
+						value={tariff.code}
+						checked={selectedTariffCode === tariff.code}
+						onchange={() => onSelectTariff(tariff.code)}
 					/>
 					<span class="option-name">{tariff.name}</span>
 					<span class="option-price">{formatMoney(tariff.monthlyPrice, tariff.currency)}/mo</span>
@@ -53,19 +62,19 @@
 			{/each}
 		</fieldset>
 
-		{#if catalog.addons.length > 0}
+		{#if availableAddons.length > 0}
 			<fieldset>
 				<legend>Add-ons</legend>
-				{#each catalog.addons as addon (addon.addonId)}
+				{#each availableAddons as addon (addon.code)}
 					<label class="option">
 						<input
 							type="checkbox"
-							value={addon.addonId}
-							checked={selectedAddonIds.includes(addon.addonId)}
-							onchange={() => onToggleAddon(addon.addonId)}
+							value={addon.code}
+							checked={selectedAddonCodes.includes(addon.code)}
+							onchange={() => onToggleAddon(addon.code)}
 						/>
 						<span class="option-name">{addon.name}</span>
-						<span class="option-price">{formatMoney(addon.monthlyPrice, addon.currency)}/mo</span>
+						<span class="option-price">{formatMoney(addon.price, addon.currency)}/mo</span>
 					</label>
 				{/each}
 			</fieldset>

@@ -1,3 +1,93 @@
+# Completing Sprint 16 — the live local E2E  [DONE 2026-07-13 — EXIT CRITERION MET]
+
+Goal: discharge the ONE open Sprint 16 exit criterion — "a user logs in via Keycloak (PKCE), completes
+onboarding through the UI, and views subscription, usage, and a downloadable invoice PDF" — on the LOCAL
+Docker Compose stack (nothing is deployed anywhere; "live" = real running services on localhost).
+Sprint 16 code was committed + pushed (d8422f5, branch feat/sprint16-web-frontend) BEFORE this run.
+
+## OUTCOME (2026-07-13): criterion MET. Sprint 16 is DONE (5/5).
+
+A human ran the whole flow in a real browser against the live stack: Keycloak PKCE login -> onboarding
+wizard (register -> KYC -> tariff -> review -> place order) -> real saga (order FULFILLED, subscription
+ACTIVE, MSISDN 905320000006) -> dashboard -> /account (0/20480 MB, 0/1000 min, 0/500 SMS) -> bill-run ->
+/invoices -> invoice PDF DOWNLOADED. Self-scoping proven on real data (bill-run issued 7 invoices; the
+user's /invoices returned exactly 1 — their own). Final suites: frontend 153 tests + svelte-check 0 errors
++ lint/build clean; web-bff 31; customer-service 95; api-gateway 9 (all JaCoCo passing).
+
+**The run found 11 real defects that every offline suite missed** — several made the shipped web channel
+COMPLETELY NON-FUNCTIONAL in a browser, and the already-pushed d8422f5 contains that broken code. Root
+cause: each layer was tested against ITS OWN MOCK (frontend mocks `fetch`; web-bff mocks the gateway), so
+a contract mismatch BETWEEN two independently-mocked layers is invisible offline; and 3 defects were
+reachable ONLY by a human in a browser (a password-grant API E2E would have sailed past them). 9 fixed:
+frontend/BFF onboarding contract drift (tariffId/addonIds + customer{fullName,...} vs the BFF's real
+tariffCode/addonCodes + CustomerRegistration{type,firstName,lastName,identityNumber,dateOfBirth}); Tariff
+`tariffId` vs the catalog's `code`; getOrderStatus parsing a flat object instead of the ADR-015
+`ApiResult<OrderResponse>` (field `id`), so polling could NEVER terminate; the wizard calling the
+ADMIN-only `POST /api/v1/payments` (subscriber = 403, admin = DOUBLE CHARGE) — payment step REMOVED, since
+charges are event-driven off order.created.v1 (verified live: placing the order alone drives order ->
+payment -> subscription -> FULFILLED); the status classifier using the wrong enum (real:
+PENDING/CONFIRMED/FULFILLED/CANCELLED/FAILED, only FULFILLED = activated); gateway CORS missing
+`Idempotency-Key` (preflight blocked both POSTs; confirmed live); customer-service GET/PUT
+/api/v1/customers/{id} still staff-gated from Sprint 14, 403-ing the record's own OWNER (self-ownership
+check applied; note `#id.toString()` — SpEL comparing a UUID path var to the String customerId claim
+silently evaluates false = deny-all); identity-service wrongly excluded from the E2E subset (it consumes
+customer.registered.v1 and writes customer_id back to Keycloak = the source of the `customerId` claim);
+and the three browser-only ones — Keycloak rejecting explicitly-named DEFAULT client scopes ("Invalid
+scopes: openid profile email" -> request only `openid`), the newly-signed-up-user 403 rendered as a red
+error instead of an onboarding CTA (now a recognised state + session refresh for the stale-token race),
+and the KYC upload having NO size limit (a 2-8 MB phone photo blew past Spring's inherited 1 MB default
+AFTER the customer was already registered -> now capped in the browser at 5 MiB, rejected by web-bff with
+400 BEFORE registration, and customer-service multipart limits set explicitly to 6MB/8MB).
+
+### Tracked follow-ups — OPEN, deliberately not fixed (do not read these as done)
+- [ ] Duplicate TCKN registration returns 500 instead of a clean 409 Conflict (customer-service).
+- [ ] ANY oversized multipart returns 500, not 413: starter-api's GlobalExceptionHandler catches Exception
+      before Spring's own 413 mapping — platform-starter issue (platform-engineer / tech-lead).
+- [ ] `POST /api/v1/addons` is documented in docs/api-contracts/product-catalog-service.md but is NOT
+      implemented (AddonController has only a GET) and returns 500. Pre-existing Sprint 07 gap. Addons are
+      optional in the wizard so it did not block the E2E — but the addon selection path is UNPROVEN E2E.
+- Customer status stays PENDING after onboarding (KYC approval is a separate admin step) — expected, not a bug.
+
+### Infrastructure reality uncovered (all fixed)
+- web-bff was ABSENT from compose, had no application-docker.yml, and had the one un-hardened Dockerfile.
+- The full 23-container stack OOM-HUNG the Docker engine: the real ceiling is Docker Desktop's Linux VM
+  (measured 7.61 GiB), not the 15.7 GB host, and every JVM was sizing its heap from HOST RAM. All JVMs now
+  carry an explicit heap cap; the E2E runs on a documented 18-container subset. schema-registry proved NOT
+  needed at runtime (all Debezium connectors use JsonConverter; ADR-019's JSON-outbox amendment).
+- register-connectors.sh called `python3` (absent on this machine), and registering all 11 connectors
+  against a partial stack aborts. Both fixed.
+
+## Prerequisite gaps found (2026-07-13) and closed
+- web-bff was ABSENT from infra/docker/compose.yml -> added (apps profile, port 9020, depends on
+  config-server/discovery-server/api-gateway; it is stateless so it does NOT wait on postgres/kafka).
+- configs/web-bff/application-docker.yml did NOT exist -> created (gateway base-url -> http://api-gateway:8080,
+  Keycloak docker addresses). Without it the dev profile's localhost values would have leaked into the
+  container (the exact class of bug Sprint 14 hit on 6 services).
+- api-gateway was profiles:[platform] only -> added `apps` (web-bff depends on it), matching the existing
+  config-server/discovery-server precedent.
+- web-bff Dockerfile was the ONE service Sprint 15 never hardened -> numeric USER 10001 + HEALTHCHECK added.
+- infra/docker/.env did not exist -> created from .env.example with a generated ENCRYPT_KEY (gitignored).
+- NO telco-*:local images existed (only telco/*:kind from Sprint 15) -> all 14 service images must build.
+
+## Execution order  [all complete]
+- [x] Wire web-bff into compose + application-docker.yml + Dockerfile (devops). compose config validates.
+- [x] Build all 14 service images.
+- [x] Bring up the stack and reach healthy — NOT the full stack: the 23-container stack OOM-hung the Docker
+      engine (Docker Desktop's Linux VM ceiling is 7.61 GiB), so this runs on a documented 18-container
+      subset with explicit per-JVM heap caps. schema-registry is not needed at runtime.
+- [x] Register the Debezium outbox connectors — after fixing register-connectors.sh (`python3` does not
+      exist on this machine; registering all 11 against a partial stack aborts).
+- [x] API-level live E2E through the gateway with a REAL Keycloak token. NOTE the deviation: the planned
+      `POST /api/v1/payments` step was REMOVED, not executed — it is ADMIN-only and charges are event-driven
+      off order.created.v1, so calling it was a defect (subscriber = 403; admin = double charge). identity-
+      service also had to be ADDED to the subset (it mints the `customerId` claim). CORS preflight with
+      Idempotency-Key and self-scoping against a real token both confirmed live.
+- [x] BROWSER click-through on the SvelteKit dev server (:3000) — user-driven, the literal "through the UI"
+      half of the exit criterion. PASSED 2026-07-13, after fixing 3 browser-only defects it exposed.
+- [x] Flip Sprint 16 to fully DONE; STATUS.md + sprint-16 README updated (2026-07-13).
+
+---
+
 # Working TODO — Sprint 16: Web Frontend (post-MVP)
 
 Sprints 01-15 feature-complete (MVP AC-01/02/03 validated live in Sprint 14). Sprint 16 is the first
@@ -186,11 +276,14 @@ invoice PDFs). The browser NEVER calls a domain service directly (ADR-011). Buil
       (REJECTED/KYC_REJECTED/KYC_FAILED now terminal) -> route back to the kyc corrective step, preserving
       input. check/lint/build green, 90 tests (+8). Feature 16.4 now DONE -> Sprint 16 is 5/5 features.
       Live saga round-trip DEFERRED-TO-STACK.
-- [x] Exit gate: full-path acceptance (login -> onboard -> pay -> account/usage -> PDF) with no
-      browser-to-domain-service call — qa. The full-path is LIVE E2E = DEFERRED-TO-STACK (no stack up).
-      Offline exit-gate PASSED (see below).
+- [x] Exit gate: full-path acceptance (login -> onboard -> account/usage -> PDF) with no
+      browser-to-domain-service call — qa. Offline gate PASSED (see below), then the LIVE full path was run
+      for real on 2026-07-13 and PASSED (see OUTCOME at the top). Note the flow no longer contains a "pay"
+      step: the browser payment POST was a defect (ADMIN-only endpoint; charges are event-driven).
 
-## Exit-gate (2026-07-13) — DONE. Sprint 16 feature-complete (5/5); live E2E deferred-to-stack
+## Offline exit-gate (2026-07-13) — historical. Superseded by the live E2E above (see OUTCOME)
+> Kept for the record. This gate passed with EVERY suite green while the product was NON-FUNCTIONAL in a
+> browser — that is precisely why an offline gate is not a substitute for a live run.
 All 5 features built + offline-verified: web-bff `mvn verify` 25 tests/JaCoCo 93.4%; frontend 90 vitest +
 check/lint/build green; `frontend-web-ci.yml` actionlint-clean.
 - qa gate: **PASS** — suites green, the no-browser-to-domain-service invariant HOLDS (client.ts is the only
@@ -204,9 +297,11 @@ check/lint/build green; `frontend-web-ci.yml` actionlint-clean.
   BUILD SUCCESS). (2) LOW/advisory: onboarding reuse path trusts a client `customerId` (by design, order-
   service re-checks) -> documented in docs/api-contracts/web-bff.md Notes. All ADR/ARC checks otherwise
   APPROVE. qa's stale pom-comment nit (web-bff "no tests yet") also corrected.
-Sprint EXIT CRITERIA (live PKCE login -> onboarding saga -> account/usage view -> real PDF download, all
-through the gateway) are LIVE E2E and remain DEFERRED-TO-STACK — same shape as Sprint 15's deployment tail;
-they discharge in one deployed-stack run alongside Sprint 15's. Sprint 16 = DONE (features).
+At the time, the sprint EXIT CRITERIA (live PKCE login -> onboarding saga -> account/usage view -> real PDF
+download) were recorded as DEFERRED-TO-STACK and Sprint 16 as DONE(features). **That posture is now closed:**
+the criteria were discharged for real on 2026-07-13 against the live local Compose stack (see OUTCOME at the
+top of this file). Sprint 16 = DONE. Sprint 15's own deployed-environment (Kind) tail is unaffected and
+remains open.
 
 Critical path: 16.1.1 -> 16.1.2 -> 16.3.3 -> {16.4.1, 16.5.1} -> {16.4.2, 16.5.2} -> 16.4.3.
 

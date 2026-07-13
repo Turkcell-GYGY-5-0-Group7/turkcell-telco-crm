@@ -1,0 +1,17 @@
+# web-bff Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the localhost values in application.yml / application-dev.yml with Docker service names.
+# Loaded AFTER application-dev.yml, so these values win.
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+telco:
+  keycloak:
+    token-endpoint: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/token
+  gateway:
+    # Single egress (ADR-022): inside the Compose network the API gateway is api-gateway:8080,
+    # never a domain-service port and never the host-published port.
+    base-url: http://api-gateway:8080

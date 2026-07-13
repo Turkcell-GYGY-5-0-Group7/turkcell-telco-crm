@@ -17,6 +17,7 @@ import com.telco.webbff.gateway.GatewayCustomer;
 import com.telco.webbff.gateway.GatewayDocument;
 import com.telco.webbff.gateway.GatewayOrder;
 import com.telco.webbff.gateway.GatewayTariff;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Service;
@@ -57,9 +58,13 @@ public class OnboardingCompositionService {
     private static final int CATALOG_PAGE_SIZE = 100;
 
     private final GatewayClient gateway;
+    private final long maxKycDocumentBytes;
 
-    public OnboardingCompositionService(GatewayClient gateway) {
+    public OnboardingCompositionService(
+            GatewayClient gateway,
+            @Value("${telco.onboarding.kyc.max-document-bytes:6291456}") long maxKycDocumentBytes) {
         this.gateway = gateway;
+        this.maxKycDocumentBytes = maxKycDocumentBytes;
     }
 
     /**
@@ -131,6 +136,14 @@ public class OnboardingCompositionService {
                     Map.of("kycDocument", "must not be null"));
         }
 
+        // Decode and size-check the document FIRST, before the customer is registered. Registration
+        // is not compensatable here (customer-service would reject a re-register of the same TCKN),
+        // so a document that is going to be rejected must never get as far as creating a customer:
+        // that is precisely what left users half-onboarded when an oversize file blew up on the
+        // upload call. A too-large document is a client error (400), not a dependency failure.
+        byte[] content = decode(request.kycDocument());
+        checkSize(content);
+
         Map<String, Object> registerBody = new LinkedHashMap<>();
         registerBody.put("type", registration.type());
         registerBody.put("firstName", registration.firstName());
@@ -139,12 +152,30 @@ public class OnboardingCompositionService {
         registerBody.put("dateOfBirth", registration.dateOfBirth());
 
         GatewayCustomer customer = data(gateway.post("/api/v1/customers", registerBody, CUSTOMER));
-        uploadKyc(customer.id(), request.kycDocument());
+        uploadKyc(customer.id(), request.kycDocument(), content);
         return customer.id().toString();
     }
 
-    private void uploadKyc(UUID customerId, KycDocument document) {
-        byte[] content = decode(document);
+    /**
+     * Rejects a KYC document larger than {@code telco.onboarding.kyc.max-document-bytes} with a 400
+     * naming the actual size and the limit, instead of forwarding it to customer-service, whose
+     * multipart limit ({@code spring.servlet.multipart.max-file-size}) would abort the upload and
+     * surface as an opaque 503 DEPENDENCY_FAILURE (or, when Tomcat cannot swallow the remaining body,
+     * as a dropped connection the browser reports as a bare "Failed to fetch"). This bound is a
+     * security control as much as a UX one: it caps the BFF's upload surface.
+     */
+    private void checkSize(byte[] content) {
+        if (content.length > maxKycDocumentBytes) {
+            throw new ValidationException(
+                    "KYC document is too large: " + content.length + " bytes, the maximum is "
+                            + maxKycDocumentBytes + " bytes",
+                    Map.of("kycDocument.content",
+                            "must be at most " + maxKycDocumentBytes + " bytes (actual: "
+                                    + content.length + ")"));
+        }
+    }
+
+    private void uploadKyc(UUID customerId, KycDocument document, byte[] content) {
         String fileName = document.fileName() != null && !document.fileName().isBlank()
                 ? document.fileName() : "kyc-document";
 

@@ -104,6 +104,18 @@ public class GatewayClient {
             case 403 -> new AccessDeniedException(message);
             case 404 -> new ResourceNotFoundException(message);
             case 409 -> new ConflictException(message);
+            // 413 PAYLOAD_TOO_LARGE is a CLIENT error - the caller sent more bytes than the route
+            // accepts (e.g. an oversize KYC document on the multipart upload). Falling through to
+            // the default arm below would report it as a 503 DEPENDENCY_FAILURE ("the platform is
+            // broken"), which is a lie the UI cannot act on. Surfaced as 400 VALIDATION_FAILED so
+            // the browser gets a 4xx with a message it can show. (Note: customer-service today
+            // renders a multipart overflow as 500 - see PAYLOAD_TOO_LARGE handling in
+            // OnboardingCompositionService, which rejects an oversize document BEFORE it is
+            // dispatched. This arm covers any hop that answers 413 honestly: the gateway, a
+            // reverse proxy, or customer-service once its multipart advice is fixed.)
+            case 413 -> new ValidationException(
+                    message + " (payload too large - the uploaded document exceeds the accepted size)",
+                    Map.of("payload", "too large"));
             case 422 -> new BusinessRuleException(message);
             default -> new DependencyFailureException(message, ex);
         };

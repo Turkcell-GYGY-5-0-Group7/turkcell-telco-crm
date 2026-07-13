@@ -1,51 +1,40 @@
 import { describe, expect, it } from 'vitest';
 import {
-	buildPaymentAttempt,
 	recoveryActionFor,
 	recoveryStep,
+	shouldReuseCustomer,
 	type RecoveryAction
 } from './recovery';
 
 // Framework-agnostic proof of the wizard's failure/compensation recovery policy
-// (16.4.3): which honest recovery path a terminal failure maps to, that a retry
-// gets a fresh idempotency key, and that a KYC rejection routes to a corrective
-// step. The live saga round-trip is deferred to the stack run (Sprint 15 precedent).
+// (16.4.3): which honest recovery path a terminal failure maps to. What the wizard may
+// offer is bounded by the real contracts - the browser cannot retry payment (charging
+// is event-driven; POST /api/v1/payments is payment-service's ADMIN-only override), and
+// a CANCELLED/FAILED order is terminal in order-service's state machine. So the only
+// real recovery is placing a NEW order for the same, already-registered customer.
 
 describe('recoveryActionFor', () => {
-	it('offers a payment retry for compensation/cancellation failures (case-insensitive)', () => {
-		for (const status of ['CANCELLED', 'canceled', 'COMPENSATED', 'FAILED']) {
-			expect(recoveryActionFor(status)).toBe<RecoveryAction>('retry-payment');
+	it('offers a new order for the terminal failure statuses order-service can reach', () => {
+		for (const status of ['CANCELLED', 'cancelled', 'FAILED', 'failed']) {
+			expect(recoveryActionFor(status)).toBe<RecoveryAction>('retry-order');
 		}
 	});
 
-	it('routes to KYC re-verification for a rejection', () => {
-		for (const status of ['REJECTED', 'kyc_rejected', 'KYC_FAILED']) {
-			expect(recoveryActionFor(status)).toBe<RecoveryAction>('restart-kyc');
-		}
-	});
-
-	it('offers no recovery for activated or still-pending outcomes', () => {
-		for (const status of [
-			'ACTIVE',
-			'CONFIRMED',
-			'PENDING_PAYMENT',
-			'PROCESSING',
-			'',
-			null,
-			undefined
-		]) {
+	it('offers no recovery for a fulfilled or still-pending order', () => {
+		for (const status of ['FULFILLED', 'PENDING', 'CONFIRMED', '', null, undefined]) {
 			expect(recoveryActionFor(status)).toBe<RecoveryAction>('none');
 		}
+	});
+
+	it('never offers a payment retry - the browser has no payment call to make', () => {
+		const actions = ['CANCELLED', 'FAILED', 'FULFILLED', 'PENDING'].map(recoveryActionFor);
+		expect(actions).not.toContain('retry-payment');
 	});
 });
 
 describe('recoveryStep', () => {
-	it('sends a KYC rejection back to the corrective KYC step, not a dead end', () => {
-		expect(recoveryStep('restart-kyc')).toBe('kyc');
-	});
-
-	it('sends a payment failure back to the payment step to retry', () => {
-		expect(recoveryStep('retry-payment')).toBe('payment');
+	it('sends a failed order back to the review step to be placed again', () => {
+		expect(recoveryStep('retry-order')).toBe('review');
 	});
 
 	it('has no step to route to when there is nothing to recover', () => {
@@ -53,29 +42,17 @@ describe('recoveryStep', () => {
 	});
 });
 
-describe('buildPaymentAttempt', () => {
-	const order = { orderId: 'o-1', customerId: 'c-1' };
-
-	it('carries the order/customer/amount through unchanged', () => {
-		const attempt = buildPaymentAttempt(order, 149.9, () => 'id-1');
-		expect(attempt).toEqual({
-			orderId: 'o-1',
-			customerId: 'c-1',
-			amount: 149.9,
-			paymentRequestId: 'id-1'
-		});
+describe('shouldReuseCustomer', () => {
+	it('reuses the existing customer once an id is known (the BFF customerId path)', () => {
+		// Re-registering the same TCKN would be rejected by customer-service, so a retry
+		// MUST go through the reuse path.
+		expect(shouldReuseCustomer('c-1')).toBe(true);
 	});
 
-	it('generates a FRESH idempotency key on every attempt (so a retry never replays the failed key)', () => {
-		let n = 0;
-		const generate = () => `id-${++n}`;
-		const first = buildPaymentAttempt(order, 100, generate);
-		const retry = buildPaymentAttempt(order, 100, generate);
-		expect(first.paymentRequestId).toBe('id-1');
-		expect(retry.paymentRequestId).toBe('id-2');
-		expect(retry.paymentRequestId).not.toBe(first.paymentRequestId);
-		// The retry still targets the same order.
-		expect(retry.orderId).toBe(first.orderId);
-		expect(retry.customerId).toBe(first.customerId);
+	it('registers a new customer when no id is known yet', () => {
+		expect(shouldReuseCustomer('')).toBe(false);
+		expect(shouldReuseCustomer('   ')).toBe(false);
+		expect(shouldReuseCustomer(null)).toBe(false);
+		expect(shouldReuseCustomer(undefined)).toBe(false);
 	});
 });

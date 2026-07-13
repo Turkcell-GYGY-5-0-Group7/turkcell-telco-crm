@@ -73,7 +73,14 @@ function buildSettings(): UserManagerSettings {
 		post_logout_redirect_uri: postLogoutUri,
 		// Authorization Code flow; oidc-client-ts adds PKCE (S256) automatically.
 		response_type: 'code',
-		scope: 'openid profile email',
+		// Request ONLY `openid`. In Keycloak, a client's DEFAULT client scopes are applied
+		// automatically and must not be named in the scope parameter; only OPTIONAL scopes may be
+		// requested. The telco-crm realm assigns profile/email/roles/telco-roles to telco-web as
+		// DEFAULT scopes (and its discovery document advertises only openid/telco-roles/
+		// offline_access as requestable), so asking for "openid profile email" is rejected with
+		// "Invalid scopes". The profile/email claims and the `roles` claim still arrive, because
+		// the default scopes are applied server-side regardless. Overridable via PUBLIC_OIDC_SCOPE.
+		scope: env.PUBLIC_OIDC_SCOPE?.trim() || 'openid',
 		// Silent renewal uses the rotating refresh token grant (no hidden iframe,
 		// so no separate silent-redirect page is required). Keycloak realm rotation
 		// (revokeRefreshToken + refreshTokenMaxReuse:0) is honoured transparently.
@@ -153,8 +160,16 @@ export async function initAuth(): Promise<void> {
  * oidc-client-ts refresh-token grant; on success the fresh access token is
  * mirrored into the token cache (so the retried request carries it) and `true`
  * is returned. Any failure drops to anonymous and returns `false`.
+ *
+ * Exported because the same refresh-token grant also resolves the STALE-TOKEN
+ * race around onboarding: identity-service mints the `customerId` claim only
+ * after it consumes `customer.registered.v1`, so the token a just-onboarded user
+ * holds does not carry the link yet. The wizard (on activation) and the account
+ * reads (on an unlinked 403, via `$lib/onboarding/link-state.ts`) renew through
+ * THIS single path to obtain a token that does - no second renewal mechanism.
+ * Never throws: a failed renewal resolves `false`.
  */
-async function renewSession(): Promise<boolean> {
+export async function renewSession(): Promise<boolean> {
 	if (!browser) return false;
 	try {
 		const user = await getManager().signinSilent();

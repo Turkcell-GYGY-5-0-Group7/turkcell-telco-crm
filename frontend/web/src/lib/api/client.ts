@@ -3,13 +3,23 @@
 // ADR-022 / ADR-011 Section 2: the browser never calls a domain service
 // directly. This module is the SINGLE place in the frontend that constructs
 // outbound request URLs. Composed reads target the BFF surface (`/bff/v1/**`).
-// A few writes/reads that the web-bff does not yet compose fall back to the API
-// GATEWAY surface (`/api/v1/**`) under ADR-022's thin-slice allowance - namely
-// order-status polling (`GET /api/v1/orders/{id}`) and payment submission
-// (`POST /api/v1/payments`), which the onboarding wizard invokes directly. Both
-// surfaces resolve against the same configurable gateway base URL; a
-// domain-service host/port is never targeted, and this remains the only HTTP
-// path in the frontend.
+// ONE read that the web-bff does not compose falls back to the API GATEWAY
+// surface (`/api/v1/**`) under ADR-022's thin-slice allowance: order-status
+// polling (`GET /api/v1/orders/{id}`), which the onboarding wizard uses to
+// observe the saga's terminal outcome. Both surfaces resolve against the same
+// configurable gateway base URL; a domain-service host/port is never targeted,
+// and this remains the only HTTP path in the frontend.
+//
+// The browser does NOT submit payments. Charging is event-driven: order-service
+// publishes `order.created.v1` and payment-service's inbox consumer charges from
+// it (docs/product/TELCO-CRM-MVP.md Section 9.2). `POST /api/v1/payments` is a
+// manual ADMIN-only override on payment-service (`@PreAuthorize("hasRole('ADMIN')")`),
+// so a browser call would be both a 403 for a SUBSCRIBER and a second charge on
+// the same order. Placing the order is the ONLY write the wizard performs.
+//
+// Every type below is derived from the web-bff's actual Java DTOs
+// (microservices/web-bff/src/main/java/com/telco/webbff/dto/), not from prose:
+// that mismatch is exactly what broke the wizard once already.
 //
 // Auth wiring (bearer token) is subtask 16.3. This client leaves a clear seam:
 // an injectable `getAccessToken` hook. Until 16.3 it defaults to returning
@@ -29,9 +39,8 @@ export const DEFAULT_BASE_URL = 'http://localhost:8080';
 export const BFF_V1 = '/bff/v1';
 
 /**
- * API gateway version prefix. Used only for the two thin-slice calls the web-bff
- * does not compose (order-status polling, payment submission); see the module
- * header and ADR-022.
+ * API gateway version prefix. Used only for the single thin-slice call the web-bff
+ * does not compose (order-status polling); see the module header and ADR-022.
  */
 export const API_V1 = '/api/v1';
 
@@ -138,6 +147,34 @@ export class ApiError extends Error {
 		this.url = url;
 		this.body = body;
 	}
+
+	/**
+	 * The server's own error message, when the body is a platform `ApiResult`
+	 * failure (ADR-015: `{ success: false, error: { code, message, details } }`).
+	 * The BFF renders every downstream rejection through that envelope - including
+	 * a rejected TCKN, which customer-service returns as a 400 and the BFF's
+	 * GatewayClient translates into a `ValidationException`. Surfacing this text
+	 * lets the wizard tell the user the truth instead of an invented message.
+	 * Returns null when the body carries no usable message.
+	 */
+	get serverMessage(): string | null {
+		const body = this.body as { error?: { message?: unknown } } | null | undefined;
+		const message = body?.error?.message;
+		return typeof message === 'string' && message.trim().length > 0 ? message : null;
+	}
+}
+
+/**
+ * The platform's universal response envelope (ADR-015 `ApiResult<T>`). Domain
+ * services on the gateway surface (`/api/v1/**`) ALWAYS wrap their payload in it;
+ * the BFF surface (`/bff/v1/**`) deliberately does not (documented ADR-015
+ * exception, web-bff contract Notes). So only the gateway thin-slice read below
+ * has to unwrap it.
+ */
+interface ApiResult<T> {
+	success: boolean;
+	data?: T;
+	error?: { code: string; message: string; details?: Record<string, unknown> };
 }
 
 // ---------------------------------------------------------------------------
@@ -224,85 +261,134 @@ export interface InvoiceList {
 	totalPages: number;
 }
 
+/**
+ * One tariff in the onboarding catalog. Mirrors the BFF `TariffOption` record
+ * EXACTLY: the identifier the order request carries is the tariff CODE (e.g.
+ * `POSTPAID-M`), never an id - the BFF resolves the code to the tariff's UUID
+ * server-side before placing the order. `description` carries the tariff's target
+ * segment as composed by the BFF.
+ */
 export interface Tariff {
-	tariffId: string;
+	code: string;
 	name: string;
+	description: string;
 	monthlyPrice: number;
 	currency: string;
 }
 
+/**
+ * One addon in the onboarding catalog. Mirrors the BFF `AddonOption` record: the
+ * identifier is the addon CODE, the price field is `price` (not `monthlyPrice`),
+ * and `tariffCode` binds the addon to the tariff it extends.
+ */
 export interface Addon {
-	addonId: string;
+	code: string;
 	name: string;
-	monthlyPrice: number;
+	tariffCode: string;
+	price: number;
 	currency: string;
 }
 
-/** GET /bff/v1/onboarding/catalog */
+/** GET /bff/v1/onboarding/catalog (BFF `OnboardingCatalogResponse`). */
 export interface OnboardingCatalog {
 	tariffs: Tariff[];
 	addons: Addon[];
 }
 
+/** Customer classification (customer-service `CustomerType`). */
+export type CustomerType = 'INDIVIDUAL' | 'CORPORATE';
+
+/**
+ * Registration details relayed by the BFF to customer-service
+ * (`POST /api/v1/customers`). Mirrors the BFF `CustomerRegistration` record, which
+ * in turn mirrors `RegisterCustomerRequest`: identity is a TCKN whose CHECKSUM
+ * customer-service validates (`@ValidTckn`), and `dateOfBirth` must be in the past
+ * (`@Past`). No email/phone exists in this contract - the domain does not capture
+ * them at registration.
+ */
+export interface CustomerRegistration {
+	type: CustomerType;
+	firstName: string;
+	lastName: string;
+	/** Turkish national identity number (TCKN); checksum-validated server-side. */
+	identityNumber: string;
+	/** ISO date (`YYYY-MM-DD`), serialized as a Java `LocalDate`. */
+	dateOfBirth: string;
+}
+
+/** KYC document type accepted by customer-service (`DocumentType`). */
+export type KycDocumentType = 'ID_CARD' | 'PASSPORT';
+
 /**
  * A KYC identity document captured in the wizard and forwarded to the BFF, which
- * relays it to customer-service (`POST /api/v1/customers/{id}/documents`). The
- * bytes are base64-encoded so the document rides the single JSON order call; the
- * BFF owns the multipart upload downstream.
+ * decodes it and relays it as a multipart upload to customer-service
+ * (`POST /api/v1/customers/{id}/documents`). Mirrors the BFF `KycDocument` record:
+ * the field names are `type` / `fileName` / `contentType` / `content` (base64), so
+ * the bytes ride the single JSON order call.
  */
 export interface KycDocumentPayload {
-	filename: string;
+	type: KycDocumentType;
+	fileName: string;
 	contentType: string;
-	/** Base64-encoded document bytes. */
+	/** Base64-encoded document bytes (no data-URL prefix). */
 	content: string;
 }
 
-/** POST /bff/v1/onboarding/order request body. */
+/**
+ * POST /bff/v1/onboarding/order request body. Mirrors the BFF
+ * `OnboardingOrderRequest` record exactly.
+ *
+ * Two mutually exclusive identity paths, enforced by the BFF's composition service:
+ * - REGISTER: supply `customer` + `kycDocument` (the BFF registers the customer and
+ *   uploads the document, then places the order).
+ * - REUSE: supply `customerId` (the BFF skips register/KYC entirely). Used when the
+ *   wizard re-places an order for a customer it already registered.
+ *
+ * `tariffCode` is mandatory (`@NotBlank`); `addonCodes` may be empty.
+ */
 export interface OnboardingOrderRequest {
-	tariffId: string;
-	addonIds: string[];
-	customer: {
-		fullName: string;
-		email: string;
-		phoneNumber: string;
-		/** TCKN (individual) or VKN (corporate); optional until KYC is enforced. */
-		nationalId?: string;
-	};
-	/** KYC document uploaded in the wizard's KYC step; omitted when not captured. */
+	/** Reuse path: an already-registered customer. Omit to register a new one. */
+	customerId?: string;
+	/** Register path: required when no `customerId` is supplied. */
+	customer?: CustomerRegistration;
+	/** Register path: required when no `customerId` is supplied. */
 	kycDocument?: KycDocumentPayload;
+	tariffCode: string;
+	addonCodes: string[];
 }
 
-/** POST /bff/v1/onboarding/order response. */
+/**
+ * POST /bff/v1/onboarding/order response. Mirrors the BFF `OnboardingOrderResponse`
+ * record: order id, saga status, and the echoed idempotency key. It carries NO
+ * customerId - the wizard must not depend on one here (that assumption is what broke
+ * the flow); the polled order (`GET /api/v1/orders/{id}`) is the real source.
+ */
 export interface OnboardingOrderResult {
 	orderId: string;
 	status: string;
-	/**
-	 * The registered (or reused) customer this order belongs to. Carried so the
-	 * wizard's payment step can charge without a second identity lookup.
-	 */
-	customerId: string;
+	idempotencyKey: string;
 }
 
-/** GET /api/v1/orders/{id} - order + saga status, polled by the wizard. */
-export interface OrderStatus {
-	orderId: string;
+/**
+ * The order-service read model behind `GET /api/v1/orders/{id}`, wrapped in
+ * `ApiResult<T>` on the wire. Only the fields the wizard uses are declared.
+ */
+interface GatewayOrderResponse {
+	/** order-service names it `id`, not `orderId`. */
+	id: string;
+	customerId: string;
 	status: string;
 }
 
 /**
- * POST /api/v1/payments request body (payment-service contract). `paymentRequestId`
- * IS the mandatory idempotency key and is echoed into the `Idempotency-Key` header.
+ * The order + saga status polled by the wizard, unwrapped from `ApiResult<T>` and
+ * normalized. `customerId` is the ONLY place the wizard can honestly learn which
+ * customer the BFF registered (the order response does not carry it); it feeds the
+ * BFF's `customerId` reuse path when an order has to be placed again.
  */
-export interface PaymentRequest {
+export interface OrderStatus {
 	orderId: string;
 	customerId: string;
-	amount: number;
-	paymentRequestId: string;
-}
-
-/** POST /api/v1/payments response. */
-export interface PaymentResult {
-	paymentId: string;
 	status: string;
 }
 
@@ -412,33 +498,33 @@ export class ApiClient {
 		});
 	}
 
-	// -- gateway thin-slice (ADR-022): not yet BFF-composed ------------------
+	// -- gateway thin-slice (ADR-022): not BFF-composed -----------------------
 
 	/**
-	 * Fetch an order and its saga status, polled by the wizard's final step until
-	 * a terminal outcome (activated / compensated). Targets the gateway directly
-	 * because the web-bff does not compose an order-status read (web-bff contract).
+	 * Fetch an order and its saga status, polled by the wizard's final step until a
+	 * terminal outcome (FULFILLED / CANCELLED / FAILED). Targets the gateway directly
+	 * because the web-bff composes no order-status read (web-bff contract).
+	 *
+	 * Unlike the BFF surface, order-service answers with the platform envelope
+	 * `ApiResult<OrderResponse>` (ADR-015) and names the identifier `id`. Both are
+	 * normalized here so callers see a flat {@link OrderStatus} - this is the single
+	 * place that knows about the envelope.
 	 */
-	getOrderStatus(orderId: string): Promise<OrderStatus> {
-		return this.request<OrderStatus>({
+	async getOrderStatus(orderId: string): Promise<OrderStatus> {
+		const path = `${API_V1}/orders/${encodeURIComponent(orderId)}`;
+		const envelope = await this.request<ApiResult<GatewayOrderResponse>>({
 			method: 'GET',
-			path: `${API_V1}/orders/${encodeURIComponent(orderId)}`
+			path
 		});
-	}
 
-	/**
-	 * Charge for an order via the payment-service (mock PSP). The mandatory
-	 * `Idempotency-Key` header mirrors `request.paymentRequestId`, so a replayed
-	 * submission returns the original outcome. Targets the gateway directly:
-	 * payment is not BFF-composed (payment-service contract, ADR-022 thin slice).
-	 */
-	submitPayment(request: PaymentRequest): Promise<PaymentResult> {
-		return this.request<PaymentResult>({
-			method: 'POST',
-			path: `${API_V1}/payments`,
-			body: request,
-			headers: { 'Idempotency-Key': request.paymentRequestId }
-		});
+		const order = envelope?.data;
+		if (!envelope?.success || !order) {
+			// A 2xx that is not a successful envelope means the gateway answered with a
+			// shape we cannot trust; fail loudly rather than reporting a fake status.
+			throw new ApiError(502, joinUrl(this.baseUrl, path), envelope);
+		}
+
+		return { orderId: order.id, customerId: order.customerId, status: order.status };
 	}
 
 	// -- internals ----------------------------------------------------------

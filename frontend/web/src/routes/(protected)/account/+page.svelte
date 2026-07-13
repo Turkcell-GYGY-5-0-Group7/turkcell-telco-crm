@@ -7,16 +7,27 @@
 	// server-side to the caller (16.5.1); the client sends no id.
 	//
 	// The (protected) group is ssr=false, so getAccount runs in the browser on
-	// mount, carrying the bearer the client attaches automatically. Loading, error
-	// and empty states are handled honestly - a failed load shows a message, never
-	// a blank page or a raw throw.
+	// mount, carrying the bearer the client attaches automatically. Loading,
+	// not-yet-onboarded, error and empty states are handled honestly - a failed load
+	// shows a message, never a blank page or a raw throw.
+	//
+	// Authenticated does NOT imply onboarded: a user with no linked customer record
+	// is correctly refused by the BFF's self-scoping guard (403). That is an expected
+	// application state, so `loadLinkedResource` separates it from real failures (it
+	// also spends one silent renew + retry on it, for the token that predates the
+	// customerId claim) and the page invites the user to onboard instead of showing
+	// an HTTP error.
 	import { onMount } from 'svelte';
 	import { ApiError, api, type AccountOverview } from '$lib/api/client';
+	import { renewSession } from '$lib/auth/oidc';
+	import { loadLinkedResource } from '$lib/onboarding/link-state';
+	import NotOnboardedNotice from '$lib/onboarding/NotOnboardedNotice.svelte';
 	import SubscriptionCard from '$lib/account/SubscriptionCard.svelte';
 
 	let account = $state<AccountOverview | null>(null);
 	let loading = $state(true);
 	let error = $state('');
+	let notOnboarded = $state(false);
 
 	onMount(() => {
 		void load();
@@ -25,16 +36,20 @@
 	async function load() {
 		loading = true;
 		error = '';
-		try {
-			account = await api.getAccount();
-		} catch (err) {
+		notOnboarded = false;
+		account = null;
+		const result = await loadLinkedResource(() => api.getAccount(), { renewSession });
+		if (result.state === 'loaded') {
+			account = result.data;
+		} else if (result.state === 'unlinked') {
+			notOnboarded = true;
+		} else {
 			error =
-				err instanceof ApiError
-					? `Could not load your account. (HTTP ${err.status})`
+				result.error instanceof ApiError
+					? `Could not load your account. (HTTP ${result.error.status})`
 					: 'Could not load your account.';
-		} finally {
-			loading = false;
 		}
+		loading = false;
 	}
 </script>
 
@@ -48,6 +63,10 @@
 			<p>{error}</p>
 			<button type="button" onclick={() => load()}>Retry</button>
 		</div>
+	{:else if notOnboarded}
+		<NotOnboardedNotice
+			message="You have not completed onboarding yet, so there is no profile or subscription to show. Your details, lines, and usage will appear here once your subscription is activated."
+		/>
 	{:else if account}
 		<div class="profile">
 			<span class="name">{account.profile.fullName}</span>

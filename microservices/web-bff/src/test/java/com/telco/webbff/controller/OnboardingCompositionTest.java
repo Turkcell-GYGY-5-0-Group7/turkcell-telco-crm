@@ -22,6 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
+import java.util.Base64;
 import java.util.Set;
 import java.util.UUID;
 
@@ -53,7 +54,10 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
                 "telco.gateway.base-url=http://gateway.mock",
                 "telco.platform.security.gateway-trust.enabled=false",
                 "telco.platform.security.jwt.secret=d2ViLWJmZi10ZXN0LXNlY3JldC1rZXktZm9yLXRlc3RpbmctMjAyNg==",
-                "telco.platform.security.jwt.issuer=telco"
+                "telco.platform.security.jwt.issuer=telco",
+                // Production value is 6 MiB (configs/web-bff/application.yml); a small bound here keeps
+                // the oversize-document test fast while exercising the identical code path.
+                "telco.onboarding.kyc.max-document-bytes=8192"
         }
 )
 @ActiveProfiles("test")
@@ -231,6 +235,33 @@ class OnboardingCompositionTest {
                 "{\"tariffCode\":\"TRF-1\"}");
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void order_rejects_an_oversize_kyc_document_with_400_before_registering_the_customer() {
+        // The live defect: an oversize KYC document was forwarded to customer-service, whose multipart
+        // limit rejected it AFTER the customer had already been registered - reported to the browser as
+        // 503 DEPENDENCY_FAILURE (or a bare "Failed to fetch" when the connection was dropped).
+        // Now it is what it always was: a CLIENT error, refused before any gateway call is made.
+        // The limit is 8KB for this test (telco.onboarding.kyc.max-document-bytes below); the document
+        // below decodes to 16KB.
+        String content = Base64.getEncoder().encodeToString(new byte[16 * 1024]);
+
+        ResponseEntity<String> response = postOrder(UUID.randomUUID().toString(), """
+                {"tariffCode":"TRF-1",
+                 "customer":{"type":"INDIVIDUAL","firstName":"Ada","lastName":"Lovelace",
+                             "identityNumber":"12345678901","dateOfBirth":"1990-01-01"},
+                 "kycDocument":{"type":"ID_CARD","fileName":"photo.jpg","contentType":"image/jpeg",
+                                "content":"%s"}}""".formatted(content));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody())
+                .contains("VALIDATION_FAILED")
+                .contains("too large")
+                .contains("16384")  // the actual size, so the user is told how far over they are
+                .contains("8192");  // the limit
+        // No customer was registered, no document uploaded, no order placed.
+        gatewayServer.verify();
     }
 
     @Test

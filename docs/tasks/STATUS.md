@@ -14,7 +14,84 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-13 (Sprint 16 **FEATURE-COMPLETE (5/5)**, verified offline on branch
+Last updated: 2026-07-13 (Sprint 16 (Web Frontend) is **DONE (5/5)** - its live end-to-end EXIT CRITERION
+is **MET**, no longer deferred. A human clicked the whole flow through a real browser against the live local
+Docker Compose stack on 2026-07-13: Keycloak PKCE login -> onboarding wizard (register -> KYC upload ->
+tariff -> review -> place order) -> the real saga (order FULFILLED, subscription ACTIVE, MSISDN 905320000006
+assigned) -> dashboard -> `/account` with usage/quota (0/20480 MB, 0/1000 min, 0/500 SMS) -> bill-run ->
+`/invoices` -> invoice PDF downloaded. Self-scoping proven on real data: the bill-run issued 7 invoices; the
+user's `/invoices` returned exactly 1 - their own. Suites green the same day: frontend 153 tests +
+svelte-check 0 errors + lint/build clean; web-bff 31 tests; customer-service 95 tests; api-gateway 9 tests
+(all JaCoCo passing).
+
+**Read this part.** The prior entry (below) called Sprint 16 DONE(features) with every offline suite GREEN.
+Standing the stack up and running the flow for real found **ELEVEN defects**, several of which made the
+shipped web channel **COMPLETELY NON-FUNCTIONAL in a browser**. The already-pushed commit `d8422f5` contains
+that broken code. ROOT CAUSE of the whole class: each layer was tested against ITS OWN MOCK (the frontend
+mocks `fetch`; web-bff mocks the gateway), so a contract mismatch BETWEEN two independently-mocked layers is
+structurally invisible offline - green suites proved nothing about the seam. And three defects were reachable
+ONLY by a human in a real browser; an API-level E2E driven by the password grant would have sailed straight
+past them.
+
+DEFECTS FOUND AND FIXED (9): (1) frontend/BFF onboarding contract DRIFT - `client.ts` sent
+`tariffId`/`addonIds` and `customer{fullName,email,phoneNumber}` while the BFF requires
+`tariffCode`/`addonCodes` and `CustomerRegistration{type,firstName,lastName,identityNumber,dateOfBirth}`; the
+wizard could not work at all (16.2.2 guessed the types from the contract doc BEFORE 16.4.1 wrote the real BFF
+DTOs; 16.5.2 caught the same drift for account/invoices but nobody reconciled onboarding). (2) frontend
+`Tariff` expected `tariffId`; the BFF catalog returns `code`. (3) `getOrderStatus` parsed a flat object, but
+order-service returns the ADR-015 envelope `ApiResult<OrderResponse>` with field `id` - so `status` was always
+undefined and POLLING COULD NEVER TERMINATE. (4) the wizard called `POST /api/v1/payments`, which is
+`@PreAuthorize("hasRole('ADMIN')")` - a documented MANUAL OVERRIDE; charges are event-driven off
+`order.created.v1`, so a subscriber call = 403 and an admin call = a DOUBLE CHARGE. The payment step was
+REMOVED entirely (verified live: placing the order alone drives order -> payment -> subscription ->
+FULFILLED). (5) the order-status classifier used the wrong enum (treated CONFIRMED as success); the real enum
+is PENDING/CONFIRMED/FULFILLED/CANCELLED/FAILED and FULFILLED is the only activated state. (6) api-gateway
+CORS `allowedHeaders` omitted `Idempotency-Key`, so the browser's onboarding-order and payment POSTs were
+blocked by preflight (found by code-review pre-commit; CONFIRMED LIVE). (7) customer-service GET/PUT
+`/api/v1/customers/{id}` was staff-gated (ADMIN/CALL_CENTER_AGENT) as a Sprint 14 INTERIM measure "until the
+linkage work resolves real ownership" - so the BFF's home/account returned 403 to the very OWNER of the
+record; the linkage work is now proven, so the established self-ownership check was applied (owner or ADMIN;
+DELETE stays ADMIN-only). Subtlety worth remembering: SpEL comparing a UUID path var to the String
+`customerId` claim silently evaluates FALSE (deny-all) - hence `#id.toString()`. (8) identity-service was
+wrongly excluded from the E2E service subset; it is REQUIRED - it consumes `customer.registered.v1` and writes
+the `customer_id` attribute back to Keycloak, which is what puts the `customerId` claim in the token that every
+self-scoped read depends on. (9) BROWSER-ONLY: login failed with "Invalid scopes: openid profile email" -
+Keycloak applies a client's DEFAULT client scopes automatically and REJECTS them if named explicitly; only
+OPTIONAL scopes may be requested, and `telco-web` has profile/email/roles/telco-roles as DEFAULT. Fixed to
+request just `openid` (the claims still arrive). A password-grant E2E never touches the authorization endpoint,
+so it could never have caught this. (10) BROWSER-ONLY: a newly signed-up user - the MOST COMMON first-run
+state - has no linked customer, so the BFF correctly 403s the account reads, and the frontend rendered that as
+a red "Could not load your dashboard (HTTP 403)" ERROR instead of an onboarding call-to-action; it is now a
+recognised application state (one unit-tested predicate) plus a session refresh that resolves the stale-token
+race (the `customerId` claim is only minted after identity-service consumes the event). (11) BROWSER-ONLY: the
+KYC upload had NO size limit - a typical phone photo (2-8 MB) blew past Spring's inherited 1 MB multipart
+default and surfaced as an unintelligible "Failed to fetch", and worse, the customer had ALREADY been
+registered by then, leaving the user half-onboarded. Fixed across three layers: the browser enforces 5 MiB
+before Continue; web-bff rejects oversize with 400 BEFORE registering the customer; customer-service multipart
+limits are now set explicitly (6MB/8MB) instead of inherited by accident.
+
+KNOWN AND DELIBERATELY NOT FIXED (tracked follow-ups, open - do NOT read these as done): duplicate TCKN
+registration returns 500 instead of a clean 409 Conflict (customer-service); ANY oversized multipart returns
+500, not 413, because `starter-api`'s `GlobalExceptionHandler` catches `Exception` before Spring's own 413
+mapping (a platform-starter issue for platform-engineer/tech-lead); `POST /api/v1/addons` is documented in
+`docs/api-contracts/product-catalog-service.md` but is NOT implemented (`AddonController` has only a GET) and
+returns 500 - a pre-existing Sprint 07 gap, and because addons are optional in the wizard it did not block the
+E2E, so **the addon selection path is UNPROVEN end-to-end**. (Customer status remaining PENDING after
+onboarding is expected - KYC approval is a separate admin step - not a bug.)
+
+INFRASTRUCTURE REALITY (it cost real time, so it is recorded): web-bff was ABSENT from
+`infra/docker/compose.yml`, had no `configs/web-bff/application-docker.yml`, and its Dockerfile was the one
+service Sprint 15 never hardened - all fixed. The full 23-container stack OOM-HUNG THE DOCKER ENGINE: the real
+ceiling is Docker Desktop's Linux VM (measured 7.61 GiB), not the 15.7 GB host, and every JVM was sizing its
+heap from HOST RAM - each now carries an explicit heap cap, and the E2E runs on a documented 18-container
+subset. schema-registry proved NOT to be needed at runtime (all Debezium connectors use JsonConverter;
+ADR-019's JSON-outbox amendment). `register-connectors.sh` called `python3`, which does not exist on this
+machine, and registering all 11 connectors against a partial stack aborts - both fixed.
+
+Sprint 16 EXIT CRITERIA are now MET and Sprint 16 is DONE; EPIC-016 (Web Channel) is DELIVERED. What remains
+open is the follow-up list above - none of it blocks Sprint 16. Prior update below.
+
+Prior update, 2026-07-13 (Sprint 16 **FEATURE-COMPLETE (5/5)**, verified offline on branch
 `feat/sprint16-web-frontend` (nothing committed yet, by user choice). Wave 6's 16.4.3 landed - the onboarding
 failure/compensation UX: a polled payment failure shows an honest "cancelled & refunded" state with Retry
 payment (a fresh Idempotency-Key per attempt, so payment-service never replays) or Start over; a KYC rejection
@@ -747,7 +824,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
-| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE (features); live E2E deferred | 5/5 |
+| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | TODO | 0/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | TODO | 0/5 |
 | [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
@@ -767,10 +844,13 @@ with a short, well-scoped integration tail before "runs green end-to-end in Kube
 true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
 Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
 ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
-and excluded from the MVP totals. Sprint 16 is **IN PROGRESS** as of 2026-07-13 (Waves 0-5 done, 4/5 -
-Features 16.1, 16.2, 16.3, and 16.5 DONE; 16.4 IN PROGRESS with 16.4.1/16.4.2 done; Wave 6 = the payment-
-failure/KYC-rejection UX (16.4.3) plus the qa exit-gate is next; live PKCE/gateway/PDF/saga E2E deferred to
-a stack run);
+and excluded from the MVP totals. Sprint 16 (Web Frontend) is **DONE, 5/5, exit criteria MET** as of
+2026-07-13: all five features built AND the live end-to-end criterion discharged by a human, in a real
+browser, against the live local Docker Compose stack (PKCE login -> onboarding -> real saga to FULFILLED ->
+account/usage -> invoice PDF download). That live run found 11 defects the all-green offline suites had
+missed - 9 fixed, the rest tracked as follow-ups (409-on-duplicate-TCKN; 413-vs-500 on oversized multipart, a
+platform-starter issue; the unimplemented `POST /api/v1/addons`, which leaves the addon selection path
+unproven end-to-end). Post-MVP feature totals: 5 DONE (Sprint 16) / 0 IN PROGRESS / 36 TODO (Sprints 17-23).
 Sprints 17-23 remain documentation/design only - TODO, not started. See Phase P6 below and
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
@@ -794,7 +874,7 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-007 Revenue Cycle | P3 | Usage-driven billing (AC-02, AC-03) | 10, 11 |
 | EPIC-008 Engagement and Support | P4 | Notifications and ticketing | 12 |
 | EPIC-009 Hardening and Release | P5 | NFR targets, security, Kubernetes | 13, 14, 15 |
-| EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) | 16 |
+| EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) - **DELIVERED** (Sprint 16 DONE, live E2E 2026-07-13) | 16 |
 | EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Proposed) | 17 |
 | EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Proposed) | 18 |
 | EPIC-019 Zero-Trust Networking | P6 | Service mesh mTLS + default-deny NetworkPolicies (ADR-026 Proposed) | 19 |
@@ -803,9 +883,12 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-022 Invoice Dispute and Chargeback | P6 | `dispute-service`, invoice dispute/PSP chargeback orchestration (ADR-028 Proposed) | 22 |
 | EPIC-023 SIM-Swap and Fraud Detection | P6 | `fraud-service`, rule-based fraud detection, MVP scope (ADR-029 Proposed) | 23 |
 
-Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23;
-EPIC-016 (Web Channel) is IN PROGRESS as of 2026-07-12, while EPIC-017 through EPIC-023 remain TODO -
-documented and design-reviewed, not built. See
+Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23.
+**EPIC-016 (Web Channel) is DELIVERED** as of 2026-07-13 - Sprint 16 is DONE (5/5) and its live
+end-to-end exit criterion was met in a real browser against the live local stack; the platform now has a
+working web channel (SvelteKit `frontend/web/` + `web-bff`). Open follow-ups from that run are tracked in
+[`sprint-16-web-frontend/README.md`](sprint-16-web-frontend/README.md) and do not reopen the epic.
+EPIC-017 through EPIC-023 remain TODO - documented and design-reviewed, not built. See
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3 ("P6 - Post-MVP Depth") for the phase
 detail and its explicit disambiguation from `docs/product/TELCO-CRM-ADVANCED.md`'s own P6-P11
 forward-looking phase lettering (Section 10 of that document), which this phase is distinct from.

@@ -19,3 +19,18 @@ telco:
     # Single egress: web-bff calls only the API gateway (ADR-022, ADR-011 Section 2), never a
     # domain-service port. Sourced from config-server here, never hardcoded in the module.
     base-url: ${GATEWAY_BASE_URL:http://localhost:8080}
+  onboarding:
+    kyc:
+      # Upper bound on the DECODED size of the KYC document carried (base64) inside
+      # POST /bff/v1/onboarding/order. The BFF decodes those bytes and relays them as the multipart
+      # `file` part to customer-service, so this bound is expressed in the same units as
+      # customer-service's spring.servlet.multipart.max-file-size (6MB) and sits at or below it:
+      # the BFF must never forward a document the domain service is going to reject, because by then
+      # the customer has ALREADY been registered and the user is left half-onboarded.
+      #
+      # 6 MiB = 6291456 bytes. The browser enforces a tighter 5 MiB on the raw file
+      # (frontend/web/src/lib/onboarding/file.ts), so this is the server-side backstop for any client
+      # that does not - and it is a security control (bounded upload surface), not just a UX nicety.
+      # Exceeding it is a CLIENT error: the BFF answers 400 VALIDATION_FAILED with the actual size,
+      # instead of letting an oversize upload fail downstream as a 503 DEPENDENCY_FAILURE.
+      max-document-bytes: 6291456
