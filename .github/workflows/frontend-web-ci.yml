@@ -1,0 +1,80 @@
+name: Frontend Web CI
+
+# Node/npm CI gate for the SvelteKit web frontend (frontend/web), task 16.2.3.
+#
+# frontend/web is intentionally OUTSIDE the Maven reactor (ADR-022 repository
+# layout), so it needs its own toolchain job. This mirrors the build-test-gate
+# pattern the Maven jobs in ci.yml apply to the reactor (NFR-17, ADR-014): it
+# installs, lints, type-checks, tests, and builds the app, and fails the
+# pipeline if any of those steps error.
+#
+# PATH FILTER: this workflow uses a native on.<event>.paths filter scoped to
+# frontend/web/** (same convention as acceptance.yml). A change touching only
+# frontend/web/** runs this job; a change that touches nothing under
+# frontend/web/** does not run it at all. Because the filter lives on the whole
+# workflow, no Java/Maven change ever spins up a Node runner here.
+#
+# This job never pushes or publishes anything - it is a pure quality gate that
+# runs on PRs to master (like the other test jobs) and on master pushes.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "frontend/web/**"
+      - ".github/workflows/frontend-web-ci.yml"
+  pull_request:
+    branches:
+      - master
+    paths:
+      - "frontend/web/**"
+      - ".github/workflows/frontend-web-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Node 20 LTS is the project's pinned CI target (local dev may run newer).
+  NODE_VERSION: "20"
+
+jobs:
+  build-test:
+    name: Lint, Type-check, Test, Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/web/package-lock.json
+
+      # npm ci installs exactly from package-lock.json and fails if it is out of
+      # sync, keeping CI reproducible.
+      - name: Install dependencies
+        run: npm ci
+
+      # Each step below fails the job (and therefore the pipeline) on a non-zero
+      # exit, mirroring the Maven verify gate for the reactor.
+      - name: Lint (prettier + eslint)
+        run: npm run lint
+
+      - name: Type-check (svelte-check)
+        run: npm run check
+
+      - name: Unit tests (vitest)
+        run: npm test
+
+      - name: Build (vite / adapter-node)
+        run: npm run build

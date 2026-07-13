@@ -15,3 +15,7 @@ telco:
     realm: telco-crm
     client-id: telco-web
     token-endpoint: ${KEYCLOAK_TOKEN_ENDPOINT:http://localhost:8080/realms/telco-crm/protocol/openid-connect/token}
+  gateway:
+    # Single egress: web-bff calls only the API gateway (ADR-022, ADR-011 Section 2), never a
+    # domain-service port. Sourced from config-server here, never hardcoded in the module.
+    base-url: ${GATEWAY_BASE_URL:http://localhost:8080}

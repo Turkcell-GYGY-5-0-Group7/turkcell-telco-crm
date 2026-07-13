@@ -14,7 +14,133 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
+Last updated: 2026-07-13 (Sprint 16 **FEATURE-COMPLETE (5/5)**, verified offline on branch
+`feat/sprint16-web-frontend` (nothing committed yet, by user choice). Wave 6's 16.4.3 landed - the onboarding
+failure/compensation UX: a polled payment failure shows an honest "cancelled & refunded" state with Retry
+payment (a fresh Idempotency-Key per attempt, so payment-service never replays) or Start over; a KYC rejection
+(REJECTED/KYC_REJECTED/KYC_FAILED, now terminal) routes back to the KYC corrective step preserving the rest of
+the input - no dead ends, no raw stack traces. So **Feature 16.4 (Onboarding wizard) is DONE**, and all five
+Sprint 16 features are built and offline-verified: web-bff `mvn verify` 25 tests/JaCoCo 93.4%; frontend 90
+vitest tests + check/lint/build green; the path-filtered `frontend-web-ci.yml` is actionlint-clean. IMPORTANT -
+this is FEATURE-COMPLETE, not a full sprint sign-off: Sprint 16's EXIT CRITERIA are live E2E (a real Keycloak
+PKCE login -> onboarding saga -> account/usage view -> real invoice-PDF download, all through the BFF/gateway
+with a validated token) and are DEFERRED-TO-STACK because no runtime stack is up - the same posture as Sprint
+15's deployment tail. The offline exit-gate has PASSED, so Sprint 16 is **DONE (features)**: qa gate PASS (suites green; the
+no-browser-to-domain-service invariant holds - client.ts is the only fetch, targeting only /bff/v1 + /api/v1
+on one gateway base, the sole non-gateway origin being Keycloak :8085 for PKCE; the 4 key behaviors genuinely
+asserted; coverage loophole closed; deferred ledger honest). code-review returned CHANGES-REQUIRED for one
+real MEDIUM gap - the gateway CORS allowlist omitted `Idempotency-Key`, which would block the cross-origin
+(localhost:3000 -> 8080) onboarding-order + payment POSTs (the headline flow) - now FIXED in
+GatewaySecurityConfig.java (added the header; api-gateway compiles clean); its LOW advisory (the onboarding
+reuse path accepts a client-supplied customerId by design, re-checked by order-service) is documented in the
+web-bff contract, and all other ADR/ARC checks APPROVE. This is DONE(features), NOT a full sprint sign-off:
+the EXIT CRITERIA are live E2E (real PKCE login -> onboarding saga -> account/usage view -> real PDF download,
+all through the BFF/gateway) and remain DEFERRED-TO-STACK, discharging in one deployed-stack run alongside
+Sprint 15's deployment tail. Non-blocking, flagged for the realm owner (NOT applied): `telco-web` does not
+server-enforce PKCE. Prior update below.
+
+Prior update, 2026-07-13 (Sprint 16 Wave 5 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). The web-channel UI is now real: Feature 16.5 (Account views) is
+**DONE** and Sprint 16 moves to **4/5**. 16.4.2 - a 6-step onboarding wizard entirely within `/onboarding`
+(register -> KYC -> catalog -> review -> payment -> result) whose final step renders ONLY the polled order
+status (activated/failed/honest-timeout), never a fake success; the client gained thin-slice gateway calls
+getOrderStatus (`GET /api/v1/orders/{id}`) + submitPayment (`POST /api/v1/payments`, Idempotency-Key).
+16.5.2 - `/account` (per-subscription usage gauges) and `/invoices` (paged, real authenticated PDF download:
+client fetch with bearer -> Blob -> browser save, since a plain link would drop the token); this also fixed
+stale `client.ts` types to match the real 16.5.1 BFF DTOs. 16.5.3 - a post-login dashboard on the public `/`
+route, auth-branched (anonymous -> welcome/Sign-in with no getHome call; authenticated -> one `getHome()`
+summary), SSR-safe, linking into /account and /invoices. Frontend now 82 unit tests; check/lint/build all
+green (consolidated sign-off). Feature 16.4 stays IN PROGRESS (16.4.1/16.4.2 done; only 16.4.3, the
+payment-failure/KYC-rejection UX, remains - Wave 6). Remaining before Sprint 16 is feature-complete: 16.4.3
+plus the qa exit-gate; all live E2E (Keycloak login, onboarding saga, account render, real PDF byte-stream)
+is DEFERRED-TO-STACK and bundled for one deployed-stack validation. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 4 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). The two web-bff composition subtasks are done, so the stub bodies
+are now REAL gateway fan-out (Simple Service Layer; web-bff calls only `/api/v1/**`, bearer auto-relayed):
+16.4.1 - onboarding (catalog = tariffs + per-tariff addons in one call; order = register-or-reuse customer +
+KYC multipart upload + place order, forwarding the inbound `Idempotency-Key` downstream); 16.5.1 -
+home/account/invoices (home = profile + active subscriptions + latest invoice in one call; account = + per-
+subscription usage/quota; invoices = paged with a gateway-route PDF link). SELF-SCOPING is enforced from
+`CurrentUserProvider.customerId()` only - the read endpoints bind no id param, so a client-supplied
+`?customerId=<attacker>` is ignored (test-proven) and an unlinked identity is 403'd. `GatewayClient` gained
+post/postMultipart + downstream-error translation (4xx -> matching platform exception, 5xx/connection -> 503,
+no leaked 500). web-bff `mvn verify` BUILD SUCCESS, 25 tests, JaCoCo 93.4%. Two in-scope build fixes landed:
+the local `.m2` platform jars were stale (Jun 25, predated Sprint-14 `UserContext.customerId()`) and were
+reinstalled (no platform source changed); and web-bff's pom gained `logstash-logback-encoder` +
+`loki-logback-appender` (the platform logback config needs them; web-bff's non-domain `microservices`
+aggregator parent, unlike `domain-services-parent`, did not supply them - a real latent runtime gap).
+Features 16.4 and 16.5 are now IN PROGRESS (their `.1` composition subtasks done); Sprint 16 stays 3/5
+(no full feature closed this wave). Wave 5 (the onboarding wizard UI 16.4.2 + the account/invoices pages
+16.5.2 + the dashboard 16.5.3) is next; full onboarding/account E2E and the real PDF download are
+DEFERRED-TO-STACK. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 3 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 2/5 to **3/5**: Feature 16.3 (Keycloak
+Authorization Code + PKCE login) is now **DONE** - 16.3.1 (oidc-client-ts login/logout/silent-renew against
+the `telco-web` public client, tokens in sessionStorage, wired into the single BFF client seam), 16.3.2
+(a `(protected)` route group guarded by a browser-only `+layout.ts` with `ssr=false`; return-to-original-route
+carried through the OIDC `state`; `safeReturnTo` blocks open redirects and login loops), and 16.3.3 (graceful
+401 handling in the single BFF client: on 401 -> one silent renew + retry once, then a clean `/login` redirect
+with return-to preserved - never a raw 401; non-401 errors untouched). Frontend now 33 unit tests;
+check/lint/build green. Note: 16.3.3's subagent hit the session usage limit mid-task (it had written the
+client.ts seams); the remaining interception logic + tests were completed directly in the main thread
+(user-approved) on those seams. DEFERRED-TO-STACK (no Keycloak/gateway running, Sprint 15 precedent): live
+PKCE login click-through, the live guard redirect round-trip, and the trace-level proof that a logged-in
+`GET /bff/v1/account` reaches the gateway and the downstream domain request carries `X-User-Id`/`X-User-Roles`.
+Non-blocking, flagged for the realm owner (NOT applied): `telco-web` does not server-ENFORCE PKCE
+(`pkce.code.challenge.method=S256` absent); the flow works because oidc-client-ts always sends S256. Wave 4
+(the real onboarding + account/home/invoice composition, 16.4.1/16.5.1) is next. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 2 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 1/5 to **2/5**: Feature 16.1 (Web BFF scaffold
+and gateway integration) is now **DONE** - final subtask 16.1.3 added the tech-lead-ruled narrow
+`/bff/v1/** -> lb://web-bff` api-gateway route (JWT auto-enforced; dev CORS origin `http://localhost:3000`
+already allowlisted), completing 16.1.1 (gateway RestClient + bearer relay) and 16.1.2 (five `/bff/v1` stub
+endpoints + OpenAPI, 13 tests, JaCoCo 98.2%). Doing 16.1.3 uncovered and fixed a real latent gateway config
+bug: staging/prod CORS used the wrong key `telco.cors.*` (never read by the gateway CORS bean) instead of
+`gateway.cors.*`, so those origins silently never bound - fixed using the already-committed origins (nothing
+invented), plus a dead `spring.cors.*` block removed. Feature 16.3 (Keycloak Auth-Code + PKCE login) is now
+**IN PROGRESS**: 16.3.1 **DONE** - oidc-client-ts against the existing `telco-web` public client (login/logout/
+silent-renew; tokens in sessionStorage; wired into the single BFF client's `getAccessToken` seam; 17 unit
+tests; check/lint/build green). One **non-blocking** item flagged for the realm owner (NOT applied): `telco-web`
+does not server-ENFORCE PKCE (missing `pkce.code.challenge.method=S256`); the flow still works because
+oidc-client-ts always sends S256. Live E2E through the gateway and live Keycloak login are both **deferred to
+the stack/CI run** (no stack/Keycloak up; Sprint 15 precedent). Features 16.3.2 (route guards) / 16.3.3 (E2E
+bearer-propagation proof) remain **Wave 3**; Features 16.4/16.5 remain **TODO**. MVP totals (Sprints 01-15,
+77 DONE) unchanged. Only status movement: Sprint 16 1/5 -> 2/5 in the Sprint Rollup table below.)
+
+Prior update, 2026-07-12 (Sprint 16 Waves 0-1 **DONE**, verified live on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 0/5 to **1/5**: Feature 16.2 (SvelteKit app
+scaffold and routing) is now **DONE** - all three subtasks: 16.2.1 (scaffold builds + dev server on port
+3000), 16.2.2 (route shells + a single typed BFF API client at `src/lib/api/client.ts`, 9 vitest tests,
+check/lint/build green), and 16.2.3 (a dedicated, path-filtered `.github/workflows/frontend-web-ci.yml` on
+Node 20, actionlint clean). Feature 16.1 (Web BFF scaffold and gateway integration) is **IN PROGRESS**:
+16.1.1 (gateway RestClient + bearer-relay interceptor + `WebBffSecurityConfig`, config-sourced base URL) and
+16.1.2 (five `/bff/v1` stub endpoints + UI DTOs, JWT-required, springdoc OpenAPI; web-bff `mvn verify` BUILD
+SUCCESS, 13 tests, JaCoCo 98.2%) are **DONE**; only 16.1.3 (api-gateway `/bff/v1/**` route + CORS) remains -
+that is **Wave 2**, and tech-lead has already APPROVED-WITH-CONDITIONS the approach (a narrow
+`/bff/v1/** -> lb://web-bff` route; JWT auto-enforced; dev CORS origin `http://localhost:3000` already
+allowlisted). Two Boot-4 gotchas were fixed during the BFF work: `HttpHeaders.containsKey` ->
+`containsHeader`, and the web-bff test context needs `spring.cloud.compatibility-verifier.enabled=false`.
+Features 16.3/16.4/16.5 remain **TODO**. MVP totals (Sprints 01-15) unchanged. Only status movement:
+Sprint 16 0/5 -> 1/5 in the Sprint Rollup table below.)
+
+Prior update, 2026-07-12 (Sprint 16 (Web Frontend), the first post-MVP sprint, **STARTED** - moved from
+TODO to **IN PROGRESS**. This is a planning/kickoff-only entry: no code was written, no service was
+scaffolded, and no feature landed this session - the five feature task files (16.1-16.5) stay **TODO**
+and flip to IN PROGRESS/DONE as work lands, so Sprint 16 stays **0/5**. ADR-022 (Frontend and BFF
+Strategy - SvelteKit + Svelte 5 + TypeScript, web-bff) is already **Accepted**, so there is no ADR
+ratification gate to clear before build work begins (unlike Sprints 17-19 and 21-23, whose ADR-024
+through ADR-029 remain Proposed). Build work proceeds on branch `feat/sprint16-web-frontend` off master.
+The deferred Sprint 15 deployed-environment K8s acceptance run - a fully-green 13-service in-cluster boot
+plus the deployed-env acceptance pass, blocked by the two tracked, user-ratified-deferred follow-ups
+(schema-registry Confluent-config exit-1; product-catalog in-cluster 500 on the tariffs read) - remains
+parked and **non-blocking** for Sprint 16; it stays tracked in `docs/tasks/sprint-15-deployment/README.md`
+and this file, unchanged by this entry. MVP totals are unchanged (Sprints 01-15 still 77 DONE); the only
+status movement is Sprint 16 TODO -> IN PROGRESS in the Sprint Rollup table below.)
+
+Prior update, 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
 built, nothing IN PROGRESS, nothing DONE**. Sprint 16 (Web Frontend, post-MVP) was detailed: its 5
 feature task files (16.1-16.5) were authored, replacing the prior "to be authored when the sprint is
 scheduled" placeholder; Sprint 16 stays **TODO 0/5**. Seven brand-new post-MVP sprints were scaffolded
@@ -621,7 +747,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
-| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
+| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE (features); live E2E deferred | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | TODO | 0/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | TODO | 0/5 |
 | [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
@@ -641,8 +767,12 @@ with a short, well-scoped integration tail before "runs green end-to-end in Kube
 true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
 Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
 ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
-and excluded from the MVP totals. All 8 are documentation/design only as of 2026-07-11 - TODO, not
-started. See Phase P6 below and [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
+and excluded from the MVP totals. Sprint 16 is **IN PROGRESS** as of 2026-07-13 (Waves 0-5 done, 4/5 -
+Features 16.1, 16.2, 16.3, and 16.5 DONE; 16.4 IN PROGRESS with 16.4.1/16.4.2 done; Wave 6 = the payment-
+failure/KYC-rejection UX (16.4.3) plus the qa exit-gate is next; live PKCE/gateway/PDF/saga E2E deferred to
+a stack run);
+Sprints 17-23 remain documentation/design only - TODO, not started. See Phase P6 below and
+[`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.
@@ -673,8 +803,9 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-022 Invoice Dispute and Chargeback | P6 | `dispute-service`, invoice dispute/PSP chargeback orchestration (ADR-028 Proposed) | 22 |
 | EPIC-023 SIM-Swap and Fraud Detection | P6 | `fraud-service`, rule-based fraud detection, MVP scope (ADR-029 Proposed) | 23 |
 
-Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23; all
-of EPIC-016 through EPIC-023 are TODO as of 2026-07-11 - documented and design-reviewed, not built. See
+Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23;
+EPIC-016 (Web Channel) is IN PROGRESS as of 2026-07-12, while EPIC-017 through EPIC-023 remain TODO -
+documented and design-reviewed, not built. See
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3 ("P6 - Post-MVP Depth") for the phase
 detail and its explicit disambiguation from `docs/product/TELCO-CRM-ADVANCED.md`'s own P6-P11
 forward-looking phase lettering (Section 10 of that document), which this phase is distinct from.

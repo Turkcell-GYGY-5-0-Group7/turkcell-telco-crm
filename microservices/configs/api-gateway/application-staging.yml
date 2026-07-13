@@ -6,6 +6,7 @@ spring:
         jwt:
           jwks-uri: ${KEYCLOAK_JWKS_URI}
 
-telco:
+# CORS origins MUST live under gateway.cors.* — that is the key GatewaySecurityConfig binds.
+gateway:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:https://staging.telco-crm.internal}
