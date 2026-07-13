@@ -4,3 +4,12 @@ spring:
     url: ${TEST_BILLING_DB_URL:jdbc:postgresql://localhost:5432/billing_test_db}
     username: ${TEST_BILLING_DB_USER:billing_test}
     password: ${TEST_BILLING_DB_PASSWORD:billing_test}
+
+telco:
+  platform:
+    # Off by default under the shared "test" profile: unlike starter-kafka's listener containers,
+    # Redisson connects eagerly at startup and would fail context refresh for every Spring-context
+    # test in this module that doesn't run a Redis container. Tests that exercise the bill-run's
+    # locking (feature 17.4) re-enable this explicitly and point it at a Testcontainers Redis.
+    lock:
+      enabled: false

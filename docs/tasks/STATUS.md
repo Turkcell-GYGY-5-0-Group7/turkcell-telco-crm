@@ -14,7 +14,78 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-12 (Sprint 18 Feature 18.5 DONE - all 5 Sprint 18 features are now
+Last updated: 2026-07-12 (Sprint 17 Distributed Locking - **COMPLETE, all 5/5 features DONE**. Built
+this session on top of the platform foundation (17.1/17.2, see the entry directly below): Feature 17.3
+(`subscription-service` MSISDN reservation-expiry reaper - `ExpireMsisdnReservationsCommand(Handler)`
+drives releases through the existing `MsisdnPool.release()` domain method, one `audit_log` row per
+release atomically inside the mediator transaction; `MsisdnReservationExpiryReaper` guards the tick
+with an explicit-lease `DistributedLock`), Feature 17.4 (`billing-service`'s `RunBillCommandHandler`
+wraps its existing bill-run orchestration in a watchdog-managed `DistributedLock` keyed on the billing
+period; a new `RunBillResult.alreadyOwnedByAnotherPod()` outcome replaces an undifferentiated failure
+on lock contention, with the losing side verified never to reach `subscriberRepo`/`batchProcessor` at
+all), and Feature 17.5 (`docs/architecture/platform-capabilities.md`, `platform/PLATFORM-SPEC.md` -
+sections 7-11 renumbered to 8-12 to insert a new platform-lock section, no repo-wide cross-reference
+broken - and `platform-gap-closing-plan.md` all updated to record the capability as shipped). A first
+code-review pass caught and this session fixed a real regression before it shipped: adding
+`starter-lock` to both services made `DistributedLock` a MANDATORY bean dependency, but Redisson
+connects eagerly at startup (unlike `starter-kafka`'s tolerant listener containers) - disabling the
+lock in each service's shared test profile (the fix used to avoid needing live Redis in unrelated
+tests) would otherwise have broken every pre-existing Spring-context test in both modules. Fixed by
+packaging a second, inverse-conditioned `@AutoConfiguration` in `starter-lock`'s own test-jar supplying
+a real in-JVM `DistributedLock` substitute whenever the real one is disabled - zero changes needed to
+any pre-existing test file; a related `@Scheduled`-fires-unconditionally finding on the new reaper was
+fixed the same way. Both fixes verified live (a new isolated `ApplicationContextRunner` test, 3/3
+passing) and confirmed by a second review pass (APPROVE). VERIFIED LIVE this session: 3 new
+Docker-independent Mockito unit test classes across both services (covering the handler/reaper lock
+logic, the losing side's degrade-safely behavior, and the release/audit atomicity) all pass; full
+`microservices` reactor build (subscription-service + billing-service) and full `platform` reactor
+both structurally clean. NOT VERIFIED LIVE: the two new Testcontainers-based `*ConcurrencyIT` classes -
+compile clean, reviewed carefully, but blocked by the same pre-existing, repo-wide Docker/Testcontainers
+API-version incompatibility documented in the entry below (confirmed unrelated to this session's
+changes). Nothing committed yet (user choice, consistent with the platform-foundation entry below).
+Detail: sprint-17 README, `docs/tasks/lessons.md` (2026-07-12 entries).
+
+Prior update, 2026-07-12 (Sprint 17 Distributed Locking - **started, platform foundation DONE (2/5
+features)**. ADR-024 was Proposed; ratified (Accepted) by tech-lead this session with one amendment:
+the architecture review found Section 5's original design - a new `LockAcquisitionException extends
+PlatformException` living in the new `platform-core/lock` module - is not buildable, because
+`PlatformException` (`platform-common`) is a `sealed` class whose `permits` list is closed to its own
+package, and this codebase has no `module-info.java` anywhere under `platform/` (so Java's
+same-package sealed-subtype rule applies, not a module-boundary one). Tech-lead's ratified fix:
+`RedissonDistributedLock` throws the platform's EXISTING `DependencyFailureException` (already
+503-mapped in `starter-api`'s `GlobalExceptionHandler`, unchanged) constructed with a new
+`LockErrorCode.LOCK_ACQUISITION_FAILED` (an `ErrorCode` living in `platform-core/lock`, mirroring
+`CommonErrorCode`) - zero changes to `starter-api`, no new exception type, no new transitive
+dependency on every service. ADR-024 Sections 2 and 5 and Sprint 17 task file 17.1 were amended to
+match before any code was written. Built this session: Feature 17.1 (`platform/platform-core/lock` -
+`DistributedLock`, `LockHandle`, `LockErrorCode`; `platform/platform-starters/starter-lock` -
+`RedissonDistributedLock`, `RedissonLockHandle`, `LockAutoConfiguration`, `LockProperties`; plain
+`org.redisson:redisson`, not `redisson-spring-boot-starter`; `platform-bom` pins Redisson 3.50.0 and
+both new module coordinates) and Feature 17.2 (a Testcontainers Redis harness packaged as a
+`starter-lock` test-jar per the `platform-event-contracts` precedent, plus a contention/watchdog/
+explicit-lease/fail-closed test suite). VERIFIED: full `platform` reactor builds clean
+(`mvn -am install`, structural + spotbugs + checkstyle all pass); `platform-lock`'s dependency tree is
+confirmed zero-Spring/zero-Redisson; a dedicated Spring context test proves the fail-closed path
+returns HTTP 503 with `ApiError.code=LOCK_ACQUISITION_FAILED` via the UNCHANGED `GlobalExceptionHandler`
+(no handler edit). NOT VERIFIED LIVE: the four Testcontainers-Redis behaviors (mutual exclusion,
+watchdog liveness, explicit-lease hard-expiry, fail-closed) - this sandbox's Docker Desktop (29.1.2)
+now enforces a minimum API floor of 1.44, and the repo's pinned Testcontainers 1.20.6 (matching
+`microservices/pom.xml`'s existing convention, mirrored into `platform-bom` for this sprint) bundles a
+`docker-java` client that negotiates API 1.32 - confirmed as a pre-existing, repo-wide environment
+issue (not caused by this sprint's changes) by reproducing the identical failure on the untouched,
+already-existing `starter-inbox` Testcontainers test. Deferred to a follow-up session: Features 17.3
+(subscription-service MSISDN reaper), 17.4 (billing-service bill-run lock), and 17.5 (capability-catalog
+docs update) - user-scoped this session to the platform foundation only. A code-review pass on 17.1/17.2
+(before this DONE status was finalized) returned CHANGES REQUIRED on its first pass - a HIGH finding
+(`withLock(Callable)` rewrapped domain `RuntimeException`s from a guarded action as
+`IllegalStateException`, which would have broken `GlobalExceptionHandler`'s type-based dispatch for
+17.3/17.4's future consumers) and two MEDIUM findings (a dead `lease-time` config property; missing
+Docker-independent unit coverage for `RedissonDistributedLock`). All three were fixed (plus one LOW
+Javadoc item), including a new 9-test Mockito unit suite (`RedissonDistributedLockUnitTest`, all
+passing live) that directly regression-tests the HIGH finding; a second review pass returned APPROVE.
+Detail: sprint-17 README, ADR-024, `docs/tasks/lessons.md` (2026-07-12 entries).
+
+Prior update, 2026-07-12 (Sprint 18 Feature 18.5 DONE - all 5 Sprint 18 features are now
 deliverable-complete and individually verified against their own subtask-level acceptance criteria
 (5/5), same "features-DONE, exit-criteria-tail tracked" framing Sprint 15 used. **IMPORTANT - the
 sprint's own Exit Criteria are NOT yet fully met**: "a pod for every one of the 13 services starts
@@ -880,7 +951,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
-| [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | TODO | 0/5 |
+| [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
 | [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
 | [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | TODO | 0/5 |
@@ -901,10 +972,14 @@ deployed on the local node and the 10 Debezium outbox connectors are not registe
 deployed-environment AC-01/02/03 run can execute. So the MVP is feature-complete and deployable, with a
 short, well-scoped integration tail (the full boot) before "runs green end-to-end in Kubernetes" is
 literally true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
-Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
+Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprint 17: ADR-024, Accepted 2026-07-12,
+**DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail tracked** (a
+pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own "every pod
+starts" exit criterion - see the 2026-07-12 entries above); Sprints 19 and 21-23: ADR-026 through
 ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
-and excluded from the MVP totals. All 8 are documentation/design only as of 2026-07-11 - TODO, not
-started. See Phase P6 below and [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
+and excluded from the MVP totals. Sprints 17 and 18 are complete (18 with a tracked follow-up); the
+other 6 remain documentation/design only as of 2026-07-11 - TODO, not started. See Phase P6 below and
+[`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
 EPIC-008 (Engagement and Support, Sprint 12) complete; notification-service and ticket-service with full unit and integration test coverage.
@@ -927,8 +1002,8 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-008 Engagement and Support | P4 | Notifications and ticketing | 12 |
 | EPIC-009 Hardening and Release | P5 | NFR targets, security, Kubernetes | 13, 14, 15 |
 | EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) | 16 |
-| EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Proposed) | 17 |
-| EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Proposed) | 18 |
+| EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Accepted) | 17 |
+| EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Accepted) | 18 |
 | EPIC-019 Zero-Trust Networking | P6 | Service mesh mTLS + default-deny NetworkPolicies (ADR-026 Proposed) | 19 |
 | EPIC-020 Chaos Engineering | P6 | Fault injection + game days, extends ADR-012/ADR-013 (no new ADR) | 20 |
 | EPIC-021 Campaign and Catalog Validation | P6 | `campaign-service`, dynamic pricing/redemption limits (ADR-027 Proposed) | 21 |

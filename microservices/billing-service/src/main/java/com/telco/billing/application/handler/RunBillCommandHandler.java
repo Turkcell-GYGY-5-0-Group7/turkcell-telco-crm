@@ -6,7 +6,10 @@ import com.telco.billing.infrastructure.entity.SubscriberBillingRecord;
 import com.telco.billing.infrastructure.persistence.SubscriberBillingRecordRepository;
 import com.telco.platform.common.context.CorrelationContext;
 import com.telco.platform.common.context.CorrelationContextHolder;
+import com.telco.platform.common.exception.DependencyFailureException;
 import com.telco.platform.cqrs.CommandHandler;
+import com.telco.platform.lock.DistributedLock;
+import com.telco.platform.lock.LockErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +44,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * throughput target can be met without a code change as subscriber volume grows; see
  * {@code docs/tasks/sprint-14-testing-and-hardening/14.3-bill-run-throughput-report.md} for the
  * measured tuning.
+ *
+ * <p>Feature 17.4 (ADR-024): the whole orchestration below runs inside a watchdog-managed
+ * {@link DistributedLock} keyed on the billing period, so at most one billing-service pod owns a
+ * given period's run in a scaled-out deployment. The losing pod (lock already held) does not
+ * partition or dispatch any batches - it returns {@link RunBillResult#alreadyOwnedByAnotherPod()}
+ * instead of racing, closing the diagnostic gap where a lost attempt previously logged as an
+ * undifferentiated failure (Sprint 14.3.2 report).
  */
 @Component
 public class RunBillCommandHandler implements CommandHandler<RunBillCommand, RunBillResult> {
@@ -49,22 +59,39 @@ public class RunBillCommandHandler implements CommandHandler<RunBillCommand, Run
 
     private final SubscriberBillingRecordRepository subscriberRepo;
     private final BillRunBatchProcessor batchProcessor;
+    private final DistributedLock distributedLock;
     private final int batchSize;
     private final int parallelism;
 
     public RunBillCommandHandler(
             SubscriberBillingRecordRepository subscriberRepo,
             BillRunBatchProcessor batchProcessor,
+            DistributedLock distributedLock,
             @Value("${telco.billing.bill-run.batch-size:500}") int batchSize,
             @Value("${telco.billing.bill-run.parallelism:8}") int parallelism) {
         this.subscriberRepo = subscriberRepo;
         this.batchProcessor = batchProcessor;
+        this.distributedLock = distributedLock;
         this.batchSize = Math.max(1, batchSize);
         this.parallelism = Math.max(1, parallelism);
     }
 
     @Override
     public RunBillResult handle(RunBillCommand command) {
+        String lockKey = "billing-service:bill-run:" + command.periodStart() + ":" + command.periodEnd();
+        try {
+            return distributedLock.withLock(lockKey, null, () -> runBillRun(command));
+        } catch (DependencyFailureException e) {
+            if (e.code() == LockErrorCode.LOCK_ACQUISITION_FAILED) {
+                LOGGER.warn("Bill-run period=[{},{}) already owned by another pod - skipping this invocation",
+                        command.periodStart(), command.periodEnd());
+                return RunBillResult.alreadyOwnedByAnotherPod();
+            }
+            throw e;
+        }
+    }
+
+    private RunBillResult runBillRun(RunBillCommand command) {
         List<SubscriberBillingRecord> activeSubscribers =
                 subscriberRepo.findByStatus(SubscriberBillingRecord.ACTIVE);
 

@@ -367,3 +367,140 @@ Format:
   path", was purely environmental (thrashing/partial-wave deps); it returned clean 200 once the
   dependency layer was healthy. Diagnose in-cluster 5xx against a HEALTHY dependency layer before
   attributing it to service code - a partial-wave deploy produces misleading transient 500s.
+
+## 2026-07-12 - Sprint 17 platform-foundation build environment gotchas (all confirmed live)
+- Mistake avoided (caught before it shipped): ADR-024 Section 5 specified
+  `LockAcquisitionException extends PlatformException`, but `PlatformException`
+  (`platform-common/.../exception/PlatformException.java`) is `sealed` with a `permits` list scoped to
+  its OWN package, and there is no `module-info.java` anywhere under `platform/` - so Java requires a
+  sealed class's permitted subtypes to live in the same package (no module boundary exists here to
+  invoke the alternate same-module rule). A type in a brand-new module's own package (here,
+  `com.telco.platform.lock`) can never join that `permits` list without moving into
+  `platform-common`'s exception package, which would contradict the new module's whole reason to
+  exist. Rule: before specifying "extends PlatformException" (or any sealed platform base type) for a
+  type that will live in a NEW module, check the sealed class's `permits` list and whether the
+  codebase uses JPMS (`find platform -name module-info.java`) - if it's classpath-based (no
+  module-info), same-package is mandatory, full stop. The general fix pattern: wrap the platform's
+  EXISTING matching sealed subtype (here, `DependencyFailureException`, which is also `final` so
+  cannot itself be subclassed) with a new `ErrorCode` enum living in the new module, rather than
+  trying to extend into the sealed hierarchy from outside.
+- `mvn` on `PATH` in this environment resolves to Homebrew's JDK 25 by default (`JAVA_HOME` unset),
+  not the project's Java 21. This doesn't fail compilation (bytecode target is still 21 via
+  `maven.compiler.release`) but breaks `spotbugs-maven-plugin` outright
+  (`IllegalArgumentException: Unsupported class file major version 69` - spotbugs's bundled ASM can't
+  parse Java-25-compiled JDK classes it needs to introspect). Always
+  `export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home` (verify via
+  `/usr/libexec/java_home -V`) before any Maven build in this repo.
+- Spring Boot 4.1 (this repo's pinned version) modularized test support and REMOVED/RELOCATED classes
+  a pre-4.0 muscle-memory reach for: `TestRestTemplate` no longer exists in `spring-boot-test` at all
+  (replaced by `spring-boot-resttestclient`'s `RestTestClient`, not a drop-in). `@AutoConfigureMockMvc`
+  moved from `org.springframework.boot.test.autoconfigure.web.servlet` to
+  `org.springframework.boot.webmvc.test.autoconfigure`, shipped by a NEW artifact
+  `spring-boot-starter-webmvc-test` (not bundled in `spring-boot-starter-test`). `ApplicationContextRunner`
+  and `AutoConfigurations` are unchanged (still `spring-boot-test`/`spring-boot-autoconfigure`, same
+  packages). When writing a Spring-context test on Boot 4.1+: check the actual jar contents
+  (`unzip -l <jar> | grep <ClassName>`) rather than assuming a pre-4.0 import path/artifact still
+  applies.
+- `platform-bom` had never needed Testcontainers before this sprint. Naively adding
+  `org.testcontainers:testcontainers`/`junit-jupiter` as dependencies (no `<version>`) fails with
+  "version is missing" even though `platform-bom` imports `spring-boot-dependencies` (which DOES
+  import a `testcontainers-bom`) - because Spring Boot 4.1's bundled `testcontainers-bom` tracks
+  Testcontainers 2.x, which renamed artifacts (`junit-jupiter` -> `testcontainers-junit-jupiter`,
+  `postgresql` -> `testcontainers-postgresql`, etc.), so the OLD unprefixed artifact IDs this repo
+  uses everywhere are simply absent from Boot 4.1's bundled BOM. `microservices/pom.xml` already
+  solved this by pinning `testcontainers.version=1.20.6` with explicit `dependencyManagement` entries
+  for the old-named artifacts it needs - `platform-bom` now mirrors that same pin (same version, for
+  consistency) rather than inventing a different convention.
+- Redisson's `Redisson.create(config)` for single-server mode connects EAGERLY (not lazily): pointing
+  it at an unreachable address throws `RedisConnectionException` synchronously from `create()` itself,
+  not from the first command. A "fail-closed on Redis outage" test must build a client against a REAL,
+  reachable Redis first, then simulate the outage some other way (this session used
+  `client.shutdown()` on an already-connected client) - it cannot simply point `create()` at a bogus
+  address and expect the failure to surface from the lock-acquisition call under test.
+- This sandbox's Docker Desktop (29.1.2) enforces a minimum Docker Engine API version of 1.44; the
+  Testcontainers version pinned repo-wide (1.20.6, see above) bundles a `docker-java` client that
+  negotiates API 1.32 and gets a hard `BadRequestException` rejection on the very first image-inspect
+  call (even for the Ryuk reaper container, before any test-specific container starts). Confirmed
+  pre-existing and NOT specific to new code: the already-existing, untouched `starter-inbox` module's
+  `InboxTransactionAtomicityTest` fails identically. `DOCKER_API_VERSION`/`DOCKER_HOST` env overrides
+  and `dangerouslyDisableSandbox` were all tried and did not fix it (in one case made socket
+  auto-detection worse). Do not spend further session time re-diagnosing this specific symptom in this
+  environment - it needs either a compatible Docker Desktop version or a repo-wide Testcontainers
+  bump (itself a real cross-cutting decision, not a quick fix, given the 2.x artifact-rename issue
+  above). Testcontainers-dependent tests in this environment can only be verified by code review +
+  compilation until one of those is done.
+
+## 2026-07-12 - adding an optional starter with a MANDATORY consumer breaks every pre-existing test unless the disabled path also supplies a bean
+- Mistake (caught by code review before it shipped): Sprint 17 Features 17.3/17.4 added `starter-lock`
+  to subscription-service and billing-service, then disabled it in each service's shared
+  `application-test.yml` (`telco.platform.lock.enabled: false`) on the theory that this mirrors how
+  `starter-kafka`'s listener containers already tolerate an absent broker in tests. It does not
+  transfer: Redisson's `RedissonClient` connects EAGERLY at `Redisson.create()` (confirmed empirically
+  this session), so `LockAutoConfiguration`'s `@ConditionalOnProperty(...enabled...)` gate is
+  class-level - when disabled, NO `DistributedLock` bean exists at all, not a lazy/tolerant one. Both
+  new consumers (`MsisdnReservationExpiryReaper`, `RunBillCommandHandler`) have a *mandatory*
+  constructor-injected `DistributedLock`, so disabling the starter in the shared test profile broke
+  EVERY pre-existing Spring-context test in both modules (unsatisfied-dependency context-refresh
+  failure), not just the new lock-specific tests - a repo-wide regression that a first code-review
+  pass caught (the failure could not be observed live in this sandbox, since Testcontainers can't run
+  at all here; it was caught by reasoning about the conditional + constructor wiring statically).
+- Rule: before disabling an optional starter in a shared test profile to avoid a live external
+  dependency, check whether ANY bean in the module has a *mandatory* (constructor) dependency on a
+  type that starter provides. If so, "just turn it off for tests" leaves that bean's mandatory
+  dependency unsatisfied for every context that doesn't specifically re-enable it - the starter needs
+  a working substitute bean available under the disabled condition too, not merely permission to be
+  absent.
+- Fix pattern used (safe to reuse): package a second, INVERSE-conditioned `@AutoConfiguration` in the
+  starter's own test-jar (`@ConditionalOnProperty(..., havingValue = "false")`, `@ConditionalOnMissingBean`
+  on its bean method) providing a trivial, real, in-JVM substitute implementation (here: a
+  `ConcurrentHashMap<String, ReentrantLock>`-backed `DistributedLock`) - register it via a SEPARATE
+  `AutoConfiguration.imports` file under `src/test/resources` in that same test-jar. Spring Boot's
+  autoconfiguration loader aggregates `AutoConfiguration.imports` across EVERY jar on the classpath
+  (confirmed: the compiled test-jar's `target/test-classes` correctly bundles both the class and this
+  resource), so any consuming service that already depends on the starter's test-jar (for other test
+  support, e.g. a Testcontainers fixture) gets this substitute automatically with zero changes to any
+  of its own pre-existing test files - not even an explicit `@Import`. A genuine `*ConcurrencyIT` that
+  needs REAL cross-instance coordination re-enables the property and points at a live Testcontainers
+  instance; `@ConditionalOnMissingBean` on the real autoconfiguration's bean method means the
+  substitute correctly steps aside once the property flips back to enabled.
+- Separate, smaller instance of the same root cause found in the same review: a new `@Scheduled`
+  bean (`MsisdnReservationExpiryReaper`) with no on/off switch fires its first tick almost immediately
+  at context startup in EVERY Spring context that contains it - once the bean-wiring problem above is
+  fixed, this component would then race against every unrelated integration test's assertions about
+  the table it sweeps. Any new `@Scheduled` production job needs its own
+  `@ConditionalOnProperty(..., matchIfMissing = true)` gate (default on in production) with the shared
+  test profile setting it `false`, mirroring the same "off by default in tests, explicit opt-in for the
+  test that actually wants it" shape as the lock fix above - not a one-off exception to that pattern.
+
+## 2026-07-12 (continued) - two different files are both named application-test.yml; editing the wrong one passes locally and fails only in CI
+- Mistake: the previous entry's fix (disable `telco.platform.lock.enabled` in the shared test
+  profile so Redisson's eager connection doesn't break every pre-existing Spring-context test) was
+  applied to `microservices/configs/<service>/application-test.yml` - but that directory is the
+  config-server-served bootstrap config (`ADR-010`, mounted into config-server as a volume,
+  resolved server-side), and is NOT what `@ActiveProfiles("test")` + `@SpringBootTest` actually reads
+  in a Maven test run. The real, classpath-loaded file is
+  `microservices/<service>/src/test/resources/application-test.yml` (a completely separate file,
+  same name, different directory, explicitly bypassing config-server via
+  `spring.cloud.config.enabled=false` + `spring.config.import=""`). Editing only the first one meant
+  the fix silently did nothing for the actual test run - this was not caught locally (Docker/
+  Testcontainers cannot execute at all in this sandbox this session, so the CI-run tests using
+  `@SpringBootTest` never actually ran here either) and only surfaced as a real CI failure in the
+  opened PR, where every pre-existing Spring-context test in both touched modules failed with the
+  exact `UnsatisfiedDependencyException -> RedisConnectionException` the fix was supposed to prevent.
+- Rule: this repo has TWO parallel, same-named-but-different-purpose config trees per service -
+  `microservices/configs/<service>/application*.yml` (config-server/deployed path, ADR-010) and
+  `microservices/<service>/src/{main,test}/resources/application*.yml` (classpath bootstrap +
+  Maven-test-only overrides, the latter deliberately opting OUT of config-server). A property meant
+  to affect a **Maven test run** (`@SpringBootTest`, `@ActiveProfiles("test")`) must go in the
+  `src/test/resources` file, not the `configs/` one - verify which file a running test actually
+  loads (check for `spring.config.import`/`spring.cloud.config.enabled` in the test's properties, or
+  just search for both files by name) before assuming an edit to a config file takes effect, and
+  never assume a locally-unverifiable change (this sandbox's Docker/Testcontainers gap, again) is
+  correct without a redundant sanity check like this.
+- Separate, cheap, unrelated defensive fix applied at the same time (not root-caused to any specific
+  failure, but reduces risk generally): a `@Scheduled` background job with no `initialDelay` fires
+  its first tick almost immediately at context/container startup, which is exactly when a
+  full-stack/acceptance-style test's own polling window has the least slack. Give any new
+  `@Scheduled` production job an explicit `initialDelayString` (defaulting to the same value as the
+  tick interval, so the first real tick still happens on a predictable cadence) rather than relying
+  on the implicit near-zero default.

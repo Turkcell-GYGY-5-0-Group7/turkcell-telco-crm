@@ -5,7 +5,7 @@
 | Audience | Anyone (human or agent) building a microservice |
 | Authority | ADR-007 (platform library), ADR-018 (starter dependency), `platform/PLATFORM-SPEC.md` |
 | Rule | **Reuse before build.** If a capability is listed here, do NOT re-implement it. |
-| Last updated | 2026-06-23 |
+| Last updated | 2026-07-12 |
 
 This is the consumer-facing index of what the platform already provides. `PLATFORM-SPEC.md` is the
 builder's contract (how the platform is implemented); this is the developer's "what can I reuse, and
@@ -53,6 +53,13 @@ below come transitively through the starters.
 | `OutboxService` | `com.telco.platform.outbox.OutboxService` | `publish(aggregateType, aggregateId, eventType, payload)` - atomic with your DB write. Never call Kafka directly. |
 | `InboxService.firstSeen(...)`, `IdempotentRequest`, `InboxBehavior` | `com.telco.platform.inbox.*` | Idempotent event consumption. |
 | `EventEnvelope` + `*V1` Avro records | `com.telco.platform.events.*` | Versioned `domain.event.v1` contracts (ADR-019). |
+
+### Distributed locking (via `starter-lock`)
+| Capability | Import | Use for |
+| --- | --- | --- |
+| `DistributedLock` | `com.telco.platform.lock.DistributedLock` | Cross-instance mutual exclusion (multiple pods, or two services) that a single-JVM lock or `SELECT ... FOR UPDATE` cannot provide. `acquire`/`withLock(key, leaseTime, action)` - `leaseTime=null` for a watchdog-managed lease (variable-duration work), a `Duration` for an explicit hard-expiring lease (bounded work). Fails CLOSED: on acquisition failure the guarded action never runs (ADR-024). |
+| `LockHandle` | `com.telco.platform.lock.LockHandle` | `AutoCloseable` handle returned by `acquire`; releases via try-with-resources. |
+| `LockErrorCode.LOCK_ACQUISITION_FAILED` | `com.telco.platform.lock.LockErrorCode` | The error code carried on the platform's existing `DependencyFailureException` (503) when a lock cannot be acquired - `PlatformException` is sealed, so this is not a distinct exception type; check the code, not the class. |
 
 ### Security (via `starter-security`)
 | Capability | Import | Use for |

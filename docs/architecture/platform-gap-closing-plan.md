@@ -2,10 +2,10 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Plan (no platform code written yet) |
+| Status | Plan (Tier 1-3 items below still unbuilt); one post-MVP follow-up has shipped outside this tier sequencing - see "Follow-up" |
 | Authority | ADR-007 (platform library), ADR-018 (starter model); tech-lead rulings 2026-06-23 |
 | Goal | Build the missing cross-cutting capabilities BEFORE domain services so they are not re-implemented per service |
-| Last updated | 2026-06-23 |
+| Last updated | 2026-07-12 |
 
 Gaps and consumer index: [`platform-capabilities.md`](platform-capabilities.md). The horizontal
 mechanics (ApiResult, mediator, outbox/inbox, context, masking) are already done; this plan closes the
@@ -92,3 +92,17 @@ Pin before the consuming module is built: `spring-data-mongodb` (notification), 
 
 Each module follows ADR-017/PLATFORM-SPEC conventions, ships unit/wiring tests (close BL-02), and is
 added to the capability catalog Section 1 when done.
+
+## Follow-up (shipped after the Tier plan)
+
+Capabilities identified and built after this plan's original Tier 1-3 sequencing was authored, outside
+that sequencing (post-MVP, not blocking any Sprint 05-15 MVP work):
+
+| Capability | Module(s) | First consumers | Risk |
+| --- | --- | --- | --- |
+| Distributed locking (ADR-024, Sprint 17) | `platform-core/lock` + `starter-lock` | `subscription-service` MSISDN reservation-expiry reaper (17.3), `billing-service` bill-run run-level lock (17.4) | MED |
+
+Distributed locking was not part of this plan's original gap analysis (no service needed cross-instance
+coordination until the Sprint 15 HPA made it a real requirement) and needed no amendment to this
+document's Tier table - it is recorded here as a follow-up entry instead, per the same "added to the
+capability catalog Section 1 when done" close-out this plan already requires of every Tier item.

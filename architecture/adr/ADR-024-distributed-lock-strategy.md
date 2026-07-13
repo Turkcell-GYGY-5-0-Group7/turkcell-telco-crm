@@ -1,7 +1,8 @@
 # ADR-024 Distributed Lock Strategy
 
-Status: Proposed
+Status: Accepted
 Date: 2026-07-11
+Ratified: 2026-07-12 (tech-lead; see Section 2/5 amendment note below)
 
 ## Context
 
@@ -97,10 +98,11 @@ wiring (`platform-core/outbox` + `starter-outbox`, `platform-core/inbox` + `star
 
 * **`platform-core/lock`** (`com.telco.platform.lock`, Spring-free, matching the purity constraint
   PLATFORM-SPEC already applies to outbox/inbox/mediator behaviors - "depend on ports, not Spring"):
-  the `DistributedLock` port, `LockHandle`, and `LockAcquisitionException`. No Redisson types appear
-  in this module's public API - keeping the port infrastructure-agnostic and independently unit
-  testable with an in-memory fake, and keeping Redisson (a third-party client) out of
-  `platform-core`'s own dependency graph.
+  the `DistributedLock` port, `LockHandle`, and `LockErrorCode` (see Section 5 - fail-closed acquisition
+  failures are surfaced via the existing `DependencyFailureException`, not a new exception type, so no
+  `LockAcquisitionException` class exists). No Redisson types appear in this module's public API -
+  keeping the port infrastructure-agnostic and independently unit testable with an in-memory fake, and
+  keeping Redisson (a third-party client) out of `platform-core`'s own dependency graph.
 * **`starter-lock`** (`com.telco.platform.starter.lock`): the Redisson-backed
   `RedissonDistributedLock` implementation, `LockAutoConfiguration` (builds the `RedissonClient` bean
   from `telco.platform.lock.*` properties, conditional on `telco.platform.lock.enabled` and on
@@ -115,8 +117,15 @@ convention):
 | `telco.platform.lock.enabled` | `true` | Master on/off switch. |
 | `telco.platform.lock.redis.address` | reuses `spring.data.redis.host`/`port` if unset | Redisson connection target; single/sentinel/cluster mode per standard Redisson config. |
 | `telco.platform.lock.wait-time` | `5s` | Max time a caller blocks trying to acquire before failing. |
-| `telco.platform.lock.lease-time` | unset (watchdog-managed) | Optional explicit TTL; see Section 4. |
-| `telco.platform.lock.watchdog-timeout` | `30s` | Redisson's internal lock-watchdog-timeout, used when `lease-time` is unset. |
+| `telco.platform.lock.watchdog-timeout` | `30s` | Redisson's internal lock-watchdog-timeout, used for watchdog-managed leases (`leaseTime == null` at the call site). |
+
+(Code-review note, 2026-07-12: this table originally also listed a `telco.platform.lock.lease-time`
+property. Removed before ship: `DistributedLock.acquire`/`withLock` (Section 3) always take an
+explicit `leaseTime` argument per call - `null` for watchdog-managed, a `Duration` for explicit -
+so there is no code path where a global config-level default lease would ever be consulted; the
+property was dead configuration. Revisit only if a future call site needs a configured default
+instead of choosing explicitly per call, at which point the port would need a corresponding
+zero-argument convenience method, not just a property.)
 
 The platform BOM (`platform-bom`) pins the Redisson version; `starter-lock` depends on the plain
 `org.redisson:redisson` client artifact, not Redisson's own opinionated
@@ -177,12 +186,24 @@ default to watchdog-managed unless the operation has a known, bounded duration.
 ### 5. Failure mode: fail CLOSED (a deliberate divergence from the gateway's rate limiter)
 
 If Redis is unavailable when `acquire`/`withLock` is called (connection failure, timeout, or the
-`wait-time` budget expires without acquiring the lock), `DistributedLock` throws
-`LockAcquisitionException` and the caller's critical section **does not run**.
-`LockAcquisitionException` is a `PlatformException` subtype mapped by the platform
-`GlobalExceptionHandler` to `503`/`DependencyFailureException`-equivalent semantics, consistent with
-how other infrastructure-unavailability failures are surfaced (`docs/architecture/platform-capabilities.md`
-Section 1).
+`wait-time` budget expires without acquiring the lock), `DistributedLock` throws the platform's
+existing `DependencyFailureException` (`platform-common`, already a `PlatformException` subtype
+mapped by `GlobalExceptionHandler` in `starter-api` to HTTP `503`) and the caller's critical section
+**does not run**. No new exception type is introduced: `PlatformException` is `sealed` with a fixed
+`permits` list scoped to `com.telco.platform.common.exception`, so a type living in the new
+`platform-core/lock` module (a different package, by this ADR's own Section 2 module-ownership
+decision) cannot join that hierarchy. Instead, `RedissonDistributedLock` constructs
+`DependencyFailureException` with a new `LockErrorCode.LOCK_ACQUISITION_FAILED` (an `ErrorCode`
+defined in `platform-core/lock`, mirroring the existing `CommonErrorCode` pattern) and a `details` map
+carrying the contended `lockKey`, giving callers/on-call the same "another pod already owns this"
+distinguishability ADR-024's Context section calls for, via the error code and details rather than a
+distinct exception class. This requires zero changes to `GlobalExceptionHandler` - the
+`DependencyFailureException` -> `503` mapping already exists - consistent with how other
+infrastructure-unavailability failures are surfaced (`docs/architecture/platform-capabilities.md`
+Section 1). (Ratification note, 2026-07-12: this section originally specified a dedicated
+`LockAcquisitionException extends PlatformException`; that was infeasible under Java's sealed-class
+same-package constraint with no `module-info.java` in this codebase, and was corrected to the
+`DependencyFailureException`-wrap approach above during tech-lead ratification.)
 
 This is the opposite of the gateway rate limiter's documented behavior
 (`docs/architecture/security-posture.md` Section 6: "Fails OPEN on a Redis outage... a deliberate
