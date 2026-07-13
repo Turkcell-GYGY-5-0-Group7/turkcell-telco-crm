@@ -334,7 +334,7 @@ jobs:
           echo "Tagging $IMAGE with: $SHA_TAG, $VERSION_TAG, latest" >&2
 
       - name: Build and push image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .                                         # build context = repo root
           file: microservices/${{ matrix.service }}/Dockerfile
