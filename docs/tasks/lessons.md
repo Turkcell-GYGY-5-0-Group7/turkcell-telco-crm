@@ -471,3 +471,36 @@ Format:
   `@ConditionalOnProperty(..., matchIfMissing = true)` gate (default on in production) with the shared
   test profile setting it `false`, mirroring the same "off by default in tests, explicit opt-in for the
   test that actually wants it" shape as the lock fix above - not a one-off exception to that pattern.
+
+## 2026-07-12 (continued) - two different files are both named application-test.yml; editing the wrong one passes locally and fails only in CI
+- Mistake: the previous entry's fix (disable `telco.platform.lock.enabled` in the shared test
+  profile so Redisson's eager connection doesn't break every pre-existing Spring-context test) was
+  applied to `microservices/configs/<service>/application-test.yml` - but that directory is the
+  config-server-served bootstrap config (`ADR-010`, mounted into config-server as a volume,
+  resolved server-side), and is NOT what `@ActiveProfiles("test")` + `@SpringBootTest` actually reads
+  in a Maven test run. The real, classpath-loaded file is
+  `microservices/<service>/src/test/resources/application-test.yml` (a completely separate file,
+  same name, different directory, explicitly bypassing config-server via
+  `spring.cloud.config.enabled=false` + `spring.config.import=""`). Editing only the first one meant
+  the fix silently did nothing for the actual test run - this was not caught locally (Docker/
+  Testcontainers cannot execute at all in this sandbox this session, so the CI-run tests using
+  `@SpringBootTest` never actually ran here either) and only surfaced as a real CI failure in the
+  opened PR, where every pre-existing Spring-context test in both touched modules failed with the
+  exact `UnsatisfiedDependencyException -> RedisConnectionException` the fix was supposed to prevent.
+- Rule: this repo has TWO parallel, same-named-but-different-purpose config trees per service -
+  `microservices/configs/<service>/application*.yml` (config-server/deployed path, ADR-010) and
+  `microservices/<service>/src/{main,test}/resources/application*.yml` (classpath bootstrap +
+  Maven-test-only overrides, the latter deliberately opting OUT of config-server). A property meant
+  to affect a **Maven test run** (`@SpringBootTest`, `@ActiveProfiles("test")`) must go in the
+  `src/test/resources` file, not the `configs/` one - verify which file a running test actually
+  loads (check for `spring.config.import`/`spring.cloud.config.enabled` in the test's properties, or
+  just search for both files by name) before assuming an edit to a config file takes effect, and
+  never assume a locally-unverifiable change (this sandbox's Docker/Testcontainers gap, again) is
+  correct without a redundant sanity check like this.
+- Separate, cheap, unrelated defensive fix applied at the same time (not root-caused to any specific
+  failure, but reduces risk generally): a `@Scheduled` background job with no `initialDelay` fires
+  its first tick almost immediately at context/container startup, which is exactly when a
+  full-stack/acceptance-style test's own polling window has the least slack. Give any new
+  `@Scheduled` production job an explicit `initialDelayString` (defaulting to the same value as the
+  tick interval, so the first real tick still happens on a predictable cadence) rather than relying
+  on the implicit near-zero default.

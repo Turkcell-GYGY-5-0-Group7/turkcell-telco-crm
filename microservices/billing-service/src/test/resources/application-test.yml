@@ -48,3 +48,10 @@ telco:
       enabled: true
     inbox:
       enabled: true
+    # Off by default: Redisson connects eagerly at startup, unlike starter-kafka's listener
+    # containers, and would fail context refresh for every test in this module that doesn't run a
+    # Redis container. starter-lock's test-jar supplies a real in-JVM DistributedLock substitute
+    # whenever this is false. A test that exercises the bill-run's real locking re-enables this
+    # explicitly and points it at a Testcontainers Redis.
+    lock:
+      enabled: false

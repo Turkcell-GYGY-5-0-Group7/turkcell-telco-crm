@@ -27,7 +27,10 @@ import java.time.Duration;
  * <p>{@code telco.subscription.msisdn-reaper.enabled} (default true) gates this bean entirely - off
  * in the shared "test" profile so this doesn't fire against every unrelated Spring-context test's
  * database; a test that wants the bean (e.g. a concurrency IT calling {@link #tick()} directly)
- * re-enables it explicitly.
+ * re-enables it explicitly. The first tick is delayed by
+ * {@code telco.subscription.msisdn-reaper.initial-delay-ms} (default 60s, same as the tick interval)
+ * rather than firing immediately at context startup, so the sweep never runs while the service (and
+ * its peers) are still warming up.
  */
 @Component
 @ConditionalOnProperty(prefix = "telco.subscription.msisdn-reaper", name = "enabled", havingValue = "true",
@@ -50,7 +53,9 @@ public class MsisdnReservationExpiryReaper {
         this.lockLease = Duration.ofMillis(lockLeaseMs);
     }
 
-    @Scheduled(fixedDelayString = "${telco.subscription.msisdn-reaper.interval-ms:60000}")
+    @Scheduled(
+            fixedDelayString = "${telco.subscription.msisdn-reaper.interval-ms:60000}",
+            initialDelayString = "${telco.subscription.msisdn-reaper.initial-delay-ms:60000}")
     public void sweep() {
         tick();
     }
