@@ -92,6 +92,36 @@ autoscaling:
 pdb:
   enabled: false
 
+# Feature 19.3.2 (ADR-026 Section 2). config-server's real caller set is all
+# 13 services (every service fetches its config on startup via Spring Cloud
+# Config, and Eureka-registered services also resolve discovery-server) -
+# not the gateway alone, so this overrides the chart default's
+# `[api-gateway]` with the full roster.
+# Feature 19.4.2/19.4.3 (ADR-026 Section 3). Ingress: chart default
+# (`useAuthorizedClientsForIngress: true`) already reuses `authorizedClients`
+# below (all 13 service names), so no `networkPolicy` override is needed here.
+# Egress: config-server itself calls no Postgres/Redis/Kafka/MinIO/Keycloak -
+# `KEYCLOAK_URI`/`KEYCLOAK_JWKS_URI` in `config:` below are template values it
+# SERVES to clients, not an outbound call it makes - so no `networkPolicy.egress`
+# flags are set true; only the universal discovery-server egress
+# (templates/networkpolicy-egress.yaml renders it unconditionally, since
+# config-server registers itself with Eureka via `EUREKA_HOST` below) applies.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - discovery-server
+    - config-server
+    - identity-service
+    - customer-service
+    - product-catalog-service
+    - order-service
+    - subscription-service
+    - usage-service
+    - billing-service
+    - payment-service
+    - notification-service
+    - ticket-service
+
 # Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
 # vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
 # local/dev unaffected). roleName defaults to serviceName above, matching the

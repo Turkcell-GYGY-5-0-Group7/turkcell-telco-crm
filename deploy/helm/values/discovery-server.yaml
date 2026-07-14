@@ -46,6 +46,34 @@ autoscaling:
 pdb:
   enabled: false
 
+# Feature 19.3.2 (ADR-026 Section 2). discovery-server's real caller set is
+# all 13 services (every Eureka-client-enabled service registers with/queries
+# it), not the gateway alone - overrides the chart default's `[api-gateway]`
+# with the full roster. See config-server.yaml's identical override for the
+# same rationale.
+# Feature 19.4.2/19.4.3 (ADR-026 Section 3). Ingress: chart default already
+# reuses `authorizedClients` below (all 13 service names), no override needed.
+# Egress: discovery-server calls no Postgres/Redis/Kafka/MinIO/Keycloak, and
+# (per the header comment above) not even config-server - it is standalone.
+# templates/networkpolicy-egress.yaml's universal rules correctly render
+# neither the discovery-server-egress nor the config-server-egress block for
+# this release (both guards exclude `discovery-server` by name).
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - discovery-server
+    - config-server
+    - identity-service
+    - customer-service
+    - product-catalog-service
+    - order-service
+    - subscription-service
+    - usage-service
+    - billing-service
+    - payment-service
+    - notification-service
+    - ticket-service
+
 # Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
 # vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
 # local/dev unaffected). roleName defaults to serviceName above, matching the

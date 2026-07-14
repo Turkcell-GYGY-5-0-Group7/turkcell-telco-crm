@@ -9,6 +9,19 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). MongoDB (primary store, approved exception, Section 5),
+# Postgres (co-located outbox for notification.dispatched.v1, Section 5's
+# Notes), Keycloak (JWKS validation), Kafka (consumes every other domain
+# service's terminal event - the platform's universal notification sink,
+# event-catalog.md Section 2 Consumers column).
+networkPolicy:
+  egress:
+    postgres: true
+    mongo: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

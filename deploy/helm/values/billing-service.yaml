@@ -7,6 +7,24 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), MinIO (invoice PDFs, Section 5),
+# Keycloak (JWKS validation), Kafka (produces invoice.*, consumes tariff.
+# price-changed.v1/subscription.*/quota.exceeded.v1/usage.aggregated.v1/
+# payment.completed.v1, event-catalog.md Section 2). `redis: true` is a
+# DEVIATION from a literal reading of Section 5 alone (its Cache column does
+# not list Redis for billing-service): verified via microservices/configs/
+# billing-service/application.yml ("First use of Redis in this service" -
+# a Redisson-backed distributed lock, ADR-024) - a real egress dependency
+# Section 5's cache-only framing does not capture.
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    minio: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

@@ -1,0 +1,43 @@
+# telco-linkerd-control-plane values (Feature 19.1.1, ADR-026 Section 1). All
+# keys nest under `linkerd-control-plane:` to reach the vendored upstream
+# chart declared in Chart.yaml.
+#
+# Self-managed trust anchor (ADR-026 Section 4): NO cert-manager, NO external
+# CA, NO dependency on deploy/helm/vault's PKI. The three PEM values below are
+# intentionally left EMPTY here - real key material is never committed to this
+# repository, the same posture deploy/helm/vault/values.yaml and
+# deploy/RUNBOOK.md Section 3 already take for Vault's unseal keys/root token.
+# Generate them with `generate-trust-anchor.sh` (this directory) and supply at
+# install time via --set-file, e.g.:
+#
+#   ./deploy/helm/linkerd-control-plane/generate-trust-anchor.sh /tmp/linkerd-trust
+#   helm install linkerd-control-plane deploy/helm/linkerd-control-plane -n linkerd \
+#     --set-file linkerd-control-plane.identityTrustAnchorsPEM=/tmp/linkerd-trust/ca.crt \
+#     --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=/tmp/linkerd-trust/issuer.crt \
+#     --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=/tmp/linkerd-trust/issuer.key
+#
+# See deploy/RUNBOOK.md's Linkerd install step for the full sequence.
+linkerd-control-plane:
+  identityTrustAnchorsPEM: ""
+
+  identity:
+    issuer:
+      tls:
+        crtPEM: ""
+        keyPEM: ""
+
+  # Single-node Kind cluster (deploy/helm/README.md's stated scale, mirroring
+  # the dev-grade posture already applied to Vault/dependencies) - one
+  # replica per control-plane component is sufficient; HA (controllerReplicas
+  # > 1, enablePodAntiAffinity) is the documented production upgrade path, not
+  # required at this scale.
+  controllerReplicas: 1
+  enablePodAntiAffinity: false
+  enablePodDisruptionBudget: false
+
+  proxy:
+    resources:
+      cpu:
+        request: 100m
+      memory:
+        request: 20Mi

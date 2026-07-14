@@ -1,0 +1,27 @@
+apiVersion: v2
+name: telco-linkerd-crds
+description: >-
+  Linkerd Custom Resource Definitions (Feature 19.1.1, ADR-026 Section 1),
+  installed ahead of the Linkerd control plane per Linkerd's official
+  two-chart install model (`linkerd-crds` then `linkerd-control-plane`).
+  Wraps the official `linkerd-crds` chart, the same vendored-dependency
+  pattern `deploy/helm/vault/Chart.yaml` (18.1.1) and
+  `deploy/helm/csi-driver/Chart.yaml` (18.3.1) already use for
+  `hashicorp/vault` and `secrets-store-csi-driver`. No values overrides are
+  needed - this chart only installs CRDs (`ServiceProfile`, the `policy.
+  linkerd.io` and `gateway.networking.k8s.io` CRDs the proxy-injector/policy
+  controller consume).
+type: application
+version: 0.1.0
+appVersion: "1.8.0"
+keywords:
+  - telco-crm
+  - linkerd
+  - service-mesh
+  - mtls
+maintainers:
+  - name: Telco CRM DevOps
+dependencies:
+  - name: linkerd-crds
+    version: 1.8.0
+    repository: https://helm.linkerd.io/stable

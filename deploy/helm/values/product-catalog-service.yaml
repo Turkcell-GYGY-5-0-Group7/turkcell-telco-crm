@@ -7,6 +7,30 @@ service:
 image:
   tag: latest
 
+# Feature 19.3.2 (ADR-026 Section 2). product-catalog-service has three real
+# non-gateway synchronous callers, confirmed live by reading each client
+# class's source (all target its tokenless GET /internal/tariffs/**
+# endpoints): order-service (ProductCatalogServiceClient), billing-service
+# (ProductCatalogBillingClient), usage-service (ProductCatalogClient).
+# Overrides the chart default's `[api-gateway]` accordingly.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - order-service
+    - billing-service
+    - usage-service
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Redis (cache-aside, Section 5),
+# Keycloak (JWKS validation), Kafka (produces tariff.created.v1/tariff.
+# price-changed.v1, event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

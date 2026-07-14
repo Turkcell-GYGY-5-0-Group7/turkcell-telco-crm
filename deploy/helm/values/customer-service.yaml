@@ -11,6 +11,28 @@ service:
 image:
   tag: latest
 
+# Feature 19.3.2 (ADR-026 Section 2). customer-service has one real
+# non-gateway synchronous caller, confirmed live by reading
+# order-service's CustomerServiceClient source (targets the tokenless
+# GET /internal/customers/{id} endpoint). Overrides the chart default's
+# `[api-gateway]` accordingly.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - order-service
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), MinIO (KYC documents, Section 5),
+# Keycloak (JWKS validation, microservices/configs/customer-service/
+# application.yml), Kafka (produces customer.registered.v1/kyc-approved.v1/
+# kyc-rejected.v1/updated.v1, event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    minio: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
