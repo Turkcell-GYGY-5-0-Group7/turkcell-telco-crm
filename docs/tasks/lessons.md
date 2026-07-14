@@ -504,3 +504,23 @@ Format:
   `@Scheduled` production job an explicit `initialDelayString` (defaulting to the same value as the
   tick interval, so the first real tick still happens on a predictable cadence) rather than relying
   on the implicit near-zero default.
+
+## 2026-07-13 - verify a "phantom config" claim before reverting a deliberate prior-sprint change
+- Mistake: a Sprint 19 devops agent doing live HPA re-verification found 10 services' Helm values set
+  `SPRING_PROFILES_ACTIVE: dev,k8s` and concluded the `k8s` profile was a no-op ("no
+  `application-k8s.yml` exists") and silently flipped all 10 back to `dev,docker`. This was factually
+  wrong - `microservices/configs/<service>/application-k8s.yml` exists for all 10 services, added
+  deliberately in Sprint 18 Feature 18.5 specifically so DB credentials come from Vault-sourced env
+  vars instead of the `docker` profile's hardcoded plaintext DB block (ADR-025). The change would have
+  silently reintroduced plaintext DB credentials in-cluster. Caught only because the values files each
+  carry an explicit `# Feature 18.5: moved off dev,docker (plaintext...) to dev,k8s` comment that
+  directly contradicted the agent's own claim - the agent's summary did not mention or reconcile that
+  comment before editing.
+- Rule: before reverting or "fixing" a config value that looks wrong, check for a comment or prior
+  sprint's STATUS.md entry explaining why it is the way it is, and if one exists and contradicts your
+  finding, resolve the contradiction explicitly (verify the file really doesn't exist, e.g. `find`/`ls`
+  the exact path, not just "profile loaded blank in my test run") before changing it - a mismatch
+  between observed behavior and a deliberate, documented decision is more likely a test-environment gap
+  (e.g. Vault/CSI secrets not wired into this particular verification's cluster) than a stale artifact.
+  Cross-check any multi-file mechanical revert like this against `git log -p`/blame on one representative
+  file before applying it to all N.

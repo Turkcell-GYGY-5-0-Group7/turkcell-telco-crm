@@ -14,7 +14,46 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-12 (Sprint 17 Distributed Locking - **COMPLETE, all 5/5 features DONE**. Built
+Last updated: 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
+verification complete, plus Feature 19.5's diff-only subtask, session continued from 19.1/19.2 (DONE,
+prior sessions, uncommitted). **19.3**: authored
+`deploy/helm/telco-service/templates/{server,authorizationpolicy,meshtlsauthentication}.yaml` (one
+Linkerd `Server` per service; `AuthorizationPolicy` + `MeshTLSAuthentication` restricting inbound to the
+`api-gateway` mesh identity by default, gated on `meshPolicy.enabled`) and per-service
+`deploy/helm/values/*.yaml` overrides: `api-gateway` (`meshPolicy.enabled: false` - its real caller,
+ingress-nginx, is unmeshed), `config-server`/`discovery-server` (`authorizedClients` widened to all 13
+services, their real caller set), and `customer-service`/`order-service`/`product-catalog-service`
+(widened for their one-to-three real non-gateway synchronous callers). An Explore-agent audit grepped
+every service for cross-service `RestTemplate`/`WebClient`/`RestClient` usage (no `@FeignClient` exists
+in this repo) and confirmed the three overrides account for all five real cross-service HTTP calls in
+the codebase - no missing override. 19.3.3's confirmatory audit confirmed `GatewaySecurityConfig`'s
+`/internal/**` edge-deny is untouched by this sprint (zero diff under `microservices/api-gateway/`) and
+structurally cannot be bypassed by the new mesh policies (mTLS-identity layer, no HTTP-path matching).
+**19.4**: a devops agent authored the default-deny `NetworkPolicy` baseline
+(`deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml`, plus a co-located universal
+CoreDNS egress allow) and per-service ingress/egress allow-rule templates
+(`deploy/helm/telco-service/templates/networkpolicy-{ingress,egress}.yaml`), with ingress deliberately
+reusing 19.3's `meshPolicy.authorizedClients` list (one source of truth for "who may call this
+service," so the mesh-layer and network-layer controls cannot drift apart) and egress flags derived
+from `service-catalog.md` Section 5 plus `event-catalog.md`'s Kafka roster. Reviewed and corrected one
+documentation gap this session (the `keycloak: true` egress flag on all 10 domain services was
+un-explained in the template's header comment; verified live via
+`microservices/configs/<service>/application-docker.yml`'s `jwks-uri` that each domain service is its
+own OAuth2 resource server independently validating JWTs against Keycloak, additional to the gateway's
+own validation - added the missing rationale comment). Flagged, not fixed (out of this Helm-only
+feature's scope): the shared-Postgres-StatefulSet architecture means 19.4.3's literal "cannot reach
+another service's Postgres instance" AC can't be network-layer-enforced (isolation here is logical/
+schema-level, ADR-006, not physical) - noted for a possible `tech-lead` AC re-scoping. **19.5.3** (the
+one 19.5 subtask needing no cluster): repo-wide diff audit confirmed Sprint 19's entire uncommitted
+changeset is confined to `deploy/`, `docs/tasks/`, and the ADR-026 status flip - zero `.java`, zero
+security/config files - ADR-011's JWT/RBAC trust layer is verified unchanged. **Live verification
+(kubectl/helm/linkerd against a running cluster) is NOT done this session for either 19.3, 19.4, or
+19.5.1/19.5.2** - Docker Desktop was not running and `helm`/`linkerd` were not available in this
+session's shell; deferred to the next cluster-available session. Nothing committed yet (matches this
+sprint's existing uncommitted state from 19.1/19.2). Detail: sprint-19 README's "19.3" and "19.4"
+Authoring and Static Verification Record sections, and the new "19.5.3 Verification Record" section.
+
+Prior update, 2026-07-12 (Sprint 17 Distributed Locking - **COMPLETE, all 5/5 features DONE**. Built
 this session on top of the platform foundation (17.1/17.2, see the entry directly below): Feature 17.3
 (`subscription-service` MSISDN reservation-expiry reaper - `ExpireMsisdnReservationsCommand(Handler)`
 drives releases through the existing `MsisdnPool.release()` domain method, one `audit_log` row per
@@ -953,7 +992,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
-| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS | 2/5 (19.3+19.4 authored/statically verified; 19.5.3 done; 19.5.1/19.5.2 + both features' live-verify blocked on cluster) |
 | [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | TODO | 0/5 |
 | [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | TODO | 0/5 |
 | [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | TODO | 0/6 |

@@ -1,0 +1,75 @@
+# Feature 19.4.2 (ADR-026 Section 3). Explicit NetworkPolicy ingress allow
+# rules restoring the real service-catalog call graph on top of the 19.4.1
+# default-deny baseline (deploy/helm/dependencies/templates/
+# networkpolicy-default-deny.yaml). Rendered once per telco-service release
+# (mirrors templates/server.yaml's "one object per service" pattern), and
+# selects this release's own pods the same way templates/server.yaml does
+# (`telco-service.selectorLabels` on the app port, named "http" -
+# templates/deployment.yaml).
+#
+# Source list: by default (`.Values.networkPolicy.useAuthorizedClientsForIngress`,
+# true unless overridden) this reuses `.Values.meshPolicy.authorizedClients`
+# verbatim - the SAME real caller set 19.3's Linkerd AuthorizationPolicy
+# already allows (see values.yaml's `meshPolicy` comment for the full roster:
+# api-gateway for most domain services; all 13 service names for
+# config-server/discovery-server; the three documented non-gateway callers for
+# customer-service, order-service, product-catalog-service). Deliberately NOT
+# a second, independently-maintained list - one source of truth for "who may
+# call this service" shared by both controls, so they cannot silently drift
+# and contradict each other.
+#
+# api-gateway is the one documented exception
+# (deploy/helm/values/api-gateway.yaml sets
+# `useAuthorizedClientsForIngress: false`, `externalIngress: true`): its real
+# caller is the Kind ingress-nginx controller (deploy/RUNBOOK.md Section 2.2),
+# which is un-meshed, runs in its own `ingress-nginx` namespace, and is NOT a
+# telco-service release - it cannot be expressed as an `authorizedClients`
+# entry (those are ServiceAccount-bound mesh identities within `telco`). The
+# labels below (`app.kubernetes.io/name: ingress-nginx`,
+# `app.kubernetes.io/component: controller` in the `ingress-nginx` namespace)
+# match the standard Kind-provider manifest deploy/RUNBOOK.md Section 2.2
+# applies (`kubectl apply -f .../deploy/static/provider/kind/deploy.yaml`) -
+# NOT independently re-verified against a live cluster this session (no
+# `kubectl`/cluster access available - see this feature's final report).
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "telco-service.fullname" . }}-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "telco-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- if .Values.networkPolicy.externalIngress }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+              app.kubernetes.io/component: controller
+        {{- end }}
+        {{- if .Values.networkPolicy.useAuthorizedClientsForIngress }}
+        {{- range .Values.meshPolicy.authorizedClients }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+        {{- end }}
+        {{- else }}
+        {{- range .Values.networkPolicy.ingressFrom }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+        {{- end }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.containerPort }}
+{{- end }}

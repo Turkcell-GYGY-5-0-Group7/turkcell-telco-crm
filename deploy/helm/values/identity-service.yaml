@@ -8,6 +8,17 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Keycloak (admin API for user
+# provisioning/deprovisioning PLUS JWKS validation, see
+# microservices/configs/identity-service/application.yml), Kafka (produces
+# user.created.v1/user.deleted.v1, event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    keycloak: true
+    kafka: true
+
 # Non-secret env -> ConfigMap. Mirrors the compose x-app-env NON-secret keys.
 config:
   CONFIG_SERVER_URI: http://config-server:8888

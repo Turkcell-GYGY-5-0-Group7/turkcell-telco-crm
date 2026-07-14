@@ -1,0 +1,87 @@
+# Feature 19.4.1 (ADR-026 Section 3). Default-deny NetworkPolicy baseline for
+# the `telco` namespace, the compensating network-layer control for pods that
+# are not (yet) meshed or bypass the Linkerd proxy - Linkerd's per-`Server`
+# AuthorizationPolicy (Feature 19.3) only governs the meshed data path, so a
+# non-injected pod (a rollout gap, a misconfigured namespace annotation) could
+# otherwise still reach another pod's application port directly in plain HTTP.
+# `security-posture.md` Section 8 names mTLS + default-deny NetworkPolicy as
+# one combined production recommendation, not two independently-schedulable
+# items (ADR-026 Section 3 keeps that pairing explicitly).
+#
+# Lives in THIS chart (deploy/helm/dependencies/), not
+# deploy/helm/telco-service/, for the same reason templates/namespace.yaml
+# does: `podSelector: {}` must select every pod in `telco` - all 13
+# telco-service releases AND this chart's own stateful backends (postgres,
+# redis, kafka, minio, keycloak, ...) - which no single telco-service release
+# can express (that chart renders one object per service release, scoped to
+# that release's own pod selector). This chart already creates the `telco`
+# namespace (templates/namespace.yaml) and is installed once, first, per
+# cluster (deploy/RUNBOOK.md Section 2), matching "namespace-wide baseline
+# before any per-service allow rule is layered on top" (19.4's Dependencies:
+# "19.4.1" is a hard prerequisite for 19.4.2/19.4.3).
+#
+# `policyTypes: [Ingress, Egress]` with no `ingress`/`egress` rule blocks are
+# what makes this default-deny in both directions (Kubernetes NetworkPolicy
+# semantics: a policyType present with zero matching rules denies all traffic
+# of that direction for the selected pods, unless another NetworkPolicy
+# selecting the same pod explicitly allows it - allow rules across multiple
+# policies are additive, per the upstream NetworkPolicy spec).
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Universal CoreDNS egress allow, co-located with the default-deny baseline
+# above rather than in either telco-service NetworkPolicy template
+# (19.4.3's suggested placement, "likely part of the 19.4.1 baseline chart,
+# since it is universal rather than per-service"): EVERY pod in `telco`,
+# including this chart's own stateful backends, needs to resolve in-cluster
+# DNS names (e.g. a Service's short name) to function at all, so this must be
+# applied in the SAME install step as the default-deny baseline - deferring
+# it to the per-service egress template (templates/networkpolicy-egress.yaml,
+# which only renders for telco-service releases, not this chart's own
+# postgres/redis/kafka/minio/keycloak pods) would leave a window where the
+# baseline denies DNS to every pod cluster-wide, including pods this chart
+# itself owns.
+#
+# CoreDNS runs in `kube-system`, labelled `k8s-app: kube-dns` by the default
+# kubeadm/Kind manifest (the same cluster this platform targets per
+# deploy/RUNBOOK.md - not independently re-verified against a live cluster
+# this session, see this feature's final report). `kubernetes.io/metadata.name`
+# is a well-known, automatically-applied namespace label (Kubernetes >=1.21,
+# stable) - used here instead of a hand-applied label so this rule needs no
+# extra cluster setup beyond what any modern cluster already provides.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}

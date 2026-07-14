@@ -1,0 +1,154 @@
+# Feature 19.4.3 (ADR-026 Section 3). Explicit NetworkPolicy egress allow
+# rules restoring each service's own infra dependencies on top of the 19.4.1
+# default-deny baseline, plus the universal config-server/discovery-server
+# egress (the mirror, from the caller's side, of 19.4.2's ingress rule).
+# Rendered once per telco-service release, selecting this release's own pods
+# the same way templates/networkpolicy-ingress.yaml does. The universal
+# CoreDNS egress allow is NOT here - it is namespace-wide and lives in
+# deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml (see
+# that file's header comment for why).
+#
+# Per-dependency flags (`.Values.networkPolicy.egress.*`) are derived
+# strictly from docs/architecture/service-catalog.md Section 5's
+# Infrastructure Profile table plus docs/architecture/event-catalog.md's
+# producer/consumer roster (for `kafka`) - set true per service in
+# deploy/helm/values/<service>.yaml, false here by default (chart default
+# declares no infra dependency). Two DEVIATIONS from a literal reading of
+# Section 5 alone, both verified by reading the actual shipped
+# `microservices/configs/<service>/application.yml` rather than assumed: (1)
+# `subscription-service` and `billing-service` also get `redis: true` even
+# though Section 5's Cache column does not list Redis for them - both use
+# Redisson-backed Redis for a cross-replica distributed lock (ADR-024, MSISDN
+# reservation-expiry reaper / invoice generation), a real egress dependency
+# Section 5's cache-only framing does not capture; (2) `usage-service` and
+# `payment-service`'s Redis egress is granted per Section 5's designed Cache
+# column even though their `application.yml`/`application-k8s.yml` do not yet
+# wire a `REDIS_HOST` in the dev/k8s profile (only prod/staging do) - granting
+# the allow rule now avoids a second NetworkPolicy change when that wiring
+# gap is closed, and an unused allow rule is not a security regression the
+# way a missing one would be.
+#
+# `keycloak: true` is set for every domain service (not just api-gateway/
+# identity-service) because each one is its own Spring Security OAuth2
+# resource server, independently validating inbound JWT signatures via a
+# directly-fetched JWKS - confirmed live by reading
+# `microservices/configs/<service>/application-docker.yml`'s
+# `spring.security.oauth2.resourceserver.jwt.jwks-uri: http://keycloak:8080/...`,
+# present in every domain service's config, not only api-gateway's. This is
+# additional to, not a replacement for, the gateway's own JWT validation and
+# `X-User-Id`/`X-User-Roles` injection (ADR-011) - the two layers are
+# independent and this NetworkPolicy grant does not change either.
+#
+# Destination Service/port values below (postgres 5432, redis 6379, kafka
+# 9092, schema-registry 8081, minio 9000, mongo 27017, keycloak 8080) mirror
+# deploy/helm/dependencies/values.yaml's defaults and
+# deploy/helm/dependencies/templates/*.yaml's `app.kubernetes.io/name`
+# component selectors (`telco-deps.selectorLabels`) - this chart has no
+# programmatic reference to that chart's values (they are two independent
+# Helm releases, not parent/subchart), so if a dependencies port is ever
+# overridden at install time, this file's hardcoded ports must be
+# kept in sync by hand.
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "telco-service.fullname" . }}-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "telco-service.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    {{- if .Values.networkPolicy.egress.postgres }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
+    {{- if .Values.networkPolicy.egress.redis }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    {{- end }}
+    {{- if .Values.networkPolicy.egress.kafka }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: schema-registry
+      ports:
+        - protocol: TCP
+          port: 8081
+    {{- end }}
+    {{- if .Values.networkPolicy.egress.minio }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    {{- end }}
+    {{- if .Values.networkPolicy.egress.mongo }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mongo
+      ports:
+        - protocol: TCP
+          port: 27017
+    {{- end }}
+    {{- if .Values.networkPolicy.egress.keycloak }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    {{- end }}
+    # Universal egress to discovery-server: every telco-service release
+    # except discovery-server itself either registers with or queries Eureka
+    # (config-server also registers - it is a Eureka client, see its
+    # `EUREKA_HOST` config in deploy/helm/values/config-server.yaml).
+    {{- if ne .Values.serviceName "discovery-server" }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: discovery-server
+      ports:
+        - protocol: TCP
+          port: 8761
+    {{- end }}
+    # Universal egress to config-server: every telco-service release except
+    # config-server (cannot import from itself, ADR-010) and discovery-server
+    # (comes up independently of config-server per
+    # deploy/helm/values/discovery-server.yaml's header comment) fetches its
+    # Spring Cloud Config bootstrap from it on startup.
+    {{- if and (ne .Values.serviceName "config-server") (ne .Values.serviceName "discovery-server") }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: config-server
+      ports:
+        - protocol: TCP
+          port: 8888
+    {{- end }}
+{{- end }}

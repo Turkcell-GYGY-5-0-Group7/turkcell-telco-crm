@@ -7,6 +7,22 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Redis (near-real-time quota
+# cache, Section 5 - granted even though the dev/k8s `application.yml`/
+# application-k8s.yml profile does not yet wire a REDIS_HOST, only prod/
+# staging do; an unused allow rule is not a regression the way a missing one
+# would be, and Section 5's designed cache dependency is the authoritative
+# source per this feature's spec), Keycloak (JWKS validation), Kafka
+# (produces usage.recorded.v1/quota.*/usage.aggregated.v1, event-catalog.md
+# Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

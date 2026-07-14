@@ -1,0 +1,32 @@
+# Feature 19.3.2 (ADR-026 Section 2, Layer 1 - "only the pod running as the
+# api-gateway ServiceAccount's mesh identity may call me"). Attaches to the
+# Server (templates/server.yaml) of the same name and restricts inbound to
+# only the mesh identities named in templates/meshtlsauthentication.yaml -
+# once this AuthorizationPolicy exists, Linkerd denies any caller whose mTLS
+# client certificate identity is not in that list, independent of HTTP
+# headers (closes the residual risk security-posture.md Section 8 accepted).
+#
+# Gated by `.Values.meshPolicy.enabled` (default true for the 10 domain
+# services + config-server/discovery-server; false for api-gateway - see the
+# values.yaml `meshPolicy` comment for why the gateway's Server is left
+# without a restricting policy: its real caller, the Kind ingress-nginx
+# controller, runs un-meshed in its own namespace and has no mesh identity to
+# present).
+{{- if .Values.meshPolicy.enabled }}
+apiVersion: policy.linkerd.io/v1alpha1
+kind: AuthorizationPolicy
+metadata:
+  name: {{ include "telco-service.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  targetRef:
+    group: policy.linkerd.io
+    kind: Server
+    name: {{ include "telco-service.fullname" . }}
+  requiredAuthenticationRefs:
+    - group: policy.linkerd.io
+      kind: MeshTLSAuthentication
+      name: {{ include "telco-service.fullname" . }}-authn
+{{- end }}

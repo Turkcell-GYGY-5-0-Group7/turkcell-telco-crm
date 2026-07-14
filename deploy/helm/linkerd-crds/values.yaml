@@ -1,0 +1,7 @@
+# telco-linkerd-crds values (Feature 19.1.1, ADR-026). This chart only
+# installs Linkerd's CRDs; there is nothing telco-specific to override, so
+# this file intentionally tracks the vendored `linkerd-crds` chart's own
+# defaults untouched. Kept as an explicit file (rather than omitted) to match
+# the `deploy/helm/vault/` / `deploy/helm/csi-driver/` convention of every
+# vendored chart carrying its own `values.yaml`, even a near-empty one.
+linkerd-crds: {}

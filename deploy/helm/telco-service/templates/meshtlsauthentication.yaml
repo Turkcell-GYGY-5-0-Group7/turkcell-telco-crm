@@ -1,0 +1,23 @@
+# Feature 19.3.2 (ADR-026 Section 2, Layer 1). Names the set of mesh
+# identities allowed to call this service, expanded from
+# `.Values.meshPolicy.authorizedClients` (each entry is another
+# telco-service release's `serviceName`) to the
+# "<name>.telco.serviceaccount.identity.linkerd.cluster.local" mesh identity
+# format Linkerd's Identity component issues per-ServiceAccount - confirmed
+# live via `linkerd identity <pod>` against a real running api-gateway pod
+# (see this sprint's README 19.3 verification record for the exact output).
+# Referenced by templates/authorizationpolicy.yaml's requiredAuthenticationRefs.
+{{- if .Values.meshPolicy.enabled }}
+apiVersion: policy.linkerd.io/v1alpha1
+kind: MeshTLSAuthentication
+metadata:
+  name: {{ include "telco-service.fullname" . }}-authn
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  identities:
+    {{- range .Values.meshPolicy.authorizedClients }}
+    - {{ printf "%s.telco.serviceaccount.identity.linkerd.cluster.local" . | quote }}
+    {{- end }}
+{{- end }}
