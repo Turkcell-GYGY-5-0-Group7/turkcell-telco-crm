@@ -27,6 +27,32 @@ ingress:
   path: /
   pathType: Prefix
 
+# Feature 19.3 (ADR-026 Section 2). No restricting AuthorizationPolicy: the
+# gateway's real caller is ingress-nginx, which runs un-meshed in its own
+# namespace and has no mesh identity to present (see
+# deploy/helm/telco-service/values.yaml's `meshPolicy` comment). A `Server`
+# is still rendered (templates/server.yaml has no such gate) so
+# `kubectl -n telco get server` lists one object per service, api-gateway
+# included - it just has no AuthorizationPolicy attached, which is Linkerd's
+# documented "default inbound policy applies" behavior, not a gap.
+meshPolicy:
+  enabled: false
+
+# Feature 19.4.2 (ADR-026 Section 3). api-gateway's real ingress source is the
+# Kind ingress-nginx controller, not another telco-service release, so it
+# cannot use `meshPolicy.authorizedClients` (see
+# deploy/helm/telco-service/values.yaml's `networkPolicy` comment and
+# templates/networkpolicy-ingress.yaml's header). `redis: true` (rate limit,
+# service-catalog.md Section 5) and `keycloak: true` (JWT JWKS validation -
+# the gateway is a Spring Security OAuth2 resource server, see
+# microservices/configs/api-gateway/application.yml's `jwks-uri`).
+networkPolicy:
+  useAuthorizedClientsForIngress: false
+  externalIngress: true
+  egress:
+    redis: true
+    keycloak: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

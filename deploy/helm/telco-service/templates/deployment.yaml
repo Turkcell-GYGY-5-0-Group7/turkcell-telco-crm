@@ -38,6 +38,18 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
     spec:
+      # Disabled for the same reason as deploy/helm/dependencies/templates/schema-registry.yaml
+      # (fix from #20): Kubernetes auto-injects a SERVICE_HOST/SERVICE_PORT-shaped env var for
+      # every Service visible to the pod's namespace (enableServiceLinks defaults to true), e.g.
+      # REDIS_PORT=tcp://10.96.x.x:6379 for a Service named "redis". That collides with this
+      # platform's own REDIS_PORT=6379 (plain int) convention baked into config-server's
+      # per-service application.yml, and Spring Boot's relaxed binding picks whichever env var
+      # wins non-deterministically - when the K8s-injected one wins, numeric properties like
+      # spring.data.redis.port fail to bind ("tcp://10.96.x.x:6379" is not an int). Live-verified
+      # (19.2.1 in-cluster deploy): api-gateway crash-looped with exactly this NumberFormatException
+      # until this was set. None of the 13 services need Kubernetes service-link env vars (service
+      # discovery is via Eureka/DNS, not env vars), so this is off for all of them, not per-service.
+      enableServiceLinks: false
       serviceAccountName: {{ include "telco-service.serviceAccountName" . }}
       {{- if .Values.vault.enabled }}
       volumes:

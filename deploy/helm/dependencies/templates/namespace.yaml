@@ -6,4 +6,8 @@ metadata:
   labels:
     {{- include "telco-deps.labels" . | nindent 4 }}
     app.kubernetes.io/name: {{ .Values.namespace }}
+  {{- if .Values.linkerdInject }}
+  annotations:
+    linkerd.io/inject: enabled
+  {{- end }}
 {{- end }}

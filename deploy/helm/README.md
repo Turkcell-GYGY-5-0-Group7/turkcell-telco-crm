@@ -23,6 +23,20 @@ deploy/helm/
                          # (`vault.csi.enabled`, see vault/values.yaml) rather
                          # than as a second chart here - see
                          # deploy/helm/csi-driver/Chart.yaml for why.
+  linkerd-crds/           # Linkerd CRDs (19.1.1, ADR-026): wraps the official
+                         # `linkerd-crds` chart, installed before the control
+                         # plane per Linkerd's own two-chart install model.
+  linkerd-control-plane/  # Linkerd control plane (19.1.1, ADR-026): wraps the
+                         # official `linkerd-control-plane` chart -
+                         # linkerd-identity (mTLS workload identity, Linkerd's
+                         # self-managed trust anchor, NOT cert-manager/Vault
+                         # PKI), linkerd-destination, linkerd-proxy-injector
+                         # (automatic sidecar injection). Installs into its
+                         # own `linkerd` namespace, not `telco`.
+                         # `generate-trust-anchor.sh` in this directory
+                         # produces the root CA / issuer cert at install time
+                         # - never committed, same handling as Vault's unseal
+                         # keys (deploy/RUNBOOK.md Section 3).
   telco-service/         # ONE reusable chart that renders a single Spring Boot service
   values/                # one values file per service (13 files)
   README.md              # this file
@@ -54,10 +68,29 @@ profile is required - there is no in-cluster config delta over `docker`.
 ## Install order
 
 ```sh
-# 1. Dependencies (creates the `telco` namespace + all stateful backends).
+# 1. Dependencies (creates the `telco` namespace, annotated
+#    `linkerd.io/inject: enabled` per 19.1.2/ADR-026 - see `linkerdInject` in
+#    deploy/helm/dependencies/values.yaml - plus all stateful backends).
 helm install telco-deps deploy/helm/dependencies --namespace telco --create-namespace
 
-# 2. Vault (18.1, ADR-025) - the platform's secret store. Installed alongside
+# 2. Linkerd (19.1.1, ADR-026 Section 1) - the service mesh control plane,
+#    installed into its own `linkerd` namespace (NOT `telco`), CRDs first per
+#    Linkerd's official two-chart model. Self-managed trust anchor (no
+#    cert-manager, no Vault PKI) - generate the root CA/issuer cert with
+#    generate-trust-anchor.sh, never committed.
+kubectl create namespace linkerd --dry-run=client -o yaml | kubectl apply -f -
+helm dependency update deploy/helm/linkerd-crds
+helm install linkerd-crds deploy/helm/linkerd-crds -n linkerd
+helm dependency update deploy/helm/linkerd-control-plane
+bash deploy/helm/linkerd-control-plane/generate-trust-anchor.sh /tmp/linkerd-trust
+helm install linkerd-control-plane deploy/helm/linkerd-control-plane -n linkerd \
+  --set-file linkerd-control-plane.identityTrustAnchorsPEM=/tmp/linkerd-trust/ca.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=/tmp/linkerd-trust/issuer.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=/tmp/linkerd-trust/issuer.key
+kubectl -n linkerd wait --for=condition=ready pod --all --timeout=180s
+linkerd check   # all control-plane checks must be green before proceeding
+
+# 3. Vault (18.1, ADR-025) - the platform's secret store. Installed alongside
 #    the dependencies, ahead of any service that will eventually consume
 #    Vault-sourced secrets. `vault.csi.enabled: true` (18.3) also deploys the
 #    Vault CSI provider DaemonSet as part of this same release - see
@@ -74,10 +107,10 @@ kubectl -n telco wait --for=condition=Initialized pod -l app.kubernetes.io/name=
 # per-service policy bootstrap (deploy/helm/vault/bootstrap-k8s-auth.sh, 18.2)
 # before any service is expected to authenticate to Vault.
 
-# 3. Secrets Store CSI Driver (18.3, ADR-025 Section 1) - the runtime
+# 4. Secrets Store CSI Driver (18.3, ADR-025 Section 1) - the runtime
 #    component that performs the SecretProviderClass -> Kubernetes Secret
 #    sync (18.3.2/18.3.3). Installed after Vault (its CSI provider half is
-#    already up via step 2), before any service release that sets
+#    already up via step 3), before any service release that sets
 #    vault.enabled=true.
 helm dependency update deploy/helm/csi-driver
 helm install csi-driver deploy/helm/csi-driver -n telco
@@ -85,12 +118,14 @@ kubectl -n telco rollout status daemonset/csi-driver-secrets-store-csi-driver --
 kubectl -n telco rollout status daemonset/vault-csi-provider --timeout=180s
 kubectl get csidriver secrets-store.csi.k8s.io
 
-# 4. Infra services first (config-server before the rest so they can bootstrap).
+# 5. Infra services first (config-server before the rest so they can bootstrap).
+#    Each pod is automatically proxy-injected (2 containers: app + linkerd-proxy)
+#    because of step 1's namespace annotation - no chart change needed here.
 helm install config-server    deploy/helm/telco-service -n telco -f deploy/helm/values/config-server.yaml    --set image.owner=<OWNER>
 helm install discovery-server deploy/helm/telco-service -n telco -f deploy/helm/values/discovery-server.yaml --set image.owner=<OWNER>
 helm install api-gateway      deploy/helm/telco-service -n telco -f deploy/helm/values/api-gateway.yaml      --set image.owner=<OWNER>
 
-# 5. Domain services.
+# 6. Domain services.
 for s in identity-service customer-service product-catalog-service order-service \
          subscription-service usage-service billing-service payment-service \
          notification-service ticket-service; do
@@ -264,4 +299,21 @@ done
 
 helm lint deploy/helm/csi-driver
 helm template csi-driver deploy/helm/csi-driver -n telco
+
+# Linkerd (19.1.1): linkerd-crds needs no special values. linkerd-control-plane
+# requires a real (locally-generated, not committed) trust anchor/issuer cert
+# for helm template/lint to render the identity secret meaningfully - generate
+# a throwaway one for local validation only.
+helm lint deploy/helm/linkerd-crds
+helm template linkerd-crds deploy/helm/linkerd-crds -n linkerd
+
+bash deploy/helm/linkerd-control-plane/generate-trust-anchor.sh /tmp/linkerd-trust-validate
+helm lint deploy/helm/linkerd-control-plane \
+  --set-file linkerd-control-plane.identityTrustAnchorsPEM=/tmp/linkerd-trust-validate/ca.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=/tmp/linkerd-trust-validate/issuer.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=/tmp/linkerd-trust-validate/issuer.key
+helm template linkerd-control-plane deploy/helm/linkerd-control-plane -n linkerd \
+  --set-file linkerd-control-plane.identityTrustAnchorsPEM=/tmp/linkerd-trust-validate/ca.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=/tmp/linkerd-trust-validate/issuer.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=/tmp/linkerd-trust-validate/issuer.key
 ```

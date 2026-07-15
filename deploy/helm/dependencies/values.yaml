@@ -16,6 +16,31 @@ namespace: telco
 # false if the namespace is provisioned externally (e.g. by a parent umbrella).
 createNamespace: true
 
+# Annotate the namespace for automatic Linkerd sidecar injection (Feature
+# 19.1.2, ADR-026 Section 1): every pod scheduled into `namespace` gets an
+# `app` + `linkerd-proxy` container from linkerd-proxy-injector, with zero
+# per-service chart change (deploy/helm/telco-service/ is untouched). Requires
+# deploy/helm/linkerd-control-plane/ (19.1.1) to already be installed - the
+# annotation alone is inert without linkerd-proxy-injector's webhook running.
+# Only takes effect on namespace CREATE (Kubernetes does not retroactively
+# inject already-running pods) - existing pods need a rollout restart after
+# this is applied to pick up the sidecar, same as any other namespace-level
+# annotation change.
+linkerdInject: true
+
+# Default-deny NetworkPolicy baseline + universal CoreDNS egress allow
+# (Feature 19.4.1, ADR-026 Section 3). See
+# templates/networkpolicy-default-deny.yaml for the full rationale, in
+# particular why this chart (not deploy/helm/telco-service/) owns the
+# namespace-wide `podSelector: {}` baseline. Companion per-service allow
+# rules live in deploy/helm/telco-service/templates/networkpolicy-ingress.yaml
+# and networkpolicy-egress.yaml, gated by that chart's own
+# `networkPolicy.enabled` (deploy/helm/telco-service/values.yaml) - keep both
+# flags in sync (both default true) or the baseline and the allow rules can
+# end up applied inconsistently across the two charts.
+networkPolicy:
+  enabled: true
+
 # Default StorageClass for PVCs (empty string = cluster default, which Kind provides
 # via the local-path provisioner). Override per-dependency below if needed.
 storageClass: ""

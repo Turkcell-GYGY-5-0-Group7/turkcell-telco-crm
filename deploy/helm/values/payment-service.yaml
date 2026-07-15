@@ -9,6 +9,19 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Redis (idempotency keys, Section
+# 5 - granted even though the dev/k8s profile does not yet wire a
+# REDIS_HOST, same rationale as usage-service.yaml's identical note),
+# Keycloak (JWKS validation), Kafka (produces payment.*, consumes order.*,
+# event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

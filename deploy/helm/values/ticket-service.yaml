@@ -7,6 +7,16 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Keycloak (JWKS validation), Kafka
+# (produces ticket.*, consumes invoice.overdue.v1, event-catalog.md
+# Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config

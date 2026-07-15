@@ -50,15 +50,45 @@ kubectl -n kube-system patch deployment metrics-server --type=json \
   -p='[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
 kubectl -n kube-system rollout status deploy/metrics-server --timeout=120s
 
-# 2.4 Vault (18.1, ADR-025) - singleton secret store, installed alongside the
+# 2.4 Linkerd (19.1.1, ADR-026 Section 1) - the service mesh control plane.
+#     Installed here, before Vault/dependencies/any service, so that the
+#     FIRST pod ever created in `telco` is already meshed - avoiding exactly
+#     the "rollout ordering risk" ADR-026's Consequences section calls out
+#     (a pod created before the mesh/annotation exists starts unmeshed and
+#     must be restarted later to pick up the sidecar). Two charts, CRDs
+#     first, per Linkerd's official install model; installs into its own
+#     `linkerd` namespace, not `telco`. Self-managed trust anchor (ADR-026
+#     Section 4) - NOT cert-manager, NOT Vault's PKI: generate the root
+#     CA/issuer cert locally and NEVER commit it (same handling as Vault's
+#     unseal keys/root token, Section 3 below).
+#     The `telco` namespace is created AND annotated here (idempotent)
+#     rather than waiting for Section 5.1's dependency-chart install, since
+#     Vault (2.5) needs the namespace to exist first and every pod created
+#     into it from this point on should be meshed.
+kubectl create namespace telco --dry-run=client -o yaml | kubectl apply -f -
+kubectl annotate namespace telco linkerd.io/inject=enabled --overwrite
+kubectl create namespace linkerd --dry-run=client -o yaml | kubectl apply -f -
+helm dependency update deploy/helm/linkerd-crds
+helm install linkerd-crds deploy/helm/linkerd-crds -n linkerd
+helm dependency update deploy/helm/linkerd-control-plane
+bash deploy/helm/linkerd-control-plane/generate-trust-anchor.sh /tmp/linkerd-trust
+helm install linkerd-control-plane deploy/helm/linkerd-control-plane -n linkerd \
+  --set-file linkerd-control-plane.identityTrustAnchorsPEM=/tmp/linkerd-trust/ca.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.crtPEM=/tmp/linkerd-trust/issuer.crt \
+  --set-file linkerd-control-plane.identity.issuer.tls.keyPEM=/tmp/linkerd-trust/issuer.key
+kubectl -n linkerd wait --for=condition=ready pod --all --timeout=180s
+linkerd check   # every control-plane check must be green before proceeding
+
+# 2.5 Vault (18.1, ADR-025) - singleton secret store, installed alongside the
 #     dependency stack (Section 5.1) and waited on here, ahead of any service
 #     install, the same way ingress-nginx/metrics-server are waited on above.
 #     `vault.csi.enabled: true` (18.3) also deploys the Vault CSI provider
-#     DaemonSet as part of this release - waited on in step 2.5 below, after
-#     the CSI driver it registers against is installed.
-#     The `telco` namespace is created here (idempotent) rather than waiting
-#     for Section 5.1's dependency-chart install, since Vault needs it first.
-kubectl create namespace telco --dry-run=client -o yaml | kubectl apply -f -
+#     DaemonSet as part of this release - waited on in step 2.6 below, after
+#     the CSI driver it registers against is installed. Because the `telco`
+#     namespace was already annotated in 2.4, the Vault pod itself comes up
+#     meshed (2 containers) - confirm with
+#     `kubectl -n telco get pod -l app.kubernetes.io/name=vault` if you want
+#     to see it; this does not change any Vault procedure below.
 helm dependency update deploy/helm/vault
 helm install vault deploy/helm/vault -n telco
 # NOTE: `kubectl rollout status statefulset/vault` does NOT work here - the
@@ -71,7 +101,7 @@ helm install vault deploy/helm/vault -n telco
 # is what actually confirms the container started and is live-verified.
 kubectl -n telco wait --for=condition=Initialized pod -l app.kubernetes.io/name=vault --timeout=180s
 
-# 2.5 Secrets Store CSI Driver + Vault CSI provider (18.3, ADR-025 Section 1) -
+# 2.6 Secrets Store CSI Driver + Vault CSI provider (18.3, ADR-025 Section 1) -
 #     the runtime component that syncs each service's SecretProviderClass
 #     (18.3.2) into a native Kubernetes Secret. Installed ahead of any service
 #     release that sets vault.enabled=true. Both driver and provider are
@@ -96,7 +126,7 @@ real metrics-server, and point a DNS name at the ingress instead of `telco.local
 
 ## 3. Vault initialization and unseal
 
-Task 18.1.2 (ADR-025 Section 1). A freshly-installed Vault pod (Section 2.4) is
+Task 18.1.2 (ADR-025 Section 1). A freshly-installed Vault pod (Section 2.5) is
 running but **sealed** - it holds no usable key material until an operator runs
 this one-time procedure. This is a manual, Shamir-sealed, single-node
 procedure by design: ADR-025 Section 1 accepts "a single-node Vault with
@@ -204,9 +234,15 @@ by this feature (out of `deploy/` scope) and should be updated by the
 
 ```sh
 # 5.1.1 Dependency stack (all stateful backends). The `telco` namespace was
-# already created in Section 2.4 (ahead of the Vault install); the create here
-# is idempotent in case Section 2.4 was skipped. Give it a long timeout: images
-# are large on first pull and it has a MinIO bucket-create post-install hook.
+# already created AND annotated `linkerd.io/inject: enabled` in Section 2.4
+# (ahead of the Vault install, 19.1.2/ADR-026); the create here is idempotent
+# in case Section 2.4 was skipped, and does not remove the annotation
+# (verified live - a `kubectl annotate`-added annotation survives a later
+# `kubectl create ns --dry-run=client -o yaml | kubectl apply -f -` because
+# apply's three-way merge only reconciles fields present in
+# `last-applied-configuration`, which this bare create/apply never sets for
+# annotations added out-of-band). Give it a long timeout: images are large on
+# first pull and it has a MinIO bucket-create post-install hook.
 kubectl create namespace telco --dry-run=client -o yaml | kubectl apply -f -
 helm install telco-deps deploy/helm/dependencies -n telco --set createNamespace=false --timeout 20m
 
@@ -228,6 +264,26 @@ for s in identity-service customer-service product-catalog-service order-service
   helm upgrade --install "$s" deploy/helm/telco-service -n telco -f "deploy/helm/values/$s.yaml" --set image.owner=$OWNER --set image.tag=$TAG
 done
 ```
+
+### 5.1.3 Mesh verification (19.1, ADR-026)
+
+Every pod above came up meshed automatically (2 containers: the service's own
++ `linkerd-proxy`) because of the `telco` namespace annotation applied in
+Section 2.4 - no per-service chart change. Confirm:
+
+```sh
+kubectl -n telco get pod -l app.kubernetes.io/name=api-gateway \
+  -o jsonpath='{.items[0].spec.containers[*].name}'
+# -> api-gateway linkerd-proxy   (2 containers)
+
+linkerd check --proxy   # data-plane checks green, incl. "data plane proxies certificate match CA"
+```
+
+Per-service `Server`/`AuthorizationPolicy` restricting inbound traffic to
+meshed+authenticated callers, and the default-deny `NetworkPolicy` compensating
+control, are Features 19.2-19.4 (not this feature) - `linkerd check --proxy`
+above only confirms the mesh/mTLS layer itself is healthy, not that
+authorization policies are yet in place.
 
 ### 5.2 Local Kind: use locally-built images
 
@@ -342,6 +398,8 @@ kubectl -n telco port-forward svc/prometheus 9090:9090   # metrics + alerts
 ```sh
 helm -n telco list -q | xargs -r -n1 helm -n telco uninstall   # remove all releases
 helm -n telco uninstall telco-deps                             # remove dependencies
+helm -n linkerd uninstall linkerd-control-plane                # remove Linkerd control plane (19.1)
+helm -n linkerd uninstall linkerd-crds                         # remove Linkerd CRDs
 kind delete cluster --name telco                               # destroy the cluster
 ```
 
@@ -366,6 +424,15 @@ deployment-artifact defects:
    full-stack deploy at a per-commit sha would `ImagePullBackOff` unchanged
    services - use the `deploy.yml` `workflow_dispatch` `image_tag=latest` override
    (or a platform/config/reactor-pom change, which rebuilds all 13).
+5. **`linkerd-viz` deferred, not shipped by 19.1**: `linkerd check` and
+   `linkerd check --proxy` (both CLI-only, no extra in-cluster component) are
+   sufficient to prove control-plane health and mTLS identity for this
+   feature's scope. `linkerd-viz` (its own Prometheus + web dashboard +
+   `linkerd viz stat`) is deliberately left for whichever of 19.2/19.5 first
+   needs live per-service traffic metrics (e.g. proving an unauthorized-caller
+   request is actually rejected, not just that certs match) - installing a
+   second Prometheus alongside the `dependencies` chart's existing one without
+   a concrete consumer yet would be premature for this feature.
 
 ---
 
@@ -385,7 +452,7 @@ inline here for reference.
 Vault's own `ServiceAccount` (`vault`, in the `telco` namespace) is granted
 the `system:auth-delegator` `ClusterRole` by
 [`deploy/helm/vault/templates/auth-delegator-clusterrolebinding.yaml`](helm/vault/templates/auth-delegator-clusterrolebinding.yaml)
-(installed automatically as part of the `vault` Helm release, Section 2.4) -
+(installed automatically as part of the `vault` Helm release, Section 2.5) -
 this lets Vault call the Kubernetes TokenReview API to validate the JWTs
 other pods present when they log in. Run the config write from inside the
 Vault pod itself: its own projected `ServiceAccount` token/CA (standard

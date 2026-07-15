@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
-# Registers every connector JSON in ./connectors with the local Kafka Connect (Debezium) instance.
-# Usage: ./register-connectors.sh [connect-url]   (default http://localhost:8083)
+# Registers connector JSONs from ./connectors with the local Kafka Connect (Debezium) instance.
+#
+# Usage: ./register-connectors.sh [connect-url] [service ...]
+#   connect-url  default http://localhost:8083
+#   service ...  optional subset of services to register (e.g. customer order billing).
+#                With no services given, every connector is registered.
+#
+# WHY a subset matters: a connector can only be registered once its service's outbox_event
+# table exists, and that table is created by the service's own Flyway migration at startup.
+# When you bring up only part of the stack (see the Sprint 16 E2E subset in compose.yml),
+# the services you did not start have no outbox_event table, so registering their connectors
+# fails and - under `set -e` - would abort this whole script. Pass the services you started.
+#
 # Files ending in .example.json are skipped; copy them to <service>-outbox-connector.json first.
 #
 # Pre-creates each Postgres PUBLICATION (idempotently) as the target database's own
@@ -17,9 +28,32 @@
 set -euo pipefail
 
 CONNECT_URL="${1:-http://localhost:8083}"
+shift || true
+SELECTED=("$@")   # optional service names; empty means "all connectors"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-telco-postgres}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONNECTORS_DIR="${SCRIPT_DIR}/connectors"
+
+# True when no subset was requested, or when <service>-outbox-connector.json was requested.
+# Matches on the service prefix, so `customer` selects customer-outbox-connector.json.
+is_selected() {
+  local file_base="$1"
+  [[ "${#SELECTED[@]}" -eq 0 ]] && return 0
+  local svc
+  for svc in "${SELECTED[@]}"; do
+    [[ "${file_base}" == "${svc}-outbox-connector" ]] && return 0
+  done
+  return 1
+}
+
+# Resolve a Python interpreter. It is `python3` on Linux/macOS and in CI, but the
+# Windows python.org installer only ships `python` - and Git Bash finds no `python3`,
+# so hardcoding `python3` breaks this script on a Windows dev machine.
+PYTHON="$(command -v python3 || command -v python || true)"
+if [[ -z "${PYTHON}" ]]; then
+  echo "No python3/python on PATH; needed to parse the connector JSON files." >&2
+  exit 1
+fi
 
 echo "Waiting for Kafka Connect at ${CONNECT_URL} ..."
 until curl -fsS "${CONNECT_URL}/connectors" >/dev/null 2>&1; do
@@ -29,7 +63,7 @@ done
 # Extracts a single string field from a connector JSON's "config" object without
 # requiring jq (not guaranteed to be installed on every dev machine / CI runner).
 json_config_field() {
-  python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['config'].get(sys.argv[2], ''))" "$1" "$2"
+  "${PYTHON}" -c "import json,sys; print(json.load(open(sys.argv[1]))['config'].get(sys.argv[2], ''))" "$1" "$2"
 }
 
 # PUT /connectors/<name>/config expects the bare config object (no {"name","config"}
@@ -38,7 +72,7 @@ json_config_field() {
 # this bare form or Kafka Connect returns a 500 trying to deserialize the wrapper as
 # a single string-valued config entry.
 json_config_only() {
-  python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['config']))" "$1"
+  "${PYTHON}" -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1]))['config']))" "$1"
 }
 
 ensure_publication() {
@@ -60,8 +94,13 @@ for file in "${CONNECTORS_DIR}"/*.json; do
   case "${file}" in
     *.example.json) continue ;;
   esac
-  found=1
   name="$(basename "${file}")"
+
+  if ! is_selected "$(basename "${file}" .json)"; then
+    echo "Skipping ${name} (not in the requested subset)."
+    continue
+  fi
+  found=1
 
   dbname="$(json_config_field "${file}" database.dbname)"
   pubname="$(json_config_field "${file}" publication.name)"
@@ -80,6 +119,10 @@ for file in "${CONNECTORS_DIR}"/*.json; do
 done
 
 if [[ "${found}" -eq 0 ]]; then
+  if [[ "${#SELECTED[@]}" -gt 0 ]]; then
+    echo "No connector matched the requested subset: ${SELECTED[*]}" >&2
+    exit 1
+  fi
   echo "No connector files found (only *.example.json). Copy an example and edit it first."
 fi
 

@@ -193,3 +193,94 @@ autoscaling:
 pdb:
   enabled: true
   minAvailable: 1
+
+# Linkerd Server/AuthorizationPolicy (Feature 19.3, ADR-026 Section 2 Layer 1).
+# `enabled: true` (this default) renders templates/server.yaml (always, see
+# that template) PLUS templates/authorizationpolicy.yaml +
+# templates/meshtlsauthentication.yaml, restricting this service's app-port
+# Server to accept inbound only from the mesh identities listed in
+# `authorizedClients`. Each entry is another telco-service release's
+# `serviceName`, expanded to
+# "<name>.telco.serviceaccount.identity.linkerd.cluster.local" - the
+# ServiceAccount-bound mesh identity Linkerd's Identity component issues per
+# pod (confirmed live via `linkerd identity <pod>` against a running
+# api-gateway pod, see docs/tasks/sprint-19-service-mesh-mtls/README.md's
+# 19.3 verification record for the exact output).
+#
+# The default below (api-gateway only) is correct for most of the 10 domain
+# services, whose only synchronous HTTP caller is api-gateway (ADR-005
+# Section 2: internal sync calls are the minority, Kafka is primary). Three
+# domain services have a REAL additional non-gateway synchronous caller,
+# confirmed by reading each `RestClient`-based client class under
+# microservices/<service>/.../infrastructure/client/, and are overridden in
+# their own deploy/helm/values/<service>.yaml:
+#   - product-catalog-service: also called directly by order-service
+#     (ProductCatalogServiceClient), billing-service
+#     (ProductCatalogBillingClient), and usage-service (ProductCatalogClient) -
+#     all hit its tokenless GET /internal/tariffs/** endpoints.
+#   - customer-service: also called directly by order-service
+#     (CustomerServiceClient) -> tokenless GET /internal/customers/{id}.
+#   - order-service: also called directly by subscription-service
+#     (OrderServiceClient) -> tokenless GET /internal/orders/{id}, the
+#     payment.completed.v1 activation path's one synchronous hop.
+# config-server and discovery-server override `authorizedClients` to all 13
+# service names (their actual caller set - every service fetches config /
+# registers on startup), not narrowed to the gateway alone.
+#
+# api-gateway itself sets `enabled: false` (deploy/helm/values/api-gateway.yaml):
+# its real caller is the Kind ingress-nginx controller, which runs in its own
+# un-annotated `ingress-nginx` namespace (RUNBOOK Section 2.2) and is NOT
+# mesh-injected, so it has no mesh identity to present - an AuthorizationPolicy
+# requiring MeshTLS authentication on api-gateway's Server would reject the
+# gateway's only real caller. templates/server.yaml still renders a Server for
+# api-gateway (19.3.1's "one Server per service" AC), just with no
+# AuthorizationPolicy attached - Linkerd's documented behavior for a Server
+# with no attached AuthorizationPolicy is the cluster's default inbound
+# policy (all-authenticated-or-unauthenticated allowed), not deny-all.
+meshPolicy:
+  enabled: true
+  authorizedClients:
+    - api-gateway
+
+# Kubernetes NetworkPolicy per-service allow rules (Feature 19.4.2/19.4.3,
+# ADR-026 Section 3). Compensating control for pods that are not (yet) meshed
+# - see deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml for
+# the default-deny baseline this restores traffic on top of.
+#
+# Ingress (19.4.2): by default (`useAuthorizedClientsForIngress: true`) the
+# ingress template (templates/networkpolicy-ingress.yaml) allows the exact
+# same source set as `meshPolicy.authorizedClients` above - deliberately
+# reusing that list rather than inventing a parallel one, so the network-layer
+# control and the mesh-layer control can never silently drift apart and
+# contradict each other for the common case (an edge added to one but not the
+# other would either break legitimate traffic or leave a gap). Only
+# api-gateway overrides this: its real caller is the Kind ingress-nginx
+# controller (deploy/RUNBOOK.md Section 2.2), which is not itself a
+# telco-service release and cannot be expressed as an `authorizedClients`
+# entry - deploy/helm/values/api-gateway.yaml sets
+# `useAuthorizedClientsForIngress: false` and `externalIngress: true` instead.
+#
+# Egress (19.4.3): `egress.*` are per-infra-dependency flags, all false here
+# by default (the chart default declares no infra dependency - every real one
+# is set true per service in deploy/helm/values/<service>.yaml, derived from
+# docs/architecture/service-catalog.md Section 5's Infrastructure Profile
+# table and docs/architecture/event-catalog.md's producer/consumer roster for
+# the `kafka` flag). Egress to config-server/discovery-server (the mirror of
+# the universal ingress rule) is NOT a flag here - it is rendered
+# unconditionally per release by templates/networkpolicy-egress.yaml (except
+# for config-server/discovery-server's own releases, which do not call
+# themselves/each other the same way - see that template's header comment).
+networkPolicy:
+  enabled: true
+  useAuthorizedClientsForIngress: true
+  # Only consulted when useAuthorizedClientsForIngress is false.
+  ingressFrom: []
+  # Only true for api-gateway.
+  externalIngress: false
+  egress:
+    postgres: false
+    redis: false
+    kafka: false
+    minio: false
+    mongo: false
+    keycloak: false

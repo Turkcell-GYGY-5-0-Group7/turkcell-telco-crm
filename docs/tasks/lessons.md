@@ -505,6 +505,96 @@ Format:
   tick interval, so the first real tick still happens on a predictable cadence) rather than relying
   on the implicit near-zero default.
 
+## 2026-07-13 - verify a "phantom config" claim before reverting a deliberate prior-sprint change
+- Mistake: a Sprint 19 devops agent doing live HPA re-verification found 10 services' Helm values set
+  `SPRING_PROFILES_ACTIVE: dev,k8s` and concluded the `k8s` profile was a no-op ("no
+  `application-k8s.yml` exists") and silently flipped all 10 back to `dev,docker`. This was factually
+  wrong - `microservices/configs/<service>/application-k8s.yml` exists for all 10 services, added
+  deliberately in Sprint 18 Feature 18.5 specifically so DB credentials come from Vault-sourced env
+  vars instead of the `docker` profile's hardcoded plaintext DB block (ADR-025). The change would have
+  silently reintroduced plaintext DB credentials in-cluster. Caught only because the values files each
+  carry an explicit `# Feature 18.5: moved off dev,docker (plaintext...) to dev,k8s` comment that
+  directly contradicted the agent's own claim - the agent's summary did not mention or reconcile that
+  comment before editing.
+- Rule: before reverting or "fixing" a config value that looks wrong, check for a comment or prior
+  sprint's STATUS.md entry explaining why it is the way it is, and if one exists and contradicts your
+  finding, resolve the contradiction explicitly (verify the file really doesn't exist, e.g. `find`/`ls`
+  the exact path, not just "profile loaded blank in my test run") before changing it - a mismatch
+  between observed behavior and a deliberate, documented decision is more likely a test-environment gap
+  (e.g. Vault/CSI secrets not wired into this particular verification's cluster) than a stale artifact.
+  Cross-check any multi-file mechanical revert like this against `git log -p`/blame on one representative
+  file before applying it to all N.
+
+## 2026-07-13 - a fully green offline suite shipped a web channel that could not work at all; only a real stack, and then a real human in a real browser, found it
+
+Sprint 16 (web frontend + web-bff) was committed and pushed as "DONE (features)" with EVERY offline gate
+green: web-bff 25 tests / JaCoCo 93.4%, frontend 90 vitest tests, svelte-check/lint/build clean, an
+actionlint-clean CI job, a qa exit-gate that PASSED, and a code-review pass. Then the local Docker Compose
+stack was stood up and the flow was actually exercised. It found **eleven real defects**, several of which
+made the shipped product **completely non-functional in a browser**. The pushed commit (d8422f5) contains
+that broken code. The tests were not weak; they were structurally incapable of catching this.
+
+- **The root cause of the whole class: both sides of a contract were tested against their own mock.**
+  The frontend's tests mock `fetch`; web-bff's tests mock the gateway with `MockRestServiceServer`. Each
+  side therefore proved only that it is self-consistent with *its own belief* about the contract. The
+  frontend sent `tariffId`/`addonIds` and `customer{fullName,email,phoneNumber}`; the BFF required
+  `tariffCode`/`addonCodes` and `CustomerRegistration{type,firstName,lastName,identityNumber,dateOfBirth}`.
+  Both suites were green. The wizard could never have worked. **A mismatch BETWEEN two independently-mocked
+  layers is invisible to any number of tests on either side.** The historical cause is ordering: the client
+  types were authored (16.2.2) by guessing from the contract doc *before* the real BFF DTOs existed
+  (16.4.1). A later task (16.5.2) found and fixed exactly this drift for the account/invoice types - and
+  nobody thought to check the onboarding types. Finding one instance of contract drift is evidence of a
+  systemic ordering problem, not a one-off; go look for its siblings.
+- **Consequence: never author a client's types from a prose contract document.** Derive them from the
+  server's actual DTOs (or generate them), and pin them with a test that asserts the wire body key-by-key
+  (`expect(body).not.toHaveProperty('tariffId')`), so drift fails loudly instead of silently.
+- **An API-level E2E is not a substitute for a browser.** After the stack was up, a curl-driven E2E proved
+  the entire backend chain: login, catalog, onboarding, the full saga (order FULFILLED, subscription
+  ACTIVE, MSISDN assigned), self-scoping, and a real invoice PDF. It still missed three defects that only a
+  human clicking through could reach:
+  - **Login was impossible.** The app requested `scope: 'openid profile email'` and Keycloak answered
+    "Invalid scopes". In Keycloak a client's **default** client scopes are applied automatically and are
+    **rejected if named explicitly**; only *optional* scopes may be requested. The curl E2E used the
+    password grant, which never touches the authorization endpoint - so it sailed straight past a bug that
+    made PKCE login flatly impossible.
+  - **The most common first-run state rendered as an error.** A newly signed-up user has no linked customer,
+    so the BFF correctly 403s the account reads; the dashboard showed a red "Could not load your dashboard
+    (HTTP 403)" instead of an onboarding call-to-action. Correct backend, broken product.
+  - **A phone photo broke onboarding.** The KYC upload had no size limit, so a typical 2-8 MB image blew
+    past Spring's *inherited* 1 MB multipart default and surfaced as a bare "Failed to fetch" - and the
+    customer had already been registered by then, leaving the user half-onboarded.
+- **"Inherited default" is not a decision.** The 1 MB multipart limit was never chosen; it was Spring's
+  default, silently load-bearing on the primary onboarding path. If a limit constrains a user-facing flow,
+  set it explicitly with a justification, and make the client's limit <= the server's so the user always
+  meets the friendliest bound first.
+- **Check the whole chain when a guard is "temporary".** Sprint 14 staff-gated
+  `GET /api/v1/customers/{id}` "as an interim measure until the linkage work resolves real ownership". The
+  linkage work later landed - but nobody went back and removed the gate, so Sprint 16's BFF composed
+  `/home` and `/account` from an endpoint that 403s the very owner of the record. An interim measure with
+  no owner and no expiry date becomes permanent, and the sprint that finally depends on it pays.
+- **A SpEL `==` between a `UUID` path variable and a `String` claim is silently always false** - a
+  deny-all that no compiler and no happy-path test would catch. Use `#id.toString() == ...customerId()`.
+  Any ownership check must be tested for the *positive* case, the *other-owner* case, AND the *unlinked*
+  (null claim) case; a null must never equal-match.
+- **The browser client called an ADMIN-only endpoint.** The wizard POSTed `/api/v1/payments`, which is
+  `@PreAuthorize("hasRole('ADMIN')")` and documented as a *manual override* - charges are event-driven off
+  `order.created.v1`. For a subscriber that is a 403; as an admin it is a **double charge**. The live run
+  showed the saga completing with no payment call at all. Read the endpoint's authorization and its javadoc
+  before wiring a client to it; "there is an endpoint for it" is not evidence you should call it.
+- **Polling that can never terminate looks exactly like polling that works.** `getOrderStatus` parsed a
+  flat object, but order-service returns the ADR-015 envelope `ApiResult<OrderResponse>` with the field
+  named `id`. `status` was therefore always `undefined`, so the wizard would have spun forever. Unwrap the
+  platform envelope in exactly one place, and assert the *terminal* state in a test, not just that a poll
+  was issued.
+- **Infrastructure lesson: measure the container ceiling, do not infer it from the host.** The full
+  23-container stack OOM-hung the Docker engine (API returning 500s until Docker Desktop was restarted).
+  The host had 15.7 GB, but containers run inside Docker Desktop's Linux VM, which was hard-capped at a
+  measured **7.61 GiB** (`docker info --format '{{.MemTotal}}'`). Worse, every JVM sized its heap from the
+  *host's* RAM, not from what Docker could spare, so each independently decided it could have multiple GB.
+  Cap every JVM heap explicitly in compose, and budget against the VM's measured ceiling. Also: a leftover
+  Kind cluster from a previous sprint had auto-restarted and was silently eating 3.3 GB (44%) of that
+  ceiling - check what is *already running* before blaming your own stack.
+
 ## 2026-07-13 - a silent `mvn install` success can still leave a broken jar behind (stale target/classes)
 - Mistake avoided (caught before it shipped, not a user correction): scaffolding `campaign-service`
   (Sprint 21 Feature 21.1) and live-starting it against a real (non-Testcontainers) Postgres +

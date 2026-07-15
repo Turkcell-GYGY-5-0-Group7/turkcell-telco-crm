@@ -113,7 +113,10 @@ public class GatewaySecurityConfig {
         // Explicit allowlist is mandatory; configure CORS_ALLOWED_ORIGINS in production.
         config.setAllowedOrigins(corsAllowedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id"));
+        // Idempotency-Key is a non-safelisted request header the web channel sends on POST writes
+        // (order + payment); it must be allowlisted or the cross-origin preflight blocks those flows.
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id",
+                "Idempotency-Key"));
         config.setExposedHeaders(List.of("X-Correlation-Id"));
         config.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
