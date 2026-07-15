@@ -1,0 +1,22 @@
+# product-catalog-service Kubernetes (in-cluster Helm) overrides, activated as
+# SPRING_PROFILES_ACTIVE=dev,k8s (Feature 18.5, ADR-025 Section 4). Replaces the `docker` profile for
+# in-cluster deployment: same in-cluster hostnames as application-docker.yml (kept, non-secret), but the
+# DB username/password are read from the pod environment (Vault-sourced via the CSI-synced Secret,
+# 18.5.1/18.5.3) instead of the committed `product_catalog`/`product_catalog` plaintext the `docker`
+# profile bakes in. Redis password was already environment-sourced in the docker profile
+# (${REDIS_PASSWORD:telco}, itself already Vault-sourced by 18.4) - unchanged here.
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/product_catalog_db
+    username: ${CATALOG_DB_USER}
+    password: ${CATALOG_DB_PASSWORD}
+  data:
+    redis:
+      host: redis
+      port: 6379
+      password: ${REDIS_PASSWORD:telco}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs

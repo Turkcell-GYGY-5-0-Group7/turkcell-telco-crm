@@ -14,6 +14,385 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
+Last updated: 2026-07-15 (Merged branch `feat/sprint16-web-frontend` into `master`, reconciling the
+Sprint 16 (Web Frontend) completion with the trunk's Sprint 17/18/19 progress. This entry only reconciles
+the two branches' status logs - no delivery status changed as a result of the merge itself. Combined
+delivery status is now: Sprint 16 (Web Frontend) **DONE (5/5)**, live end-to-end exit criterion MET
+(2026-07-13, a real human clicked the whole flow through a real browser against the live local Docker
+Compose stack); Sprint 17 (Distributed Locking) **DONE (5/5)**; Sprint 18 (Secret Management) **DONE
+(features, 5/5)** with its exit-criteria tail tracked (a pre-existing, Sprint-18-unrelated config-server
+multi-profile bug); Sprint 19 (Service Mesh and mTLS) **IN PROGRESS (2/5)**. Both branches' prior update
+chains are preserved verbatim below - the trunk's Sprint 19/17/18 chain first, then the Sprint 16
+completion chain. Prior updates below.)
+
+Last updated: 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
+verification complete, plus Feature 19.5's diff-only subtask, session continued from 19.1/19.2 (DONE,
+prior sessions, uncommitted). **19.3**: authored
+`deploy/helm/telco-service/templates/{server,authorizationpolicy,meshtlsauthentication}.yaml` (one
+Linkerd `Server` per service; `AuthorizationPolicy` + `MeshTLSAuthentication` restricting inbound to the
+`api-gateway` mesh identity by default, gated on `meshPolicy.enabled`) and per-service
+`deploy/helm/values/*.yaml` overrides: `api-gateway` (`meshPolicy.enabled: false` - its real caller,
+ingress-nginx, is unmeshed), `config-server`/`discovery-server` (`authorizedClients` widened to all 13
+services, their real caller set), and `customer-service`/`order-service`/`product-catalog-service`
+(widened for their one-to-three real non-gateway synchronous callers). An Explore-agent audit grepped
+every service for cross-service `RestTemplate`/`WebClient`/`RestClient` usage (no `@FeignClient` exists
+in this repo) and confirmed the three overrides account for all five real cross-service HTTP calls in
+the codebase - no missing override. 19.3.3's confirmatory audit confirmed `GatewaySecurityConfig`'s
+`/internal/**` edge-deny is untouched by this sprint (zero diff under `microservices/api-gateway/`) and
+structurally cannot be bypassed by the new mesh policies (mTLS-identity layer, no HTTP-path matching).
+**19.4**: a devops agent authored the default-deny `NetworkPolicy` baseline
+(`deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml`, plus a co-located universal
+CoreDNS egress allow) and per-service ingress/egress allow-rule templates
+(`deploy/helm/telco-service/templates/networkpolicy-{ingress,egress}.yaml`), with ingress deliberately
+reusing 19.3's `meshPolicy.authorizedClients` list (one source of truth for "who may call this
+service," so the mesh-layer and network-layer controls cannot drift apart) and egress flags derived
+from `service-catalog.md` Section 5 plus `event-catalog.md`'s Kafka roster. Reviewed and corrected one
+documentation gap this session (the `keycloak: true` egress flag on all 10 domain services was
+un-explained in the template's header comment; verified live via
+`microservices/configs/<service>/application-docker.yml`'s `jwks-uri` that each domain service is its
+own OAuth2 resource server independently validating JWTs against Keycloak, additional to the gateway's
+own validation - added the missing rationale comment). Flagged, not fixed (out of this Helm-only
+feature's scope): the shared-Postgres-StatefulSet architecture means 19.4.3's literal "cannot reach
+another service's Postgres instance" AC can't be network-layer-enforced (isolation here is logical/
+schema-level, ADR-006, not physical) - noted for a possible `tech-lead` AC re-scoping. **19.5.3** (the
+one 19.5 subtask needing no cluster): repo-wide diff audit confirmed Sprint 19's entire uncommitted
+changeset is confined to `deploy/`, `docs/tasks/`, and the ADR-026 status flip - zero `.java`, zero
+security/config files - ADR-011's JWT/RBAC trust layer is verified unchanged. **Live verification
+(kubectl/helm/linkerd against a running cluster) is NOT done this session for either 19.3, 19.4, or
+19.5.1/19.5.2** - Docker Desktop was not running and `helm`/`linkerd` were not available in this
+session's shell; deferred to the next cluster-available session. Nothing committed yet (matches this
+sprint's existing uncommitted state from 19.1/19.2). Detail: sprint-19 README's "19.3" and "19.4"
+Authoring and Static Verification Record sections, and the new "19.5.3 Verification Record" section.
+
+Prior update, 2026-07-12 (Sprint 17 Distributed Locking - **COMPLETE, all 5/5 features DONE**. Built
+this session on top of the platform foundation (17.1/17.2, see the entry directly below): Feature 17.3
+(`subscription-service` MSISDN reservation-expiry reaper - `ExpireMsisdnReservationsCommand(Handler)`
+drives releases through the existing `MsisdnPool.release()` domain method, one `audit_log` row per
+release atomically inside the mediator transaction; `MsisdnReservationExpiryReaper` guards the tick
+with an explicit-lease `DistributedLock`), Feature 17.4 (`billing-service`'s `RunBillCommandHandler`
+wraps its existing bill-run orchestration in a watchdog-managed `DistributedLock` keyed on the billing
+period; a new `RunBillResult.alreadyOwnedByAnotherPod()` outcome replaces an undifferentiated failure
+on lock contention, with the losing side verified never to reach `subscriberRepo`/`batchProcessor` at
+all), and Feature 17.5 (`docs/architecture/platform-capabilities.md`, `platform/PLATFORM-SPEC.md` -
+sections 7-11 renumbered to 8-12 to insert a new platform-lock section, no repo-wide cross-reference
+broken - and `platform-gap-closing-plan.md` all updated to record the capability as shipped). A first
+code-review pass caught and this session fixed a real regression before it shipped: adding
+`starter-lock` to both services made `DistributedLock` a MANDATORY bean dependency, but Redisson
+connects eagerly at startup (unlike `starter-kafka`'s tolerant listener containers) - disabling the
+lock in each service's shared test profile (the fix used to avoid needing live Redis in unrelated
+tests) would otherwise have broken every pre-existing Spring-context test in both modules. Fixed by
+packaging a second, inverse-conditioned `@AutoConfiguration` in `starter-lock`'s own test-jar supplying
+a real in-JVM `DistributedLock` substitute whenever the real one is disabled - zero changes needed to
+any pre-existing test file; a related `@Scheduled`-fires-unconditionally finding on the new reaper was
+fixed the same way. Both fixes verified live (a new isolated `ApplicationContextRunner` test, 3/3
+passing) and confirmed by a second review pass (APPROVE). VERIFIED LIVE this session: 3 new
+Docker-independent Mockito unit test classes across both services (covering the handler/reaper lock
+logic, the losing side's degrade-safely behavior, and the release/audit atomicity) all pass; full
+`microservices` reactor build (subscription-service + billing-service) and full `platform` reactor
+both structurally clean. NOT VERIFIED LIVE: the two new Testcontainers-based `*ConcurrencyIT` classes -
+compile clean, reviewed carefully, but blocked by the same pre-existing, repo-wide Docker/Testcontainers
+API-version incompatibility documented in the entry below (confirmed unrelated to this session's
+changes). Nothing committed yet (user choice, consistent with the platform-foundation entry below).
+Detail: sprint-17 README, `docs/tasks/lessons.md` (2026-07-12 entries).
+
+Prior update, 2026-07-12 (Sprint 17 Distributed Locking - **started, platform foundation DONE (2/5
+features)**. ADR-024 was Proposed; ratified (Accepted) by tech-lead this session with one amendment:
+the architecture review found Section 5's original design - a new `LockAcquisitionException extends
+PlatformException` living in the new `platform-core/lock` module - is not buildable, because
+`PlatformException` (`platform-common`) is a `sealed` class whose `permits` list is closed to its own
+package, and this codebase has no `module-info.java` anywhere under `platform/` (so Java's
+same-package sealed-subtype rule applies, not a module-boundary one). Tech-lead's ratified fix:
+`RedissonDistributedLock` throws the platform's EXISTING `DependencyFailureException` (already
+503-mapped in `starter-api`'s `GlobalExceptionHandler`, unchanged) constructed with a new
+`LockErrorCode.LOCK_ACQUISITION_FAILED` (an `ErrorCode` living in `platform-core/lock`, mirroring
+`CommonErrorCode`) - zero changes to `starter-api`, no new exception type, no new transitive
+dependency on every service. ADR-024 Sections 2 and 5 and Sprint 17 task file 17.1 were amended to
+match before any code was written. Built this session: Feature 17.1 (`platform/platform-core/lock` -
+`DistributedLock`, `LockHandle`, `LockErrorCode`; `platform/platform-starters/starter-lock` -
+`RedissonDistributedLock`, `RedissonLockHandle`, `LockAutoConfiguration`, `LockProperties`; plain
+`org.redisson:redisson`, not `redisson-spring-boot-starter`; `platform-bom` pins Redisson 3.50.0 and
+both new module coordinates) and Feature 17.2 (a Testcontainers Redis harness packaged as a
+`starter-lock` test-jar per the `platform-event-contracts` precedent, plus a contention/watchdog/
+explicit-lease/fail-closed test suite). VERIFIED: full `platform` reactor builds clean
+(`mvn -am install`, structural + spotbugs + checkstyle all pass); `platform-lock`'s dependency tree is
+confirmed zero-Spring/zero-Redisson; a dedicated Spring context test proves the fail-closed path
+returns HTTP 503 with `ApiError.code=LOCK_ACQUISITION_FAILED` via the UNCHANGED `GlobalExceptionHandler`
+(no handler edit). NOT VERIFIED LIVE: the four Testcontainers-Redis behaviors (mutual exclusion,
+watchdog liveness, explicit-lease hard-expiry, fail-closed) - this sandbox's Docker Desktop (29.1.2)
+now enforces a minimum API floor of 1.44, and the repo's pinned Testcontainers 1.20.6 (matching
+`microservices/pom.xml`'s existing convention, mirrored into `platform-bom` for this sprint) bundles a
+`docker-java` client that negotiates API 1.32 - confirmed as a pre-existing, repo-wide environment
+issue (not caused by this sprint's changes) by reproducing the identical failure on the untouched,
+already-existing `starter-inbox` Testcontainers test. Deferred to a follow-up session: Features 17.3
+(subscription-service MSISDN reaper), 17.4 (billing-service bill-run lock), and 17.5 (capability-catalog
+docs update) - user-scoped this session to the platform foundation only. A code-review pass on 17.1/17.2
+(before this DONE status was finalized) returned CHANGES REQUIRED on its first pass - a HIGH finding
+(`withLock(Callable)` rewrapped domain `RuntimeException`s from a guarded action as
+`IllegalStateException`, which would have broken `GlobalExceptionHandler`'s type-based dispatch for
+17.3/17.4's future consumers) and two MEDIUM findings (a dead `lease-time` config property; missing
+Docker-independent unit coverage for `RedissonDistributedLock`). All three were fixed (plus one LOW
+Javadoc item), including a new 9-test Mockito unit suite (`RedissonDistributedLockUnitTest`, all
+passing live) that directly regression-tests the HIGH finding; a second review pass returned APPROVE.
+Detail: sprint-17 README, ADR-024, `docs/tasks/lessons.md` (2026-07-12 entries).
+
+Prior update, 2026-07-12 (Sprint 18 Feature 18.5 DONE - all 5 Sprint 18 features are now
+deliverable-complete and individually verified against their own subtask-level acceptance criteria
+(5/5), same "features-DONE, exit-criteria-tail tracked" framing Sprint 15 used. **IMPORTANT - the
+sprint's own Exit Criteria are NOT yet fully met**: "a pod for every one of the 13 services starts
+successfully" is blocked platform-wide by a pre-existing, Sprint-18-unrelated config-server bug (see
+below) - not by anything this sprint's Vault/CSI work introduced. Per-service DB credentials into
+Vault KV v2, retiring the `docker`-profile plaintext DB block for in-cluster deployment, ADR-025
+Section 2/4. **18.5.1**: extended
+`deploy/helm/vault/seed-secrets.sh` to generate a real per-service DB password (`openssl rand -base64 24`)
+for every PostgreSQL-backed service (`docs/architecture/service-catalog.md` Section 5 - `identity-service`,
+`customer-service`, `product-catalog-service`, `order-service`, `subscription-service`, `usage-service`,
+`billing-service`, `payment-service`, `notification-service` (outbox DB), `ticket-service`; 10 services),
+write it to `secret/<service>/db-credentials` (keeping `username` as the existing per-service Postgres
+role name from `01-create-databases.sql` - renaming the role was assessed as unnecessary DB-ownership
+churn for no security benefit this feature is scoped to deliver), AND rotate the *live* Postgres role's
+password to match (`ALTER USER ... WITH PASSWORD`) so the Vault value is the actually-accepted
+credential, not just a Vault-side placeholder. No new Vault policy needed - confirmed the existing 18.2.2
+per-service policy (`secret/data/<service>/*`) already covers the `db-credentials` path. **18.5.2**:
+audited every PostgreSQL-backed service's `application-prod.yml` against `application-docker.yml` -
+finding: `prod` is **not** safe to activate in-cluster as-is for **any** of the 10 services (not just
+customer-service) - it externalizes DB (and, for customer/billing, MinIO) credentials but drops the
+`docker` profile's Kafka `bootstrap-servers`, Keycloak JWKS URI, and (for order/usage/billing/subscription)
+inter-service `telco.clients` URL overrides entirely, which would silently break Kafka, JWT validation,
+and service-to-service calls if activated bare. Created `microservices/configs/<service>/application-k8s.yml`
+for all 10 services - functionally `application-docker.yml` with the DB username/password replaced by
+`${<SERVICE>_DB_USER}`/`${<SERVICE>_DB_PASSWORD}` placeholders (matching `application-prod.yml`'s naming
+convention); jdbc URL host/port/dbname stay hardcoded (non-secret, unchanged from `application-docker.yml`).
+Updated `SPRING_PROFILES_ACTIVE` in all 10 services' `deploy/helm/values/<service>.yaml` from `dev,docker`
+to `dev,k8s`. **18.5.3**: no `SecretProviderClass` template change was needed (it already iterates
+`.Values.vault.secretKeys` generically, 18.3.2) - added two `vault.secretKeys` entries per service
+(`<SERVICE>_DB_USER`/`<SERVICE>_DB_PASSWORD`, sourced from `secret/<service>/db-credentials`'s
+`username`/`password` fields) to each of the 10 `deploy/helm/values/<service>.yaml` files. **Live-verified**
+on the same Kind cluster 18.4 left running: ran the extended `seed-secrets.sh` for all 10 services (not
+just 2-3) - every `secret/<service>/db-credentials` write and matching Postgres `ALTER USER` succeeded.
+Spot-verified `secret/order-service/db-credentials` and `secret/billing-service/db-credentials` returned
+values distinct from the `order`/`order` and `billing`/`billing` committed defaults. **Important finding,
+broader than 18.4's note**: building and deploying `billing-service` (new PostgreSQL-backed service,
+locally built + `kind load`ed) and re-deploying `customer-service` with `vault.enabled=true` and the new
+`dev,k8s` profile showed that switching the profile name does **not** sidestep the pre-existing
+config-server bug 18.4 flagged for customer-service - live testing (`curl .../billing-service/dev,k8s`,
+`.../customer-service/dev`, `.../identity-service/dev,k8s`, `.../ticket-service/dev,k8s`,
+`.../order-service/dev,k8s`, `.../api-gateway/dev,docker` - the last one on the *original* docker profile,
+confirming this is not something 18.5 introduced) all returned HTTP 500 with the same
+`FailedToConstructEnvironmentException: ... found duplicate key spring` - the merge conflict is between
+the root `application-dev.yml` and each service's own `application-dev.yml`, independent of the second
+profile. **No PostgreSQL-backed service reaches full pod `Ready` in this cluster today**, and none did
+under 18.4 either beyond config-server itself - this is not a regression introduced by 18.5, it is the
+same already-flagged, out-of-scope bug now confirmed platform-wide rather than customer-service-specific.
+Not fixed here (Java/config-server-adjacent, explicitly out of `deploy/` scope per this feature's own task
+spec). Because the app never reaches `DataSource` creation when config fetch 500s, full-`Ready`-implies-DB-
+connectivity could not be used as the verification method; instead, DB credential delivery was proven
+directly and rigorously: `kubectl exec deploy/billing-service -- env` and `kubectl exec deploy/customer-service
+-- env` (customer-service was re-upgraded to `vault.enabled=true`/`dev,k8s` for this) showed
+`BILLING_DB_USER=billing`/`BILLING_DB_PASSWORD=<fresh Vault value>` and
+`CUSTOMER_DB_USER=customer`/`CUSTOMER_DB_PASSWORD=<fresh Vault value>` respectively, both byte-for-byte
+matching `vault kv get secret/<service>/db-credentials` - confirming the CSI sync delivers the new keys
+correctly. Then, from `postgres-0`, connected to Postgres over its **Service IP** (not `localhost`, which
+hits a `trust`-auth loopback rule in this cluster's `pg_hba.conf` and would prove nothing) using each
+service's exact injected password: `psql -h <postgres-0 IP> -U billing -d billing_db` succeeded with the
+Vault value and **failed with `password authentication failed`** using the old `billing`/`billing` default;
+identical result for `customer`/`customer`. This proves the rotated credential is genuinely required for
+DB access, end to end, independent of the blocked app-level verification path. **Not attempted**: DB
+credential seeding/rotation for `product-catalog-service`, `subscription-service`, `usage-service`,
+`payment-service`, `notification-service`; `seed-secrets.sh` ran for all 10 and Vault holds a value for
+each (verified for `order-service`/`billing-service`), and the live psql-level proof was only additionally
+done for `billing-service` and `customer-service` (2 of 10) - do not read this as "all 10 services proven
+DB-connectivity-live", only "all 10 have real Vault+Postgres-rotated credentials; 2 of 10 individually
+proved to authenticate over the network with them". Confirmed no touched service's `SPRING_PROFILES_ACTIVE`
+retains `docker` (`dev,k8s` verified live for `billing-service` and `customer-service`; verified in the
+committed values files for the other 8). Kind cluster torn down after this session - Sprint 18 is complete,
+no further feature needs it kept alive.)
+
+Last updated: 2026-07-12 (Sprint 18 Feature 18.4 DONE - migrated `ENCRYPT_KEY`, `CUSTOMER_AES_KEY`,
+`CONFIG_SERVER_PASSWORD`, `EUREKA_PASSWORD`, `REDIS_PASSWORD` from committed Helm dev defaults into
+Vault KV v2, ADR-025 Section 2. Added `deploy/helm/vault/seed-secrets.sh` (18.4.1): generates
+`ENCRYPT_KEY` via `openssl rand -hex 32`, `CUSTOMER_AES_KEY` via `openssl rand -base64 32` (satisfies
+`AesKeyProvider`'s 32-byte AES-256 decode check), and one shared value each for
+`CONFIG_SERVER_PASSWORD`/`EUREKA_PASSWORD`/`REDIS_PASSWORD` (per ADR-025 Section 2, these are shared
+credentials - same value, written to every consuming service's own `secret/<service>/app` path so Vault
+policy still scopes *who* can read it) and writes them via `vault kv put` at the exact paths the 13
+services' `vault.secretKeys` (Feature 18.3) already expect - `secret/config-server/encrypt-key`,
+`secret/customer-service/aes-key`, `secret/<service>/app` per service. Retired the committed DEV-ONLY
+values in `deploy/helm/values/config-server.yaml` and `customer-service.yaml` (18.4.2): `ENCRYPT_KEY`
+and `CUSTOMER_AES_KEY` are now obvious, non-random repeating-pattern placeholders (still valid
+64-hex-char / 32-byte-base64 so local `vault.enabled=false` boots) that can never be mistaken for real
+key material; rewrote `deploy/helm/README.md` "Config / Secret model" and `deploy/RUNBOOK.md` Section 4
+(+ new Section 14) to present `vault.enabled=true` as the primary path for any non-local environment and
+the static `secrets:` map as explicitly local-dev-only, with a coordination note for the `security` agent
+to close `docs/architecture/security-posture.md` Section 10's "Real secrets from Vault/K8s Secret" item
+(not edited directly, out of this feature's scope). **Bug found and fixed** (surfaced only under real
+Vault values, in-scope per this feature's own bug-fix allowance): `deploy/helm/values/config-server.yaml`
+hardcoded a dev Basic-Auth `Authorization` probe header (`base64("config:config")`); `/actuator/health` is
+`permitAll` in `ConfigServerSecurityConfig` so no header was ever required, but Spring Security's
+`BasicAuthenticationFilter` 401s on an *invalid* credential before authorization runs regardless of
+`permitAll` - this silently prevented config-server from ever reaching `Ready` once `CONFIG_SERVER_PASSWORD`
+became a real (non-`"config"`) Vault value. Fixed by removing the header entirely (not needed in either
+mode). **Bug found and fixed in `seed-secrets.sh` itself** (Git-Bash-on-Windows-specific): `openssl rand
+-base64 24 | tr -d '=+/\n'` left a trailing `\r` on every generated password (CRLF line ending), silently
+corrupting Basic Auth even though `kubectl exec ... -- env` output looked identical for both client and
+server; fixed by also stripping `\r`. Live-verified on a fresh Kind cluster (created for this
+verification, left running for 18.5): Vault (18.1) initialized/unsealed, `bootstrap-k8s-auth.sh` (18.2)
+re-run, `csi-driver` (18.3) installed, `telco-deps` (postgres/redis needed for this verification) and
+`seed-secrets.sh` (18.4.1) run - `vault kv get secret/config-server/encrypt-key` returned a 64-hex-char
+value distinct from the retired dev default, `secret/customer-service/aes-key` decoded to exactly 32
+bytes. Installed `config-server` and `customer-service` with `--set vault.enabled=true` using locally
+built images (`telco-config-server:local`, `telco-customer-service:local`, retagged/`kind load`ed):
+**config-server reached `1/1 Ready`**, and `kubectl exec deploy/config-server -- env` showed the real
+Vault-generated `ENCRYPT_KEY`/`CONFIG_SERVER_PASSWORD`/`EUREKA_PASSWORD` (not the retired dev defaults) -
+meeting the acceptance criterion in full. **customer-service reached `Running` with the real Vault-sourced
+env values confirmed** (`CUSTOMER_AES_KEY`, `CONFIG_SERVER_PASSWORD`, `EUREKA_PASSWORD`, `REDIS_PASSWORD`
+all distinct from dev defaults, matching what was seeded) and its Basic-Auth to config-server was proven
+to work with the real Vault-sourced credential (the request moved from `401 Unauthorized` before the
+`\r`-stripping fix to authenticated `200`/`500` after it) - but the pod did **not** reach full `1/1 Ready`
+because of a separate, pre-existing, Vault-unrelated bug newly discovered during this verification: 11 of
+13 services' `microservices/configs/<service>/application-dev.yml` each declare their own top-level
+`spring:` key, and when config-server's native repository merges that with the shared
+`microservices/configs/application-dev.yml` (which also declares `spring:`) for a multi-profile request
+(`dev,docker`), it throws `FailedToConstructEnvironmentException: ... found duplicate key spring`. This
+was never hit before because no domain service had previously gotten past config-server's Basic-Auth step
+in a live cluster test (Sprint 15's tail: only discovery-server/config-server/api-gateway/product-catalog-service
+were ever fully live-verified, and api-gateway's own `application-dev.yml` was never exercised together with
+the root file's `dev,docker` combination in-cluster either) - it is unrelated to Vault/secrets and requires
+editing `microservices/configs/*.yml` content (domain-engineer/event-integration territory, not `deploy/`),
+so it was **not** fixed here and is flagged as a new follow-up. **Policy-deletion negative test passed
+live**: `vault policy delete customer-service` followed by a pod recreate produced a `FailedMount` event -
+`error making mount request: ... GET .../secret/data/customer-service/app Code: 403 ... permission
+denied` - proving per-service Vault policy scoping is enforced, not just documented; policy restored
+afterward and a subsequent pod recreate mounted successfully again. **Honest scope note**: per this
+feature's acceptance criteria, the stated minimum bar - config-server AND customer-service pods carrying
+real Vault-sourced secret env values, plus the policy-deletion negative test - is met in full (config-server
+additionally reached full `Ready`; customer-service's secret delivery chain is proven end-to-end even
+though its own `Ready` state is blocked by the unrelated config-content bug above). The sprint README's
+broader "all 13 services boot" framing was NOT attempted for the remaining 11 services (consistent with
+Sprint 15's own unresolved tail, out of this feature's scope per its own task spec) and remains aspirational;
+do not read 18.4 DONE as a full 13-service live boot. Kind cluster left running (18.5 - per-service DB
+credentials into Vault - is still TODO and needs it).)
+
+Last updated: 2026-07-12 (Sprint 18 Feature 18.3 DONE - Secrets Store CSI Driver + Vault CSI provider,
+`SecretProviderClass` per service, `secretObjects` sync to `<service>-secret`, ADR-025 Section 1. Added
+`deploy/helm/csi-driver/` wrapping the upstream `secrets-store-csi-driver` chart (kubernetes-sigs) as a
+vendored dependency (same `Chart.yaml`/`helm dependency update`/`Chart.lock` pattern as `deploy/helm/vault/`),
+with `syncSecret.enabled: true` (required for the `secretObjects` sync, otherwise the driver only mounts
+files). The Vault CSI provider is NOT a separately published chart - HashiCorp ships it as the
+`csi.enabled` sub-block of the `hashicorp/vault` chart itself - so it is enabled via
+`deploy/helm/vault/values.yaml` (`vault.csi.enabled: true`) rather than as a second chart; both together
+satisfy the "CSI driver + Vault CSI provider, both DaemonSets" requirement. Added
+`deploy/helm/telco-service/templates/secretproviderclass.yaml` (new template, rendered only when
+`vault.enabled: true`), gated `templates/secret.yaml` to render only when `vault.enabled: false` (default,
+local/dev unchanged), and added a CSI volume + read-only volumeMount to `templates/deployment.yaml`, gated
+the same way - `envFrom.secretRef` itself was not touched. Added a `vault:` block to
+`deploy/helm/telco-service/values.yaml` (`enabled: false` default, `address`, `role`, `secretKeys: []`) and
+a `vault.secretKeys` override to all 13 `deploy/helm/values/<service>.yaml` files, mapping each service's
+actual secret keys (per `deploy/helm/README.md`'s secret-key table) to Vault KV v2 paths: a shared
+`secret/<service>/app` path for `CONFIG_SERVER_PASSWORD`/`EUREKA_PASSWORD`/`REDIS_PASSWORD`, and dedicated
+paths for `config-server`'s `ENCRYPT_KEY` (`secret/config-server/encrypt-key`) and `customer-service`'s
+`CUSTOMER_AES_KEY` (`secret/customer-service/aes-key`), matching ADR-025 Section 2's named paths. Updated
+`deploy/helm/README.md` (chart-layout tree, install order steps 3/4/5, "Config / Secret model" rewritten to
+document both modes, "Validate" section covers both `vault.enabled` values) and `deploy/RUNBOOK.md`
+(Section 2.5 CSI driver DaemonSet readiness wait + `kubectl get csidriver`, Section 4 rewritten). No Helm
+binary/CLI tools were preinstalled in this session's environment - `helm` v3.19.0 and `kind` v0.30.0 were
+downloaded directly (network egress available) into the session scratchpad to perform validation.
+`helm lint`/`helm template` green for all 13 services in both `vault.enabled=false` and `vault.enabled=true`,
+and for the new `csi-driver` chart; confirmed the `vault.enabled=true` render of `customer-service` has no
+static `kind: Secret` and instead a `SecretProviderClass` + CSI volume, with the `envFrom.secretRef` block
+byte-for-byte identical to the `vault.enabled=false` render. Live-verified end to end on a fresh Kind
+cluster (created for this verification, torn down afterward - none left running, since 18.4 will need a
+fresh Vault init/unseal cycle regardless): installed `vault` (18.1, with `csi.enabled: true`) + init/unseal
++ `bootstrap-k8s-auth.sh` (18.2, re-verified live in the process) + `csi-driver` (18.3.1) - both
+`csi-driver-secrets-store-csi-driver` and `vault-csi-provider` DaemonSets reached `1/1 Ready` on the
+single-node cluster and `kubectl get csidriver secrets-store.csi.k8s.io` returned the object. Wrote real
+test values into `secret/customer-service/app` (`CONFIG_SERVER_PASSWORD`/`EUREKA_PASSWORD`/`REDIS_PASSWORD`)
+and `secret/customer-service/aes-key` (`CUSTOMER_AES_KEY`) via `vault kv put` (placeholder test values -
+real migration is Feature 18.4). Applied the real chart-rendered `SecretProviderClass` + `ServiceAccount`
+for `customer-service` (`helm template ... --show-only`, not hand-authored) and a test pod mounting it
+under that `ServiceAccount`; the pod reached `Running`, `kubectl get secret customer-service-secret`
+existed with exactly the 4 expected keys, and decoding each one
+(`kubectl get secret ... -o jsonpath ... | base64 -d`) matched the test values written to Vault verbatim
+(`CONFIG_SERVER_PASSWORD=test-config-pw-18.3`, `EUREKA_PASSWORD=test-eureka-pw-18.3`,
+`REDIS_PASSWORD=test-redis-pw-18.3`, `CUSTOMER_AES_KEY=dGVzdC1jdXN0b21lci1hZXMta2V5LTE4LjM=`); the CSI
+volume's mounted files (`/mnt/secrets-store/CONFIG_SERVER_PASSWORD`, etc.) matched too. Feature 18.4/18.5
+remain TODO; nothing in the 13 services' application code, Dockerfiles, or `envFrom` changed.)
+
+Prior update, 2026-07-12 (Sprint 18 Feature 18.2 DONE - Vault Kubernetes auth method + per-service KV v2
+policies/roles, ADR-025 Section 1/2. Added a `ClusterRoleBinding` granting Vault's own `ServiceAccount`
+`system:auth-delegator` (`deploy/helm/vault/templates/auth-delegator-clusterrolebinding.yaml`, installed
+automatically with the `vault` release); one least-privilege KV v2 policy per service, scoped to exactly
+`secret/data/<service>/*` + `secret/metadata/<service>/*` read/list
+(`deploy/helm/vault/policies/<service>.hcl`, all 13 services - every service reads at least
+`EUREKA_PASSWORD` per `deploy/helm/README.md`'s "Config / Secret model" table); one
+`auth/kubernetes/role/<service>` per service binding `bound_service_account_names=<service>`,
+`bound_service_account_namespaces=telco`, `policies=<service>`, `ttl=15m`, matching the ServiceAccount
+name the `telco-service` chart's `serviceaccount.yaml` already provisions (no service overrides
+`serviceAccount.name`). All of the above is scripted, idempotent, and re-runnable via
+`deploy/helm/vault/bootstrap-k8s-auth.sh`. `deploy/RUNBOOK.md` gained a new Section 13 ("Vault Kubernetes
+auth method and per-service policies") - appended at the end rather than inserted after Section 3, to
+avoid invalidating the numbered cross-references several already-drafted Sprint 19/20 task specs make to
+this document's current Sections 4/6/8/9/12. Live-verified end to end on a fresh Kind cluster (created for
+this verification, torn down afterward - none left running): `vault auth list` showed `kubernetes/`
+enabled, `vault read auth/kubernetes/config` returned `kubernetes_host: https://10.96.0.1:443` (the
+in-cluster API service IP), `vault policy read customer-service`/`billing-service` returned the correctly
+scoped policies, `vault read auth/kubernetes/role/customer-service` showed the expected bindings. Real
+`ServiceAccount`s `customer-service` and `billing-service` were created via
+`helm template ... -s templates/serviceaccount.yaml` (the actual chart template, not hand-authored) and
+bound to lightweight debug pods (full JVM service images were not needed for this auth-only feature - no
+application code path is exercised). A real `vault write auth/kubernetes/login role=customer-service
+jwt=<projected-token>` from inside the live `customer-service`-ServiceAccount pod succeeded and returned a
+token scoped to `["customer-service","default"]` only; that token read `secret/data/customer-service/*`
+(200) and was denied `secret/data/billing-service/*` (403 permission denied) - and symmetrically, a
+`billing-service`-scoped login token read its own path (200) and was denied `customer-service`'s path
+(403), confirming Vault-enforced per-service isolation in both directions. Features 18.3-18.5 remain TODO;
+nothing in the 13 services' application code, Dockerfiles, or `envFrom` changed.)
+
+Prior update, 2026-07-12 (Sprint 18 Feature 18.1 DONE - Vault Helm release, standalone/Raft, unseal
+procedure. Added `deploy/helm/vault/` wrapping the official `hashicorp/vault` chart as a dependency
+(Chart.yaml `dependencies:` entry, `helm dependency update`-vendored `charts/vault-0.34.0.tgz` +
+`Chart.lock`, mirroring the repo's existing chart-vendoring convention), pinned standalone mode
+(`server.standalone.enabled: true`, `server.ha.enabled: false`, replicas 1) with Integrated Storage
+(Raft) as the storage backend and the Vault Agent sidecar injector disabled (ADR-025 Section 1).
+`deploy/helm/README.md` chart-layout tree, install order, and "HPA / PDB" singleton section updated;
+`deploy/RUNBOOK.md` gained a new Section 3 ("Vault initialization and unseal", Shamir/manual, no key
+material committed) and a Vault readiness wait in Section 2 - all later sections renumbered by one.
+Live-verified end to end on a fresh Kind cluster (none was running at session start, despite the prior
+entry below claiming one was left up - created and later torn down for this verification, no
+pre-existing cluster state touched): `helm lint`/`helm template` green, `helm install vault` succeeded,
+`vault operator init` + 3-of-5 `vault operator unseal` brought Vault to `Initialized: true, Sealed:
+false`, pod reached `1/1 Ready`, and `kubectl get pdb`/`get hpa`/`get deployment` in the `telco`
+namespace confirmed no PDB, no HPA, and no injector Deployment target the Vault StatefulSet. One
+correction made during live verification: the task's suggested `kubectl rollout status
+statefulset/vault` does not work (the upstream chart uses `updateStrategyType: OnDelete`, which
+`rollout status` refuses to track) and `wait --for=condition=ready` would hang until after unseal
+(Vault's readiness probe runs `vault status`, which fails while sealed) - replaced with `kubectl wait
+--for=condition=Initialized` in both `deploy/RUNBOOK.md` and `deploy/helm/README.md`. Features 18.2-18.5
+remain TODO; nothing in the 13 services' application code, Dockerfiles, or `envFrom` changed.)
+
+Prior update, 2026-07-12 (Sprint 15 exit-criteria follow-ups - **two of three RESOLVED live on Kind;
+one remains**. Reopened the two tracked deployment blockers on the live Kind cluster and closed both
+with evidence. (1) schema-registry in-cluster crash-loop: the originally-recorded root cause
+(KafkaStore-init timeout, "add a wait-for-kafka init-container") was DISPROVEN by the actual crashed-pod
+evidence and the pre-approved fix was correctly NOT applied. Real, live-confirmed root cause: a
+Kubernetes service-link env collision - the Service named `schema-registry` makes kubelet inject
+`SCHEMA_REGISTRY_PORT=tcp://<ip>:8081`, which cp-schema-registry's entrypoint reads as the deprecated
+PORT setting and hard-exits 1 in the configure stage before Kafka is ever contacted (zero log4j output
+was the tell). Fix: `enableServiceLinks: false` on the schema-registry Deployment pod spec
+(`deploy/helm/dependencies/templates/schema-registry.yaml`); verified live Running 1/1, 0 restarts,
+`/subjects` serving. (2) product-catalog 500 on GET /api/v1/tariffs in-cluster: ENVIRONMENTAL, not a
+code defect - the list endpoint is uncached and the earlier 500 occurred only during a
+thrashing/partial-wave cluster state; returned HTTP 200 with the correct ApiResult shape once the
+dependency layer was healthy. No code change. Incidental live finding: kafka-0's exit-143 churn was a
+liveness-probe kill under single-node CPU pressure (HPAs had inflated app replicas 5x), cleared by
+pinning the api-gateway + product-catalog HPAs to 1/1 - no chart change. The dependency layer + config/
+discovery/gateway/product-catalog are all Running 1/1. STILL REMAINING (the one item between
+"feature-complete + deployable" and "AC proven green in Kubernetes"): the full 13-service in-cluster
+boot - the other 9 domain services are not yet imaged/deployed on the local node and the 10 Debezium
+outbox connectors are not registered - then the deployed-environment AC-01/02/03 run. Detail:
+`docs/tasks/todo.md` ("Closing the Sprint 15 exit-criteria tail"), `docs/tasks/lessons.md` (2026-07-12
+entry), and `docs/tasks/sprint-15-deployment/README.md` (Exit-Criteria Follow-Ups). Nothing committed
+yet (user choice); the Kind cluster is left running.
+
 Last updated: 2026-07-13 (Sprint 16 (Web Frontend) is **DONE (5/5)** - its live end-to-end EXIT CRITERION
 is **MET**, no longer deferred. A human clicked the whole flow through a real browser against the live local
 Docker Compose stack on 2026-07-13: Keycloak PKCE login -> onboarding wizard (register -> KYC upload ->
@@ -825,9 +1204,9 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
-| [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | TODO | 0/5 |
-| [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | TODO | 0/5 |
-| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | TODO | 0/5 |
+| [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
+| [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS | 2/5 (19.3+19.4 authored/statically verified; 19.5.3 done; 19.5.1/19.5.2 + both features' live-verify blocked on cluster) |
 | [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | TODO | 0/5 |
 | [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | TODO | 0/5 |
 | [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | TODO | 0/6 |
@@ -837,12 +1216,19 @@ Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE 
 / 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -
 deliverables built and each individually verified (much of it live on a Kind cluster) - BUT its
 platform-level exit criteria ("all MVP AC hold in the DEPLOYED environment") are not yet fully met:
-a fully-green 13-service in-cluster boot + the deployed-environment acceptance run remain, blocked by
-two tracked, user-ratified-deferred follow-ups (schema-registry Confluent-config exit-1;
-product-catalog in-cluster 500 on the tariffs read). So the MVP is feature-complete and deployable,
-with a short, well-scoped integration tail before "runs green end-to-end in Kubernetes" is literally
-true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
-Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprints 17-19 and 21-23: ADR-024 through
+a fully-green 13-service in-cluster boot + the deployed-environment acceptance run remain. Of the two
+tracked deployment blockers, BOTH were RESOLVED live on 2026-07-12 (schema-registry exit-1 -> a K8s
+service-link env collision, fixed with `enableServiceLinks: false`; product-catalog in-cluster 500 ->
+environmental, returns 200 on a healthy dependency layer, no code change). The one item still standing
+is the always-deferred full 13-service boot itself: the other 9 domain services are not yet imaged/
+deployed on the local node and the 10 Debezium outbox connectors are not registered, after which the
+deployed-environment AC-01/02/03 run can execute. So the MVP is feature-complete and deployable, with a
+short, well-scoped integration tail (the full boot) before "runs green end-to-end in Kubernetes" is
+literally true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
+Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprint 17: ADR-024, Accepted 2026-07-12,
+**DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail tracked** (a
+pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own "every pod
+starts" exit criterion - see the 2026-07-12 entries above); Sprints 19 and 21-23: ADR-026 through
 ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
 and excluded from the MVP totals. Sprint 16 (Web Frontend) is **DONE, 5/5, exit criteria MET** as of
 2026-07-13: all five features built AND the live end-to-end criterion discharged by a human, in a real
@@ -850,8 +1236,9 @@ browser, against the live local Docker Compose stack (PKCE login -> onboarding -
 account/usage -> invoice PDF download). That live run found 11 defects the all-green offline suites had
 missed - 9 fixed, the rest tracked as follow-ups (409-on-duplicate-TCKN; 413-vs-500 on oversized multipart, a
 platform-starter issue; the unimplemented `POST /api/v1/addons`, which leaves the addon selection path
-unproven end-to-end). Post-MVP feature totals: 5 DONE (Sprint 16) / 0 IN PROGRESS / 36 TODO (Sprints 17-23).
-Sprints 17-23 remain documentation/design only - TODO, not started. See Phase P6 below and
+unproven end-to-end). Sprints 17 (Distributed Locking) and 18 (Secret Management) are also complete (18 with
+a tracked follow-up), and Sprint 19 (Service Mesh and mTLS) is IN PROGRESS (2/5); Sprints 20-23 remain
+documentation/design only - TODO, not started. See Phase P6 below and
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
@@ -875,8 +1262,8 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-008 Engagement and Support | P4 | Notifications and ticketing | 12 |
 | EPIC-009 Hardening and Release | P5 | NFR targets, security, Kubernetes | 13, 14, 15 |
 | EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) - **DELIVERED** (Sprint 16 DONE, live E2E 2026-07-13) | 16 |
-| EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Proposed) | 17 |
-| EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Proposed) | 18 |
+| EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Accepted) | 17 |
+| EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Accepted) | 18 |
 | EPIC-019 Zero-Trust Networking | P6 | Service mesh mTLS + default-deny NetworkPolicies (ADR-026 Proposed) | 19 |
 | EPIC-020 Chaos Engineering | P6 | Fault injection + game days, extends ADR-012/ADR-013 (no new ADR) | 20 |
 | EPIC-021 Campaign and Catalog Validation | P6 | `campaign-service`, dynamic pricing/redemption limits (ADR-027 Proposed) | 21 |

@@ -27,6 +27,32 @@ ingress:
   path: /
   pathType: Prefix
 
+# Feature 19.3 (ADR-026 Section 2). No restricting AuthorizationPolicy: the
+# gateway's real caller is ingress-nginx, which runs un-meshed in its own
+# namespace and has no mesh identity to present (see
+# deploy/helm/telco-service/values.yaml's `meshPolicy` comment). A `Server`
+# is still rendered (templates/server.yaml has no such gate) so
+# `kubectl -n telco get server` lists one object per service, api-gateway
+# included - it just has no AuthorizationPolicy attached, which is Linkerd's
+# documented "default inbound policy applies" behavior, not a gap.
+meshPolicy:
+  enabled: false
+
+# Feature 19.4.2 (ADR-026 Section 3). api-gateway's real ingress source is the
+# Kind ingress-nginx controller, not another telco-service release, so it
+# cannot use `meshPolicy.authorizedClients` (see
+# deploy/helm/telco-service/values.yaml's `networkPolicy` comment and
+# templates/networkpolicy-ingress.yaml's header). `redis: true` (rate limit,
+# service-catalog.md Section 5) and `keycloak: true` (JWT JWKS validation -
+# the gateway is a Spring Security OAuth2 resource server, see
+# microservices/configs/api-gateway/application.yml's `jwks-uri`).
+networkPolicy:
+  useAuthorizedClientsForIngress: false
+  externalIngress: true
+  egress:
+    redis: true
+    keycloak: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
@@ -37,3 +63,20 @@ secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/api-gateway role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: api-gateway/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: api-gateway/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: api-gateway/app
+      field: REDIS_PASSWORD

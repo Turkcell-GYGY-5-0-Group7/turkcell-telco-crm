@@ -1,0 +1,27 @@
+# telco-csi-driver values (Feature 18.3, ADR-025 Section 1). All keys nest
+# under `secrets-store-csi-driver:` to reach the vendored upstream chart
+# declared in Chart.yaml. Deploys as a DaemonSet on every node
+# (`linux.enabled: true`, the chart's default), ahead of any
+# `SecretProviderClass` (deploy/helm/telco-service/templates/secretproviderclass.yaml).
+secrets-store-csi-driver:
+  linux:
+    enabled: true
+    crds:
+      enabled: true
+
+  # REQUIRED for 18.3.2/18.3.3: without syncSecret.enabled, the driver only
+  # mounts Vault secrets as files in the CSI volume - it does NOT materialize
+  # the `secretObjects` block into a native Kubernetes Secret. ADR-025 Section
+  # 1's whole reason for choosing the CSI driver over the Agent injector is
+  # this sync producing an ordinary `<service>-secret` that `envFrom.secretRef`
+  # already consumes unchanged - this flag is what makes that sync happen.
+  syncSecret:
+    enabled: true
+
+  # Secret rotation stays off for this MVP posture (matches the "dev-grade
+  # in-cluster dependency, hardened later" posture already applied to Vault
+  # itself in deploy/helm/vault/values.yaml) - re-sync happens on pod restart,
+  # which is sufficient for Sprint 18's scope. Enabling this is a documented
+  # future hardening step, not required to prove the sync mechanism (18.3
+  # acceptance criteria).
+  enableSecretRotation: false

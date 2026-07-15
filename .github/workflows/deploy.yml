@@ -98,10 +98,10 @@ jobs:
           echo "Deploying ghcr.io/$OWNER/telco-<service>:$TAG" >&2
 
       - name: Install kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Install Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
         with:
           version: v3.16.4
 

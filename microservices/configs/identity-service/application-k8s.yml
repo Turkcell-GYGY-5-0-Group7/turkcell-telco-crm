@@ -1,0 +1,23 @@
+# identity-service Kubernetes (in-cluster Helm) overrides, activated as SPRING_PROFILES_ACTIVE=dev,k8s
+# (Feature 18.5, ADR-025 Section 4). Replaces the `docker` profile for in-cluster deployment: same
+# in-cluster hostnames as application-docker.yml (kept, non-secret), but the DB username/password are
+# read from the pod environment (Vault-sourced via the CSI-synced Secret, 18.5.1/18.5.3) instead of the
+# committed `identity`/`identity` plaintext the `docker` profile bakes in. The jdbc URL's host/port/db
+# name are not secret, so they stay hardcoded here rather than moving to Vault (ADR-025 Section 2).
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/identity_db
+    username: ${IDENTITY_DB_USER}
+    password: ${IDENTITY_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:9092
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+keycloak:
+  admin:
+    server-url: http://keycloak:8080

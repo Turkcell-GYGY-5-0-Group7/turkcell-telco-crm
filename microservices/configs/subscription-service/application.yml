@@ -48,8 +48,20 @@ telco:
       enabled: true
     inbox:
       enabled: true
+    # Guards the MSISDN reservation-expiry reaper across replicas (feature 17.3, ADR-024). The Redis
+    # in this stack requires auth (infra/docker/compose.yml --requirepass); starter-lock's
+    # spring.data.redis.host/port fallback does not read a password, so the address is set explicitly
+    # with embedded credentials rather than relying on that fallback.
+    lock:
+      enabled: true
+      redis:
+        address: redis://:${REDIS_PASSWORD:telco}@${REDIS_HOST:localhost}:${REDIS_PORT:6379}
   clients:
     # Single synchronous hop on the payment.completed.v1 activation path: order-service supplies the
     # authoritative customerId and the tariff snapshot (tariffCode/tariffVersion) for activation.
     order:
       url: ${ORDER_SERVICE_URL:http://order-service}
+  subscription:
+    msisdn-reaper:
+      interval-ms: ${MSISDN_REAPER_INTERVAL_MS:60000}
+      lock-lease-ms: ${MSISDN_REAPER_LOCK_LEASE_MS:30000}

@@ -1,6 +1,6 @@
 # ADR-026 Service Mesh and mTLS
 
-Status: Proposed
+Status: Accepted
 Date: 2026-07-11
 
 ---

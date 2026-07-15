@@ -31,6 +31,7 @@ GroupId `com.telco.platform`, version `1.0.0-SNAPSHOT`. Base package per module:
 | mediator | platform-mediator | `com.telco.platform.mediator` |
 | outbox | platform-outbox | `com.telco.platform.outbox` |
 | inbox | platform-inbox | `com.telco.platform.inbox` |
+| lock | platform-lock | `com.telco.platform.lock` |
 | event-contracts | platform-event-contracts | `com.telco.platform.events` |
 | autoconfigure | platform-autoconfigure | `com.telco.platform.autoconfigure` |
 | starter-api | starter-api | `com.telco.platform.starter.api` |
@@ -39,6 +40,7 @@ GroupId `com.telco.platform`, version `1.0.0-SNAPSHOT`. Base package per module:
 | starter-outbox | starter-outbox | `com.telco.platform.starter.outbox` |
 | starter-inbox | starter-inbox | `com.telco.platform.starter.inbox` |
 | starter-observability | starter-observability | `com.telco.platform.starter.observability` |
+| starter-lock | starter-lock | `com.telco.platform.starter.lock` |
 
 Sub-packages: `.api`, `.exception`, `.context`, `.util` (common); `.pipeline`, `.behavior`,
 `.behavior.support` (mediator). All POMs already exist; implementers add Java/resources and may
@@ -261,7 +263,47 @@ public final class InboxBehavior implements PipelineBehavior {  // order=Pipelin
 
 ---
 
-## 7. platform-event-contracts (Avro, ADR-019)
+## 7. platform-lock (distributed locking, ADR-024)
+
+```java
+public interface DistributedLock {
+  LockHandle acquire(String key, Duration leaseTime);
+  <T> T withLock(String key, Duration leaseTime, Callable<T> action);
+  void withLock(String key, Duration leaseTime, Runnable action);
+}
+
+public interface LockHandle extends AutoCloseable {   // Redisson RLock wrapper in starter-lock
+  String key();
+  void release();     // idempotent
+  default void close() { release(); }
+}
+
+public enum LockErrorCode implements ErrorCode { LOCK_ACQUISITION_FAILED }   // no new exception type
+```
+
+Cross-instance mutual exclusion (multiple pods of one service, or two services) that a single-JVM
+lock or a Postgres `SELECT ... FOR UPDATE` cannot provide. `leaseTime == null` requests a
+watchdog-managed lease (the Redisson implementation auto-renews it while the holder is alive - the
+right choice for variable-duration work); a non-null `Duration` requests an explicit lease that
+hard-expires on schedule regardless of holder liveness (the right choice for a bounded critical
+section). Callers choose per call site; the platform does not force one mode (ADR-024 Section 4).
+
+Fails CLOSED: on connection failure, timeout, or the wait-time budget expiring without acquiring the
+lock, the implementation throws the platform's EXISTING `DependencyFailureException` (already
+503-mapped by `GlobalExceptionHandler`) constructed with `LockErrorCode.LOCK_ACQUISITION_FAILED` - it
+does NOT define a dedicated exception type. `PlatformException` (Section 2.2) is `sealed` with a
+`permits` list scoped to its own package (`com.telco.platform.common.exception`), and this codebase
+has no `module-info.java`, so a type in `com.telco.platform.lock` cannot join that hierarchy (ADR-024
+Section 5). This is the one significant departure from the outbox/inbox port shape above: do not
+add a `LockAcquisitionException` here even though the naming convention elsewhere might suggest it.
+
+Spring-free, matching this module's purity constraint: no Redisson or Spring types appear anywhere
+in `platform-lock`'s public API or dependency graph. The Redisson-backed implementation
+(`RedissonDistributedLock`, `RedissonLockHandle`) lives entirely in `starter-lock` (Section 10.7).
+
+---
+
+## 8. platform-event-contracts (Avro, ADR-019)
 
 Avro schemas under `src/main/avro/*.avsc`, namespace `com.telco.platform.events.<domain>`.
 Generated into `target/generated-sources/avro` by the configured avro-maven-plugin.
@@ -275,7 +317,7 @@ these MVP schemas matching `docs/architecture/event-catalog.md`:
 
 ---
 
-## 8. platform-autoconfigure (shared Spring primitives)
+## 9. platform-autoconfigure (shared Spring primitives)
 
 - `PlatformProperties` constants: property prefix root `telco.platform`.
 - `PlatformJacksonAutoConfiguration` - a `Jackson2ObjectMapperBuilderCustomizer` registering
@@ -287,21 +329,21 @@ Keep this module small. Capability-specific autoconfig lives in the owning start
 
 ---
 
-## 9. Starters (Spring wiring; ADR-018)
+## 10. Starters (Spring wiring; ADR-018)
 
 Each starter provides `@AutoConfiguration` classes, conditional beans
 (`@ConditionalOnMissingBean`, `@ConditionalOnClass`, `@ConditionalOnProperty`), typed
 `@ConfigurationProperties`, and a `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`
 file. No business logic. Property prefix root: `telco.platform`.
 
-### 9.1 starter-api
+### 10.1 starter-api
 `@RestControllerAdvice` `GlobalExceptionHandler` mapping `PlatformException` subtypes to HTTP
 status + `ApiResult.failure(...)`, populating `ApiMeta` from `CorrelationContextHolder` and the
 request path; maps `MethodArgumentNotValidException`/`ConstraintViolationException` to 400; falls
 back to 500 `INTERNAL_ERROR` without leaking stack traces. Conditional on web. Property:
 `telco.platform.api.enabled` (default true).
 
-### 9.2 starter-mediator
+### 10.2 starter-mediator
 `MediatorAutoConfiguration` provides: Spring `HandlerRegistry` (resolves CommandHandler/
 QueryHandler/EventHandler beans), the `Mediator` bean (`InProcessMediator`), and behavior beans -
 Performance, Logging, Authorization always-on; Validation `@ConditionalOnBean(Validator.class)`;
@@ -311,7 +353,7 @@ adapter. Order config AFTER Hibernate/DataSource/Transaction/Validation auto-con
 `@ConditionalOnMissingBean`. Props under `telco.platform.mediator.*` (e.g.
 `performance.slow-threshold-ms` default 500).
 
-### 9.3 starter-security
+### 10.3 starter-security
 `JwtProperties` (`telco.platform.security.jwt.*`: secret or public-key, issuer, expiry, header
 names). `JwtService` (validate + parse claims; optional issue helper). `JwtAuthFilter`
 (`OncePerRequestFilter`): if `telco.platform.security.gateway-trust.enabled`, trust `X-User-Id`/
@@ -320,27 +362,55 @@ names). `JwtService` (validate + parse claims; optional issue helper). `JwtAuthF
 (overrides the mediator default). `SecurityAutoConfiguration` conditional on
 `telco.platform.security.enabled` and on security/web classes.
 
-### 9.4 starter-outbox
+### 10.4 starter-outbox
 `JdbcOutboxStore` (spring-jdbc), `JacksonEventSerializer`, `OutboxAutoConfiguration` wiring
 `DefaultOutboxService`. Flyway migration creating a Debezium-compatible outbox table. Optional
 disabled relay scheduler (`telco.platform.outbox.relay.enabled=false`). Props
 `telco.platform.outbox.*`.
 
-### 9.5 starter-inbox
+### 10.5 starter-inbox
 `JdbcInboxStore` (spring-jdbc), `InboxAutoConfiguration` wiring `DefaultInboxService` and
 contributing `InboxBehavior` as a `PipelineBehavior` bean. Flyway migration for the inbox table.
 Props `telco.platform.inbox.*`.
 
-### 9.6 starter-observability
+### 10.6 starter-observability
 `CorrelationFilter` (`OncePerRequestFilter`): read or generate `X-Correlation-Id`, set
 `CorrelationContextHolder` + MDC (`traceId`, `correlationId`), echo the header on the response,
 clear on completion. `ObservabilityAutoConfiguration` registers the filter (conditional on web)
 and a micrometer tracing customizer (conditional on micrometer classes). Props
 `telco.platform.observability.*` (e.g. `correlation.enabled` default true).
 
+### 10.7 starter-lock (ADR-024)
+`RedissonDistributedLock implements DistributedLock` (built on `RedissonClient.getLock(key)`/`RLock`;
+`leaseTime == null` -> watchdog-managed, a `Duration` -> explicit hard-expiry; on failure throws
+`DependencyFailureException` with `LockErrorCode.LOCK_ACQUISITION_FAILED`, per Section 7 - no
+`GlobalExceptionHandler` change needed, since that mapping already exists). `RedissonLockHandle`
+(wraps `RLock`; `release()` guards with `isHeldByCurrentThread()` rather than catching
+`IllegalMonitorStateException`). `LockAutoConfiguration`: builds the `RedissonClient` bean from
+`telco.platform.lock.redis.address`, falling back to `spring.data.redis.host`/`port` (NOT
+`spring.data.redis.password` - set a full `redis://:<password>@host:port` address explicitly if the
+target Redis requires auth); conditional on `telco.platform.lock.enabled` (default true) and
+Redisson on the classpath; `@ConditionalOnMissingBean` override points for both the `RedissonClient`
+and the `DistributedLock` beans. Depends on the plain `org.redisson:redisson` client artifact, not
+Redisson's own `redisson-spring-boot-starter` - the platform, not a third-party starter, owns the
+`AutoConfiguration` and property surface. No Flyway migration (Redis-backed, not a table). Props
+under `telco.platform.lock.*`:
+
+| Property | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `true` | Master on/off switch. |
+| `redis.address` | falls back to `spring.data.redis.host`/`port`, else `redis://localhost:6379` | Redisson single-server connection target. |
+| `wait-time` | `5s` | Max time a caller blocks trying to acquire before failing closed. |
+| `watchdog-timeout` | `30s` | Redisson's internal lock-watchdog-timeout, used for watchdog-managed leases (`leaseTime == null`). |
+
+Strictly optional per ADR-018: a service adds `starter-lock` only if it needs cross-instance
+coordination; no existing starter or service gained a transitive dependency on it. First real
+consumers: `subscription-service`'s MSISDN reservation-expiry reaper (explicit lease) and
+`billing-service`'s bill-run (watchdog-managed lease) - Sprint 17 Features 17.3/17.4.
+
 ---
 
-## 10. Database Migrations (Flyway, ADR-016)
+## 11. Database Migrations (Flyway, ADR-016)
 
 Platform tables ship as Flyway scripts on the classpath under `db/migration/platform/` in the
 owning starter, versioned at `V900+` to avoid collision with service migrations. Services add
@@ -359,7 +429,7 @@ primary key (message_id, handler)`.
 
 ---
 
-## 11. Build and Verification
+## 12. Build and Verification
 
 From `telco-crm/platform`:
 

@@ -7,13 +7,60 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Redis (near-real-time quota
+# cache, Section 5 - granted even though the dev/k8s `application.yml`/
+# application-k8s.yml profile does not yet wire a REDIS_HOST, only prod/
+# staging do; an unused allow rule is not a regression the way a missing one
+# would be, and Section 5's designed cache dependency is the authoritative
+# source per this feature's spec), Keycloak (JWKS validation), Kafka
+# (produces usage.recorded.v1/quota.*/usage.aggregated.v1, event-catalog.md
+# Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/usage-service/application-k8s.yml), which reads
+  # DB credentials from the environment instead.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/usage-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  USAGE_DB_USER: usage
+  USAGE_DB_PASSWORD: usage
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/usage-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: usage-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: usage-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: usage-service/app
+      field: REDIS_PASSWORD
+    - key: USAGE_DB_USER
+      path: usage-service/db-credentials
+      field: username
+    - key: USAGE_DB_PASSWORD
+      path: usage-service/db-credentials
+      field: password

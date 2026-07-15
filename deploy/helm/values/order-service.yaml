@@ -7,13 +7,64 @@ service:
 image:
   tag: latest
 
+# Feature 19.3.2 (ADR-026 Section 2). order-service has one real non-gateway
+# synchronous caller, confirmed live by reading subscription-service's
+# OrderServiceClient source (the payment.completed.v1 activation path's one
+# synchronous hop, targeting the tokenless GET /internal/orders/{id}
+# endpoint). Overrides the chart default's `[api-gateway]` accordingly.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - subscription-service
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), Keycloak (JWKS validation), Kafka
+# (produces order.created.v1/confirmed.v1/cancelled.v1 and consumes payment.*/
+# subscription.activation-failed.v1, event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/order-service/application-k8s.yml), which reads
+  # DB credentials from the environment instead.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/order-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  ORDER_DB_USER: order
+  ORDER_DB_PASSWORD: order
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/order-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: order-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: order-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: order-service/app
+      field: REDIS_PASSWORD
+    - key: ORDER_DB_USER
+      path: order-service/db-credentials
+      field: username
+    - key: ORDER_DB_PASSWORD
+      path: order-service/db-credentials
+      field: password

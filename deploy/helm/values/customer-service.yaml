@@ -11,16 +11,82 @@ service:
 image:
   tag: latest
 
+# Feature 19.3.2 (ADR-026 Section 2). customer-service has one real
+# non-gateway synchronous caller, confirmed live by reading
+# order-service's CustomerServiceClient source (targets the tokenless
+# GET /internal/customers/{id} endpoint). Overrides the chart default's
+# `[api-gateway]` accordingly.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - order-service
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), MinIO (KYC documents, Section 5),
+# Keycloak (JWKS validation, microservices/configs/customer-service/
+# application.yml), Kafka (produces customer.registered.v1/kyc-approved.v1/
+# kyc-rejected.v1/updated.v1, event-catalog.md Section 2).
+networkPolicy:
+  egress:
+    postgres: true
+    minio: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/customer-service/application-k8s.yml), which reads
+  # DB credentials from the environment instead.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
-  # DEV-ONLY base64 AES-256 key (matches the application.yml dev default).
-  # Prod supplies a real key via --set-file / external Secret. NFR-06.
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/customer-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  CUSTOMER_DB_USER: customer
+  CUSTOMER_DB_PASSWORD: customer
+  # LOCAL-DEV-ONLY placeholder (vault.enabled=false path only - see
+  # deploy/helm/README.md "Config / Secret model"), matching the
+  # application.yml dev default. Deliberately decodes to an obvious,
+  # non-random repeating byte pattern so it can never be mistaken for a real
+  # key; it is valid base64-encoded 32 bytes only so AesKeyProvider's
+  # AES-256 validation passes locally (NFR-06). The real value lives in
+  # Vault KV v2 at secret/customer-service/aes-key (18.4.1,
+  # deploy/helm/vault/seed-secrets.sh) and is NEVER committed here. Any
+  # non-local environment MUST run with vault.enabled=true.
   CUSTOMER_AES_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/customer-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3). CUSTOMER_AES_KEY (NFR-06)
+# gets its own Vault KV path (per ADR-025 Section 2's
+# "secret/customer-service/aes-key") rather than sharing the "app" path used
+# for the shared credentials.
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: customer-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: customer-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: customer-service/app
+      field: REDIS_PASSWORD
+    - key: CUSTOMER_AES_KEY
+      path: customer-service/aes-key
+      field: CUSTOMER_AES_KEY
+    - key: CUSTOMER_DB_USER
+      path: customer-service/db-credentials
+      field: username
+    - key: CUSTOMER_DB_PASSWORD
+      path: customer-service/db-credentials
+      field: password

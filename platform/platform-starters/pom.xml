@@ -25,6 +25,7 @@
         <module>starter-observability</module>
         <module>starter-log-persistence</module>
         <module>starter-kafka</module>
+        <module>starter-lock</module>
     </modules>
 
 </project>

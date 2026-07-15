@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| DONE (features); exit-criteria follow-ups tracked | 5/5 | 2026-07-08 |
+| DONE (features); exit-criteria follow-ups tracked | 5/5 | 2026-07-12 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -42,4 +42,27 @@ Covers NFR-03 (HPA), NFR-04 (uptime), and the CI/CD/deployment requirements (ADR
 - A bad deploy is caught by smoke tests and rolled back automatically.
 - All MVP acceptance criteria (validated in Sprint 14) hold in the deployed environment; the platform
   is operable from the runbook.
+
+## Exit-Criteria Follow-Ups (status)
+
+The five features are DONE and individually verified (much of it live on Kind). Two of the three
+tracked follow-ups that blocked the "AC hold in the deployed environment" exit criterion are now
+RESOLVED; one remains.
+
+- RESOLVED 2026-07-12 - schema-registry exit-1 in-cluster. Root cause was NOT the originally-inferred
+  KafkaStore-init timeout; confirmed live as a Kubernetes service-link env collision (the Service named
+  `schema-registry` injects `SCHEMA_REGISTRY_PORT`, which cp-schema-registry's entrypoint reads as the
+  deprecated PORT setting and hard-exits 1 before contacting Kafka). Fix: `enableServiceLinks: false`
+  on the schema-registry Deployment pod spec (`deploy/helm/dependencies/templates/schema-registry.yaml`).
+  Verified live: Running 1/1, 0 restarts, `/subjects` serving.
+- RESOLVED 2026-07-12 - product-catalog 500 on GET /api/v1/tariffs in-cluster. Environmental, not a
+  code defect (the list endpoint is uncached; the earlier 500 occurred during a thrashing/partial-wave
+  cluster state). Returned HTTP 200 with the correct ApiResult shape once the dependency layer was
+  healthy. No code change.
+- REMAINING - full 13-service in-cluster boot + deployed-environment acceptance run (AC-01/02/03). The
+  local Kind cluster currently runs the dependency layer + config/discovery/gateway/product-catalog;
+  the other 9 domain services are not yet imaged/deployed there, and the 10 Debezium outbox connectors
+  are not registered. This is the always-deferred "full boot" and is the one item still standing
+  between "feature-complete + deployable" and "AC proven green in Kubernetes". Tracked in
+  [../todo.md](../todo.md) (Step 3).
 </content>

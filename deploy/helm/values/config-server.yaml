@@ -10,9 +10,9 @@
 # config-server substitutes ${...} placeholders in the YAML it serves using its
 # own environment, so it carries the same host/credential values as the clients.
 #
-# Its /actuator/health sits behind basic auth (the compose + Dockerfile
-# healthchecks curl it with -u config:config), so the probes send a dev-default
-# Authorization header. Override probes.httpHeaders if the basic-auth creds change.
+# /actuator/health and /actuator/info are explicitly permitAll in
+# ConfigServerSecurityConfig (everything else requires basic auth) - no probe
+# Authorization header is required or sent (see the 18.4.3 bug note below).
 serviceName: config-server
 containerPort: 8888
 service:
@@ -30,11 +30,19 @@ resources:
     memory: 768Mi
 
 probes:
-  # DEV-ONLY basic-auth header: base64("config:config"). Prod overrides this to
-  # match the real CONFIG_SERVER_USER/PASSWORD (or fronts a permitted probe path).
-  httpHeaders:
-    - name: Authorization
-      value: "Basic Y29uZmlnOmNvbmZpZw=="
+  # BUG FOUND under 18.4.3 live verification (fixed here, not scope creep):
+  # this used to send a hardcoded dev Authorization header
+  # (base64("config:config")) on every probe. /actuator/health is permitAll
+  # in ConfigServerSecurityConfig, so the header was never actually required
+  # - but Spring Security's BasicAuthenticationFilter rejects a request
+  # carrying an *invalid* Basic credential with 401 before authorization
+  # rules are even evaluated, regardless of permitAll. That happened to be
+  # masked under vault.enabled=false (the dev CONFIG_SERVER_PASSWORD default
+  # IS "config", so the header happened to be valid) but broke startup/
+  # liveness/readiness probes the moment CONFIG_SERVER_PASSWORD became a
+  # real, non-"config" Vault-sourced value (18.4.1) - the pod never reached
+  # Ready. Fix: send no Authorization header at all; the endpoint does not
+  # need one in either mode.
   startup:
     path: /actuator/health
     initialDelaySeconds: 10
@@ -66,9 +74,15 @@ config:
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
-  # DEV-ONLY symmetric encrypt key (compose expects `openssl rand -hex 32`).
-  # Prod MUST override via --set-file / external Secret. Never commit a real key.
-  ENCRYPT_KEY: "0f8a1c3e5b7d9f2a4c6e8b0d1f3a5c7e9b1d3f5a7c9e0b2d4f6a8c0e2b4d6f8a"
+  # LOCAL-DEV-ONLY placeholder (vault.enabled=false path only - see
+  # deploy/helm/README.md "Config / Secret model"). Deliberately an obvious,
+  # non-random repeating pattern so it can never be mistaken for a real key;
+  # it is a valid 64-hex-char string only so config-server (which refuses to
+  # start without ENCRYPT_KEY) boots locally. The real value lives in Vault
+  # KV v2 at secret/config-server/encrypt-key (18.4.1,
+  # deploy/helm/vault/seed-secrets.sh) and is NEVER committed here. Any
+  # non-local environment MUST run with vault.enabled=true.
+  ENCRYPT_KEY: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
 # Singleton config source: do not autoscale, and no PDB (single replica would
 # otherwise block node drains). Overrides the chart defaults (15.3).
@@ -77,3 +91,52 @@ autoscaling:
   enabled: false
 pdb:
   enabled: false
+
+# Feature 19.3.2 (ADR-026 Section 2). config-server's real caller set is all
+# 13 services (every service fetches its config on startup via Spring Cloud
+# Config, and Eureka-registered services also resolve discovery-server) -
+# not the gateway alone, so this overrides the chart default's
+# `[api-gateway]` with the full roster.
+# Feature 19.4.2/19.4.3 (ADR-026 Section 3). Ingress: chart default
+# (`useAuthorizedClientsForIngress: true`) already reuses `authorizedClients`
+# below (all 13 service names), so no `networkPolicy` override is needed here.
+# Egress: config-server itself calls no Postgres/Redis/Kafka/MinIO/Keycloak -
+# `KEYCLOAK_URI`/`KEYCLOAK_JWKS_URI` in `config:` below are template values it
+# SERVES to clients, not an outbound call it makes - so no `networkPolicy.egress`
+# flags are set true; only the universal discovery-server egress
+# (templates/networkpolicy-egress.yaml renders it unconditionally, since
+# config-server registers itself with Eureka via `EUREKA_HOST` below) applies.
+meshPolicy:
+  authorizedClients:
+    - api-gateway
+    - discovery-server
+    - config-server
+    - identity-service
+    - customer-service
+    - product-catalog-service
+    - order-service
+    - subscription-service
+    - usage-service
+    - billing-service
+    - payment-service
+    - notification-service
+    - ticket-service
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/config-server role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3). ENCRYPT_KEY gets its own
+# Vault KV path (per ADR-025 Section 2's "secret/config-server/encrypt-key")
+# rather than sharing the "app" path used for the shared credentials.
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: config-server/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: config-server/app
+      field: EUREKA_PASSWORD
+    - key: ENCRYPT_KEY
+      path: config-server/encrypt-key
+      field: ENCRYPT_KEY

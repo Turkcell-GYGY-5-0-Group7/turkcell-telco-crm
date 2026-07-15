@@ -9,13 +9,59 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). MongoDB (primary store, approved exception, Section 5),
+# Postgres (co-located outbox for notification.dispatched.v1, Section 5's
+# Notes), Keycloak (JWKS validation), Kafka (consumes every other domain
+# service's terminal event - the platform's universal notification sink,
+# event-catalog.md Section 2 Consumers column).
+networkPolicy:
+  egress:
+    postgres: true
+    mongo: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/notification-service/application-k8s.yml), which
+  # reads the PostgreSQL outbox DB credentials from the environment instead.
+  # notification-service's primary store is MongoDB (unauthenticated in this
+  # stack, not in scope for this feature); only the outbox DB creds move.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/notification-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  NOTIFICATION_DB_USER: notification
+  NOTIFICATION_DB_PASSWORD: notification
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/notification-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: notification-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: notification-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: notification-service/app
+      field: REDIS_PASSWORD
+    - key: NOTIFICATION_DB_USER
+      path: notification-service/db-credentials
+      field: username
+    - key: NOTIFICATION_DB_PASSWORD
+      path: notification-service/db-credentials
+      field: password

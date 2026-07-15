@@ -7,13 +7,62 @@ service:
 image:
   tag: latest
 
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record), MinIO (invoice PDFs, Section 5),
+# Keycloak (JWKS validation), Kafka (produces invoice.*, consumes tariff.
+# price-changed.v1/subscription.*/quota.exceeded.v1/usage.aggregated.v1/
+# payment.completed.v1, event-catalog.md Section 2). `redis: true` is a
+# DEVIATION from a literal reading of Section 5 alone (its Cache column does
+# not list Redis for billing-service): verified via microservices/configs/
+# billing-service/application.yml ("First use of Redis in this service" -
+# a Redisson-backed distributed lock, ADR-024) - a real egress dependency
+# Section 5's cache-only framing does not capture.
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    minio: true
+    keycloak: true
+    kafka: true
+
 config:
   CONFIG_SERVER_URI: http://config-server:8888
   CONFIG_SERVER_USER: config
-  SPRING_PROFILES_ACTIVE: dev,docker
+  # Feature 18.5: moved off dev,docker (plaintext DB block) to dev,k8s
+  # (microservices/configs/billing-service/application-k8s.yml), which reads
+  # DB credentials from the environment instead.
+  SPRING_PROFILES_ACTIVE: dev,k8s
   EUREKA_USERNAME: eureka
 
 secrets:
   CONFIG_SERVER_PASSWORD: config
   EUREKA_PASSWORD: eureka
   REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/billing-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  BILLING_DB_USER: billing
+  BILLING_DB_PASSWORD: billing
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/billing-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: billing-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: billing-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: billing-service/app
+      field: REDIS_PASSWORD
+    - key: BILLING_DB_USER
+      path: billing-service/db-credentials
+      field: username
+    - key: BILLING_DB_PASSWORD
+      path: billing-service/db-credentials
+      field: password

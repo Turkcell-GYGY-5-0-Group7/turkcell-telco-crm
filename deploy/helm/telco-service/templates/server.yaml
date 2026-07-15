@@ -1,0 +1,25 @@
+# Feature 19.3.1 (ADR-026 Section 2, Layer 1). A Linkerd `Server` selecting this
+# release's Pod label + app port. Rendered unconditionally for every one of the
+# 13 telco-service releases (10 domain services + api-gateway + config-server +
+# discovery-server) - a Server is the prerequisite object an
+# AuthorizationPolicy (templates/authorizationpolicy.yaml) attaches to; without
+# it, Linkerd's default policy is unrestricted-within-mesh, not deny-by-default
+# (see the values.yaml `meshPolicy` comment for which services actually get a
+# restricting AuthorizationPolicy attached - api-gateway deliberately does not).
+apiVersion: policy.linkerd.io/v1beta1
+kind: Server
+metadata:
+  name: {{ include "telco-service.fullname" . }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-service.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "telco-service.selectorLabels" . | nindent 6 }}
+  # Matches the named container port ("http") in templates/deployment.yaml -
+  # every one of the 13 services' app port, per docs/architecture/service-catalog.md.
+  port: http
+  # All 13 services are plain Spring Boot HTTP/1.1 servers (Spring Cloud
+  # Gateway included) - no HTTP/2 or gRPC in this platform (ADR-005).
+  proxyProtocol: HTTP/1
