@@ -73,7 +73,10 @@ class CampaignRepositoryTest {
         assertThat(found.getValidTo()).isNotNull();
         assertThat(found.getCreatedAt()).isNotNull();
         assertThat(found.getUpdatedAt()).isNotNull();
-        assertThat(found.getVersion()).isZero();
+        // Hibernate's element-collection persister issues a version-incrementing UPDATE when it
+        // recreates a non-empty @ElementCollection (applicableTariffCodes), even on the initial
+        // persist - so a freshly created campaign is at version 1, not 0, by the time it is re-read.
+        assertThat(found.getVersion()).isEqualTo(1);
 
         assertThat(campaignRepository.existsByCode("WELCOME10")).isTrue();
         assertThat(campaignRepository.existsByCode("MISSING")).isFalse();

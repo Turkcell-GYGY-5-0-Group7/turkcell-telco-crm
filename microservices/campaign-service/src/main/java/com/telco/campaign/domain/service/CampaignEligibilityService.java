@@ -13,6 +13,7 @@ import com.telco.platform.common.exception.BusinessRuleException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.outbox.OutboxService;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
@@ -28,9 +29,18 @@ import java.util.UUID;
  *
  * <p>Not invoked through the {@code Mediator} (this is a plain domain service, not a command/query
  * handler) - 21.3's validate endpoint and 21.4's event consumers call it directly. Both public methods
- * are self-transactional ({@code @Transactional}) rather than relying on the mediator's
- * {@code TransactionBehavior}, since neither caller guarantees a surrounding mediator-dispatched
- * transaction.
+ * are self-transactional ({@code @Transactional(propagation = REQUIRES_NEW)}) rather than relying on
+ * the mediator's {@code TransactionBehavior}, since neither caller guarantees a surrounding
+ * mediator-dispatched transaction - and, when a caller (such as
+ * {@code CreateRedemptionReservationCommandHandler}) IS itself a {@code Command} already wrapped in a
+ * {@code TransactionBehavior} transaction, plain {@code REQUIRED} propagation would join that outer
+ * transaction rather than run independently: a caught-and-swallowed {@link BusinessRuleException}
+ * would still leave the outer transaction marked rollback-only, failing the handler's own commit with
+ * {@code UnexpectedRollbackException} even though the exception was handled. {@code REQUIRES_NEW}
+ * guarantees a genuinely independent transaction regardless of caller context, so a caller that
+ * deliberately catches and swallows one of this class's exceptions (as
+ * {@code CreateRedemptionReservationCommandHandler} does for the cap-exceeded race) can still commit
+ * its own transaction normally.
  *
  * <p>{@link #evaluate} is deliberately a pure read except for the defensive auto-expire side effect
  * (ADR-027: "Redemption is not counted at the synchronous validation call ... it is a pure read").
@@ -78,7 +88,7 @@ public class CampaignEligibilityService {
      * @param customerId   the customer attempting to redeem
      * @param tariffCode   the tariff code the order is being priced against
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public EligibilityDecision evaluate(String campaignCode, UUID customerId, String tariffCode) {
         Optional<Campaign> campaignOpt = campaignRepository.findByCode(campaignCode);
         if (campaignOpt.isEmpty()) {
@@ -143,7 +153,7 @@ public class CampaignEligibilityService {
      * @throws ResourceNotFoundException if no campaign exists for {@code campaignId}
      * @throws BusinessRuleException     if either cap is already exhausted
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public CampaignRedemption reserve(UUID campaignId, UUID customerId, UUID orderId) {
         Campaign campaign = campaignRepository.findByIdForUpdate(campaignId)
                 .orElseThrow(() -> new ResourceNotFoundException(
