@@ -1,0 +1,6 @@
+# campaign-service prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+spring:
+  datasource:
+    url: ${CAMPAIGN_DB_URL}
+    username: ${CAMPAIGN_DB_USER}
+    password: ${CAMPAIGN_DB_PASSWORD}

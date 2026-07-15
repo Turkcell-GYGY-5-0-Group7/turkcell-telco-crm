@@ -46,3 +46,5 @@ telco:
       url: http://customer-service
     product-catalog-service:
       url: http://product-catalog-service
+    campaign-service:
+      url: http://campaign-service

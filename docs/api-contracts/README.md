@@ -21,6 +21,7 @@ intended public surface; implementation status tracks `docs/tasks/STATUS.md`.
 | [notification-service](notification-service.md) | 9009 | Simple Service Layer | TODO (Sprint 12) |
 | [ticket-service](ticket-service.md) | 9010 | CQRS + Mediator | TODO (Sprint 12) |
 | [web-bff](web-bff.md) (web channel composition) | - | BFF (post-MVP) | TODO (Sprint 16) |
+| [campaign-service](campaign-service.md) | 9011 | CQRS + Mediator | TODO (Sprint 21) |
 
 Per-service infrastructure (primary store, cache, search, object storage) is declared in the
 [service-catalog Infrastructure Profile](../architecture/service-catalog.md) (ADR-006). Notable

@@ -1,0 +1,6 @@
+# campaign-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/campaign_db
+    username: campaign
+    password: campaign

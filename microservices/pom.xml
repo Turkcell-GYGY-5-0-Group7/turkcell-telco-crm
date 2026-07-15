@@ -72,6 +72,7 @@
         <module>payment-service</module>
         <module>notification-service</module>
         <module>ticket-service</module>
+        <module>campaign-service</module>
         <!-- Channel (post-MVP, ADR-022) -->
         <module>web-bff</module>
     </modules>

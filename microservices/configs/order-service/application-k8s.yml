@@ -22,3 +22,5 @@ telco:
       url: http://customer-service:9002
     product-catalog-service:
       url: http://product-catalog-service:9003
+    campaign-service:
+      url: http://campaign-service:9011

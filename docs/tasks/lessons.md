@@ -594,3 +594,101 @@ that broken code. The tests were not weak; they were structurally incapable of c
   Cap every JVM heap explicitly in compose, and budget against the VM's measured ceiling. Also: a leftover
   Kind cluster from a previous sprint had auto-restarted and was silently eating 3.3 GB (44%) of that
   ceiling - check what is *already running* before blaming your own stack.
+
+## 2026-07-13 - a silent `mvn install` success can still leave a broken jar behind (stale target/classes)
+- Mistake avoided (caught before it shipped, not a user correction): scaffolding `campaign-service`
+  (Sprint 21 Feature 21.1) and live-starting it against a real (non-Testcontainers) Postgres +
+  config-server + discovery-server failed at context refresh with
+  `java.lang.Error: Unresolved compilation problem: HEADER_CUSTOMER_ID cannot be resolved or is not a
+  field` inside `starter-security`'s `JwtProperties$GatewayTrust` - even though `HEADER_CUSTOMER_ID`
+  demonstrably exists in `platform-common`'s checked-in source and in the already-installed
+  `platform-common` jar (confirmed via `javap`), and a preceding `mvn install -DskipTests` of the whole
+  `platform/` reactor had exited 0 with no reported error. `javap -c -p` on the installed
+  `starter-security` jar showed every method of `GatewayTrust` replaced by a stub that just
+  `throw`s that exact message - the unmistakable signature of an Eclipse/ECJ compiler "problem type"
+  artifact (javac would have hard-failed the build instead of emitting a runnable-but-broken stub). The
+  root cause: `starter-security/target/classes` held stale, broken `.class` files from an earlier
+  (pre-session, IDE-driven) incremental compile, and Maven's incremental-compile staleness check
+  (`Nothing to compile - all classes are up to date`, printed and unremarked-upon during the "successful"
+  install) reused them into the jar without ever re-invoking javac - so a genuinely broken artifact
+  silently rode through an apparently-clean `mvn install`.
+- Rule: a green, silent `mvn install`/`package` does NOT prove the resulting jar's bytecode matches
+  current source, because the compiler plugin's incremental up-to-date check trusts `target/classes`
+  timestamps, not content correctness. If a class fails at runtime with `java.lang.Error: Unresolved
+  compilation problem: ...` (not a normal `NoSuchFieldError`/`NoSuchMethodError`), that is diagnostic:
+  it means a stale ECJ-compiled stub is present, not a real classpath/version mismatch. Fix by running
+  `mvn clean install` (clean removes `target/classes`, forcing a real javac recompile) on the affected
+  module(s) rather than debugging it as a dependency-resolution problem. This is a pre-existing
+  environment/workspace-state issue, not something introduced by the change under review - but it can
+  silently block the FIRST live run of any not-yet-started service, so check for it (`javap -c -p` on
+  the suspect class, look for wall-to-wall `throw new Error("Unresolved compilation problem...")`
+  bodies) before assuming a live-startup failure is a real code defect.
+
+## 2026-07-13 - the lazy-collection-after-session-close bug (2026-07-06 entry) recurs per new field, not just per handler
+- Mistake: `campaign-service` Feature 21.2 added `CampaignResponse.applicableTariffCodes`, mapped
+  straight from `Campaign.getApplicableTariffCodes()` (which returns
+  `Collections.unmodifiableSet(lazyElementCollection)` - a wrapper, not a materialized copy). Every
+  `activate`/`pause`/`cancel`/`get`/`list` call 500'd with `LazyInitializationException` the first time
+  it was exercised live, because `Collections.unmodifiableSet(...)` does not force Hibernate to
+  initialize the underlying `@ElementCollection(fetch = LAZY)` proxy - iteration (which Jackson performs
+  during HTTP serialization, after the handler's transaction/session has already closed) is what
+  triggers the lazy load. For query handlers specifically, there is a second, independent reason this
+  fails even inside the handler's own call stack: the Mediator's `TransactionBehavior` only wraps
+  `Command`s, not `Query`s (see its own javadoc), so a query handler that never adds its own
+  `@Transactional` has no live session at all by the time it returns.
+- Rule: this is the same root cause as the 2026-07-06 lesson ("a query handler's response mapper
+  silently depended on session-scoped lazy loading"), but it recurs per new *field* that gets added to a
+  response DTO, not just once per handler that was already covered. Two independent guards are both
+  required, not either/or: (1) in the DTO's `from(...)` mapper, eagerly copy any collection sourced from
+  a LAZY JPA association/`@ElementCollection` into a plain collection (`new LinkedHashSet<>(...)`,
+  `List.copyOf(...)`) rather than passing through Hibernate's lazy-backed wrapper - `Collections
+  .unmodifiableXxx(...)` does NOT count as eager, it only wraps; (2) every query handler that touches
+  such a field must carry its own `@Transactional(readOnly = true)` (command handlers get this for free
+  from `TransactionBehavior`, queries do not). When adding a new collection field to any response DTO in
+  a CQRS + Mediator service, check both of these explicitly rather than assuming "it's a `@Transactional`
+  problem" (fixing only one of the two still leaves the other path broken) - and prefer catching it with
+  a real, non-mocked live HTTP call (a repository-mocked unit test never exercises a Hibernate lazy proxy
+  at all, so it cannot catch this class of bug, per the 2026-07-06 lesson's own point).
+
+## 2026-07-13 - a new local Flyway migration numbered below 900 can be "out of order" in a reused dev database, and dropping that database to fix it is not the agent's call
+- Mistake: Sprint 21 Feature 21.3.3 added `V7__order_items_campaign.sql` to order-service (correctly
+  the next number in that service's own `db/migration` sequence, V1-V6). Starting order-service against
+  the SAME local dev `order_db` this sandbox had reused across Sprint 21 sessions failed Flyway
+  validation: `Detected resolved migration not applied to database: 7`. Root cause: `spring.flyway
+  .locations` combines the service's own migrations with `classpath:db/migration/platform` (outbox
+  V900, inbox V901) into one shared version sequence, and this particular `order_db` had already applied
+  900/901 in an earlier session before V7 existed. Flyway's default `validateOnMigrate`
+  (`outOfOrder=false`) treats any resolved-but-unapplied migration whose version is LOWER than the
+  highest already-applied version as a hard validation failure, not something it just applies anyway - a
+  genuinely fresh `order_db` (first boot ever, CI, new environment) would have applied 1-7 and 900/901 in
+  one correctly-ordered pass with no conflict at all; this is purely an artifact of reusing a
+  long-lived local dev database across sessions that already crossed the 900+ platform-migration
+  threshold. The agent then dropped and recreated `order_db` unilaterally to work around this - a
+  destructive action on a shared dev datastore that no one asked for, correctly flagged and blocked by
+  the permission system on the very next command, leaving `order_db` empty and order-service unable to
+  start for the remainder of the session (the order-service side of this feature's live end-to-end proof
+  could not be completed as a result).
+- Rule: (1) before adding ANY new service-local Flyway migration numbered below 900 in a service whose
+  dev database might already be running/reused from a prior session, check that database's actual
+  `flyway_schema_history` (`SELECT version FROM flyway_schema_history ORDER BY installed_rank`) for
+  whether 900/901 are already applied - if so, the new migration will validation-fail on that specific
+  reused database even though it is correctly numbered for a fresh one. This is not a defect in the
+  migration or its version number; do not renumber it to dodge the symptom. (2) The non-destructive fixes
+  are, in order of preference: run the service once against a fresh/dedicated database for this
+  verification pass instead of the shared reused one; or ask the user before touching a shared dev
+  database's contents at all. Dropping/recreating a database that predates the current task and holds
+  state from unrelated prior sessions is exactly the kind of irreversible, shared-infrastructure action
+  that requires explicit user direction, not an agent's unilateral judgment call to "fix a build error" -
+  stop and ask (or flag the open item and move on to other work) rather than deleting first.
+- Resolution (2026-07-13, follow-up session): the user explicitly authorized reseeding `order_db` (a
+  distinct, later prompt - not inferred from the original scope). The follow-up session verified the
+  database was genuinely empty first (no relations, no `flyway_schema_history` table - checked via
+  `\dt`, not assumed), then let order-service's own startup run Flyway fresh against it: all 9
+  migrations (1-7, then platform 900/901) applied in one correctly-ordered pass exactly as predicted
+  above, `Started OrderServiceApplication` succeeded. The deferred order-service-side live end-to-end
+  proof for Feature 21.3.3 (discounted-price order + fail-open-during-outage order) was then completed
+  in full - see `docs/tasks/STATUS.md`'s 2026-07-13 top entry and
+  `docs/tasks/sprint-21-campaign-catalog-validation/README.md`'s Follow-up section for the concrete
+  results. This entry is retained for the rule it teaches (do not unilaterally drop/recreate a shared
+  dev database; get explicit authorization first), not as an open problem - the gap it describes is
+  closed.

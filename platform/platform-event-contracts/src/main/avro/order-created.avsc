@@ -48,6 +48,12 @@
               "name": "quantity",
               "type": "int",
               "doc": "Quantity ordered."
+            },
+            {
+              "name": "campaignId",
+              "type": ["null", "string"],
+              "default": null,
+              "doc": "Identifier of the campaign that discounted unitPrice, if any (Sprint 21 Feature 21.3.3, ADR-027 Decision Section 4). Null when the item was priced at the undiscounted tariff rate."
             }
           ]
         }

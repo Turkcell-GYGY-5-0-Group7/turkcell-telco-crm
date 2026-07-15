@@ -30,4 +30,13 @@ public class RestClientConfig {
                 .baseUrl(baseUrl)
                 .build();
     }
+
+    @Lazy
+    @Bean
+    public RestClient campaignRestClient(
+            @Value("${telco.clients.campaign-service.url}") String baseUrl) {
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .build();
+    }
 }

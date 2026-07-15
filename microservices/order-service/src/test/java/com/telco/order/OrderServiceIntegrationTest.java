@@ -1,5 +1,6 @@
 package com.telco.order;
 
+import com.telco.order.infrastructure.client.CampaignServiceClient;
 import com.telco.order.infrastructure.client.CustomerClientResponse;
 import com.telco.order.infrastructure.client.CustomerServiceClient;
 import com.telco.order.infrastructure.client.ProductCatalogServiceClient;
@@ -81,6 +82,9 @@ class OrderServiceIntegrationTest {
     @MockitoBean
     ProductCatalogServiceClient productCatalogServiceClient;
 
+    @MockitoBean
+    CampaignServiceClient campaignServiceClient;
+
     @Autowired
     JwtService jwtService;
 
@@ -115,6 +119,10 @@ class OrderServiceIntegrationTest {
                 .thenReturn(new CustomerClientResponse(CUSTOMER_ID, "ACTIVE"));
         when(productCatalogServiceClient.getTariff(any()))
                 .thenReturn(new TariffClientResponse(TARIFF_ID, "POSTPAID-001", "Postpaid Basic", new BigDecimal("49.99"), "TRY", 3));
+        // No eligible campaign for these fixtures: every order-creation test in this class asserts
+        // today's undiscounted pricing (Feature 21.3.3 regression guard).
+        when(campaignServiceClient.validate(any(), any(), any()))
+                .thenReturn(CampaignServiceClient.NOT_ELIGIBLE_SENTINEL);
     }
 
     @Test
