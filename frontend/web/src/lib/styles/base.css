@@ -1,0 +1,84 @@
+/*
+ * Base element styles. Imported once from the root layout, alongside tokens.css.
+ * Everything here is deliberately global; component styling stays scoped.
+ */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	min-height: 100vh;
+	background: var(--color-bg);
+	color: var(--color-text);
+	font-family: var(--font-sans);
+	font-size: var(--text-base-size);
+	line-height: var(--text-base-lh);
+	-webkit-font-smoothing: antialiased;
+	transition:
+		background-color var(--duration-base) var(--ease-in-out),
+		color var(--duration-base) var(--ease-in-out);
+}
+
+h1,
+h2,
+h3,
+h4 {
+	margin: 0;
+	color: var(--color-text);
+	letter-spacing: -0.01em;
+}
+
+p {
+	margin: 0;
+}
+
+a {
+	color: var(--color-link);
+}
+
+/* One focus ring for the whole app. Inside the navy header the ring colour is
+   locally re-pointed at the yellow, which clears 3:1 against navy in both themes. */
+:focus-visible {
+	outline: 2px solid var(--color-focus);
+	outline-offset: 2px;
+	border-radius: var(--radius-sm);
+}
+
+::selection {
+	background: var(--color-accent-soft);
+	color: var(--color-on-accent-soft);
+}
+
+/* Numeric columns (amounts, MSISDNs, counters) must not jitter as digits change. */
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* CSS-driven motion is neutralised here; JS-driven Svelte transitions consult
+   prefersReducedMotion() from $lib/ui/motion instead. */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

@@ -7,6 +7,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { completeLogin, returnPathFromUser } from '$lib/auth/oidc';
+	import Alert from '$lib/ui/Alert.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Spinner from '$lib/ui/Spinner.svelte';
 
 	let error = $state<string | null>(null);
 
@@ -24,31 +27,47 @@
 
 <section class="page">
 	{#if error}
-		<h1>Sign-in failed</h1>
-		<p class="error">{error}</p>
-		<a href="/login">Back to sign in</a>
+		<Alert tone="danger">
+			{#snippet children()}
+				<p><strong>Sign-in failed.</strong></p>
+				<p>{error}</p>
+			{/snippet}
+			{#snippet actions()}
+				<Button variant="secondary" size="sm" href="/login">Back to sign in</Button>
+			{/snippet}
+		</Alert>
 	{:else}
-		<h1>Signing in...</h1>
-		<p>Completing authentication with Keycloak.</p>
+		<div class="pending">
+			<Spinner size="md" />
+			<p class="title">Signing in...</p>
+			<p class="detail">Completing authentication with Keycloak.</p>
+		</div>
 	{/if}
 </section>
 
 <style>
 	.page {
-		max-width: 40rem;
+		max-width: 36rem;
+		margin-inline: auto;
+		padding-block: var(--space-12);
 	}
 
-	h1 {
-		margin: 0 0 0.5rem;
-		font-size: 1.5rem;
+	.pending {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: var(--space-3);
 	}
 
-	p {
-		margin: 0 0 0.75rem;
-		color: #4b5563;
+	.title {
+		font-size: var(--text-lg-size);
+		line-height: var(--text-lg-lh);
+		font-weight: 600;
 	}
 
-	.error {
-		color: #b91c1c;
+	.detail {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm-size);
 	}
 </style>

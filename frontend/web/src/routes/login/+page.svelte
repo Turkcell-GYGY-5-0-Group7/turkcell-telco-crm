@@ -8,6 +8,9 @@
 	import { page } from '$app/stores';
 	import { authState, login, logout } from '$lib/auth/oidc';
 	import { RETURN_TO_PARAM } from '$lib/auth/route-guard';
+	import BrandLogo from '$lib/ui/BrandLogo.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Card from '$lib/ui/Card.svelte';
 
 	let busy = $state(false);
 
@@ -33,46 +36,58 @@
 </script>
 
 <section class="page">
-	<h1>Sign in</h1>
+	<Card padding="lg">
+		<div class="body">
+			<BrandLogo variant="hero" />
 
-	{#if $authState.status === 'authenticated'}
-		<p>Signed in{$authState.username ? ` as ${$authState.username}` : ''}.</p>
-		<button type="button" onclick={onSignOut} disabled={busy}>Sign out</button>
-	{:else}
-		<p>Authenticate with Keycloak (Authorization Code + PKCE) to continue.</p>
-		<button type="button" onclick={onSignIn} disabled={busy || $authState.status === 'unknown'}>
-			Sign in with Keycloak
-		</button>
-	{/if}
+			{#if $authState.status === 'authenticated'}
+				<h1>Your session</h1>
+				<p class="lede">
+					Signed in{$authState.username ? ` as ${$authState.username}` : ''}.
+				</p>
+				<Button variant="secondary" onclick={onSignOut} loading={busy}>Sign out</Button>
+			{:else}
+				<h1>Sign in</h1>
+				<p class="lede">
+					Authenticate with Keycloak (Authorization Code + PKCE) to reach your account.
+				</p>
+				<Button onclick={onSignIn} loading={busy} disabled={$authState.status === 'unknown'}>
+					Sign in with Keycloak
+				</Button>
+			{/if}
+		</div>
+	</Card>
 </section>
 
 <style>
 	.page {
-		max-width: 40rem;
+		max-width: 26rem;
+		margin-inline: auto;
+		padding-block: var(--space-12);
+	}
+
+	.body {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: var(--space-4);
 	}
 
 	h1 {
-		margin: 0 0 0.5rem;
-		font-size: 1.5rem;
+		font-size: var(--text-2xl-size);
+		line-height: var(--text-2xl-lh);
+		font-weight: 700;
 	}
 
-	p {
-		margin: 0 0 1rem;
-		color: #4b5563;
+	.lede {
+		color: var(--color-text-secondary);
+		font-size: var(--text-sm-size);
+		line-height: var(--text-sm-lh);
 	}
 
-	button {
-		font: inherit;
-		padding: 0.5rem 1rem;
-		border: 1px solid #16213e;
-		border-radius: 0.375rem;
-		background: #16213e;
-		color: #ffffff;
-		cursor: pointer;
-	}
-
-	button:disabled {
-		opacity: 0.6;
-		cursor: default;
+	.body :global(.btn) {
+		width: 100%;
+		margin-top: var(--space-2);
 	}
 </style>

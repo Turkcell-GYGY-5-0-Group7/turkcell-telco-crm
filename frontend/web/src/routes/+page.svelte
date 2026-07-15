@@ -25,6 +25,13 @@
 	import { loadLinkedResource } from '$lib/onboarding/link-state';
 	import NotOnboardedNotice from '$lib/onboarding/NotOnboardedNotice.svelte';
 	import DashboardSummary from '$lib/home/DashboardSummary.svelte';
+	import Alert from '$lib/ui/Alert.svelte';
+	import BrandLogo from '$lib/ui/BrandLogo.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Card from '$lib/ui/Card.svelte';
+	import PageHeader from '$lib/ui/PageHeader.svelte';
+	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import Spinner from '$lib/ui/Spinner.svelte';
 
 	let home = $state<HomeDashboard | null>(null);
 	let loading = $state(false);
@@ -86,19 +93,38 @@
 	}
 </script>
 
-<section class="home">
-	<h1>Telco CRM</h1>
-
-	{#if $authState.status === 'authenticated'}
-		<p class="lede">Welcome back{$authState.username ? `, ${$authState.username}` : ''}.</p>
+{#if $authState.status === 'authenticated'}
+	<section class="page">
+		<PageHeader
+			title="Dashboard"
+			subtitle={$authState.username
+				? `Welcome back, ${$authState.username}.`
+				: 'Your account at a glance.'}
+		/>
 
 		{#if loading}
-			<p class="hint">Loading your dashboard...</p>
-		{:else if error}
-			<div class="notice error" role="alert">
-				<p>{error}</p>
-				<button type="button" onclick={() => load()}>Retry</button>
+			<!-- Skeletons mirror the real three-card grid, so the layout does not jump
+			     when the composed payload lands. -->
+			<div class="skeleton-grid" aria-busy="true" aria-label="Loading your dashboard">
+				{#each [0, 1, 2] as index (index)}
+					<Card>
+						<div class="skeleton-card">
+							<Skeleton variant="circle" width="2.5rem" height="2.5rem" />
+							<Skeleton variant="text" width="45%" />
+							<Skeleton variant="text" lines={3} />
+						</div>
+					</Card>
+				{/each}
 			</div>
+		{:else if error}
+			<Alert tone="danger">
+				{#snippet children()}
+					<p>{error}</p>
+				{/snippet}
+				{#snippet actions()}
+					<Button variant="secondary" size="sm" onclick={() => load()}>Retry</Button>
+				{/snippet}
+			</Alert>
 		{:else if notOnboarded}
 			<NotOnboardedNotice
 				message="You have not completed onboarding yet, so there is no account to show. Once you have registered, chosen a plan, and your subscription is activated, your dashboard will appear here."
@@ -106,99 +132,86 @@
 		{:else if home}
 			<DashboardSummary {home} />
 		{/if}
-	{:else if $authState.status === 'anonymous'}
-		<p class="lede">Your account, subscriptions, and invoices in one place.</p>
-		<p class="hint">Sign in to see your dashboard.</p>
+	</section>
+{:else if $authState.status === 'anonymous'}
+	<section class="hero">
+		<BrandLogo variant="hero" />
+		<h1>Your telecom, in one place</h1>
+		<p class="lede">
+			Register a line, follow your usage, and settle your invoices - one account, one view.
+		</p>
 		<div class="actions">
-			<button type="button" onclick={signIn} disabled={signingIn}>Sign in</button>
-			<a class="secondary" href="/onboarding">New here? Start onboarding</a>
+			<Button onclick={signIn} loading={signingIn}>Sign in</Button>
+			<Button variant="ghost" href="/onboarding">New here? Start onboarding</Button>
 		</div>
-	{:else}
-		<p class="hint">Starting up...</p>
-	{/if}
-</section>
+	</section>
+{:else}
+	<div class="booting">
+		<Spinner size="md" label="Starting up" />
+	</div>
+{/if}
 
 <style>
-	.home {
-		max-width: 60rem;
+	.page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: var(--space-6);
+	}
+
+	.skeleton-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+		gap: var(--space-4);
+	}
+
+	.skeleton-card {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-3);
+	}
+
+	.hero {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: var(--space-5);
+		max-width: 40rem;
+		margin-inline: auto;
+		padding-block: var(--space-16);
 	}
 
 	h1 {
-		margin: 0;
-		font-size: 1.75rem;
+		font-size: var(--text-4xl-size);
+		line-height: var(--text-4xl-lh);
+		font-weight: 700;
 	}
 
 	.lede {
-		margin: 0;
-		font-size: 1.05rem;
-		color: #374151;
-	}
-
-	.hint {
-		margin: 0;
-		color: #6b7280;
-		font-size: 0.9rem;
+		color: var(--color-text-secondary);
+		font-size: var(--text-lg-size);
+		line-height: var(--text-lg-lh);
 	}
 
 	.actions {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: var(--space-3);
+		margin-top: var(--space-2);
 	}
 
-	.actions button {
-		font: inherit;
-		padding: 0.5rem 1.1rem;
-		border: 1px solid #16213e;
-		border-radius: 0.375rem;
-		background: #16213e;
-		color: #ffffff;
-		cursor: pointer;
-	}
-
-	.actions button:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
-	.secondary {
-		color: #16213e;
-		font-size: 0.9rem;
-		text-decoration: none;
-		font-weight: 600;
-	}
-
-	.secondary:hover {
-		text-decoration: underline;
-	}
-
-	.notice {
+	.booting {
 		display: flex;
-		align-items: center;
-		gap: 1rem;
-		padding: 1rem 1.25rem;
-		border-radius: 0.5rem;
-		background: #fef2f2;
-		border: 1px solid #fecaca;
+		justify-content: center;
+		padding-block: var(--space-16);
 	}
 
-	.notice p {
-		margin: 0;
-		color: #b91c1c;
-		font-size: 0.9rem;
-	}
-
-	.notice button {
-		font: inherit;
-		font-size: 0.85rem;
-		padding: 0.35rem 0.9rem;
-		border-radius: 0.375rem;
-		border: 1px solid #b91c1c;
-		background: #ffffff;
-		color: #b91c1c;
-		cursor: pointer;
+	@media (max-width: 40rem) {
+		h1 {
+			font-size: var(--text-3xl-size);
+			line-height: var(--text-3xl-lh);
+		}
 	}
 </style>
