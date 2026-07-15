@@ -1,0 +1,71 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco</groupId>
+        <artifactId>domain-services-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../domain-services-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>campaign-service</artifactId>
+    <name>campaign-service</name>
+    <description>Campaign and catalog-limits validation (port 9011, CQRS + Mediator, ADR-027).
+        Owns Campaign/CampaignRedemption in campaign-db; transactional, per-customer-consistent
+        (not cache-aside). Eventing wiring (outbox lifecycle events, order/payment/tariff inbox
+        consumers, reservation-expiry reaper) lands in Sprint 21 Feature 21.4.</description>
+
+    <dependencies>
+        <!-- CQRS + Mediator dispatch (ADR-027 Decision Section 2). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
+        </dependency>
+        <!-- Idempotent consumption of order/payment/tariff events (Feature 21.4). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-inbox</artifactId>
+        </dependency>
+        <!-- Kafka listeners for order.created.v1/order.cancelled.v1, payment.completed.v1,
+             tariff.created.v1/tariff.price-changed.v1 (Feature 21.4.2/21.4.3). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-kafka</artifactId>
+        </dependency>
+        <!-- Guards the redemption reservation-expiry reaper across replicas (Feature 21.4,
+             ADR-024 amendment to ADR-027 Section 4, mirroring subscription-service's MSISDN reaper). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-lock</artifactId>
+        </dependency>
+
+        <!-- Canonical Avro event contracts and the shared AvroContractAssertions test-jar (ADR-019):
+             CampaignEventSchemaCompatTest compares real event records against the governed schema in
+             platform-event-contracts, not a local test-resources snapshot. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- starter-lock's in-JVM DistributedLock substitute, auto-registered whenever
+             telco.platform.lock.enabled=false in tests (docs/tasks/lessons.md 2026-07-12), so every
+             pre-existing Spring-context test in this module keeps working without a live Redis. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-lock</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -78,11 +78,22 @@ public class Order {
     }
 
     /**
-     * Adds an item to this order. Callers use this to build the item list before persisting.
+     * Adds an item to this order with no campaign discount. Callers use this to build the item list
+     * before persisting.
      */
     public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
                              BigDecimal unitPrice, int quantity) {
-        OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName, unitPrice, quantity);
+        return addItem(tariffId, tariffCode, tariffVersion, tariffName, unitPrice, quantity, null, null);
+    }
+
+    /**
+     * Adds an item to this order, recording which campaign (if any) discounted {@code unitPrice}
+     * (Feature 21.3.3, ADR-027 Decision Section 4).
+     */
+    public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
+                             BigDecimal unitPrice, int quantity, UUID campaignId, String campaignCode) {
+        OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName,
+                unitPrice, quantity, campaignId, campaignCode);
         items.add(item);
         return item;
     }

@@ -1,0 +1,6 @@
+# campaign-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${CAMPAIGN_DB_URL}
+    username: ${CAMPAIGN_DB_USER}
+    password: ${CAMPAIGN_DB_PASSWORD}

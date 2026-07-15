@@ -1,0 +1,64 @@
+{
+  "type": "record",
+  "name": "CampaignCreatedV1",
+  "namespace": "com.telco.platform.events.campaign",
+  "doc": "Emitted when a campaign is created in DRAFT status (campaign.created.v1). Producer: campaign-service.",
+  "fields": [
+    {
+      "name": "campaignId",
+      "type": "string",
+      "doc": "Unique campaign identifier (UUID)."
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "doc": "Admin-assigned campaign code, unique."
+    },
+    {
+      "name": "name",
+      "type": "string",
+      "doc": "Campaign name."
+    },
+    {
+      "name": "discountType",
+      "type": "string",
+      "doc": "PERCENTAGE or FIXED_AMOUNT."
+    },
+    {
+      "name": "discountValue",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Discount magnitude as an exact decimal (precision 19, scale 4); interpretation depends on discountType."
+    },
+    {
+      "name": "validFrom",
+      "type": "string",
+      "doc": "Instant the campaign's validity window begins, ISO-8601 (UTC)."
+    },
+    {
+      "name": "validTo",
+      "type": "string",
+      "doc": "Instant the campaign's validity window ends, ISO-8601 (UTC)."
+    },
+    {
+      "name": "totalRedemptionCap",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Total redemption cap across all customers, or null for unlimited."
+    },
+    {
+      "name": "perCustomerRedemptionCap",
+      "type": "int",
+      "doc": "Per-customer redemption cap."
+    },
+    {
+      "name": "createdAt",
+      "type": "string",
+      "doc": "Instant the campaign was created, ISO-8601 (UTC)."
+    }
+  ]
+}

@@ -48,6 +48,20 @@ class OrderTest {
     }
 
     @Test
+    void addItem_with_campaign_records_campaign_id_and_code() {
+        Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID);
+        UUID tariffId = UUID.randomUUID();
+        UUID campaignId = UUID.randomUUID();
+
+        OrderItem item = order.addItem(tariffId, "BASIC_V1", 1, "Basic Plan",
+                new BigDecimal("37.49"), 1, campaignId, "SUMMER25");
+
+        assertThat(item.getCampaignId()).isEqualTo(campaignId);
+        assertThat(item.getCampaignCode()).isEqualTo("SUMMER25");
+        assertThat(item.getUnitPrice()).isEqualByComparingTo("37.49");
+    }
+
+    @Test
     void cancel_transitions_pending_order_to_cancelled() {
         Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID);
 

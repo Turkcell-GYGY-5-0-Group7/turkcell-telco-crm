@@ -37,5 +37,20 @@ All endpoints require a valid JWT.
 - `Idempotency-Key` is mandatory on order creation; replays return the original result.
 - Order capture validates the customer (ACTIVE/KYC) and snapshots catalog price synchronously.
 - Saga state is persisted; activation failure compensates (refund + order CANCELLED).
+- **Optional campaign discount at order capture (Sprint 21 Feature 21.3.3, ADR-027 Decision Section
+  4):** after the existing tariff price-snapshot call, order-service asks campaign-service (tokenless,
+  `POST /internal/campaigns/validate` on `CampaignServiceClient`, behind a **fail-open** Resilience4j
+  circuit breaker) whether a campaign discount applies to each line item. Each item in
+  `POST /api/v1/orders`'s request body may optionally carry a `campaignCode`; when omitted,
+  campaign-service auto-resolves the best-matching ACTIVE campaign for the item's tariff. When
+  eligible, the `OrderItem`'s `unitPrice` is discounted (`PERCENTAGE`:
+  `monthlyFee * (1 - discountValue/100)`; `FIXED_AMOUNT`: `monthlyFee - discountValue`, both floored at
+  zero) and the nullable `campaignId`/`campaignCode` snapshot columns on `order_items` are populated
+  (`campaignId` always when a discount applied; `campaignCode` only when the caller explicitly
+  requested that campaign - matching the `tariff_id`/`tariff_code`/`tariff_version` snapshot symmetry).
+  A campaign-service outage, an OPEN circuit breaker, or a genuinely ineligible decision all leave the
+  item priced at today's undiscounted `monthlyFee` - a campaign outage never blocks order creation.
+  `OrderCreatedEvent.OrderItemPayload` carries a matching nullable `campaignId` field for Feature 21.4's
+  redemption-confirmation flow.
 
-Reference: [service-catalog](../architecture/service-catalog.md), [event-catalog](../architecture/event-catalog.md), ADR-015.
+Reference: [service-catalog](../architecture/service-catalog.md), [event-catalog](../architecture/event-catalog.md), ADR-015, ADR-027.

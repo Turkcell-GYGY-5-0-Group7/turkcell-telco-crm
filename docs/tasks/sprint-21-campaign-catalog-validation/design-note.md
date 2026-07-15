@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Track | Sprint 21 |
-| Status | Draft (input to ADR-027, Proposed) |
+| Status | Draft (input to ADR-027, which is now Accepted/ratified 2026-07-13 - see Section 4 amendment note in the ADR for the Section 7 item 1 resolution) |
 | Author | architecture agent |
 | Last updated | 2026-07-11 |
 | Related | [ADR-027](../../../architecture/adr/ADR-027-campaign-and-catalog-validation.md), [service-catalog.md](../../architecture/service-catalog.md), [event-catalog.md](../../architecture/event-catalog.md) |
@@ -73,7 +73,8 @@ inter-service channel).
 Flow:
 
 1. order-service resolves the tariff/offering via its existing sync call to product-catalog-service.
-2. order-service calls `POST /api/v1/campaigns/validate` (internal) on campaign-service with
+2. order-service calls `POST /internal/campaigns/validate` (tokenless, network-perimeter trust -
+   see ADR-027 Section 4, 2026-07-13 second ratification addendum) on campaign-service with
    `{ customerId, tariffCode, campaignCode? }`.
 3. campaign-service evaluates eligibility (tariff code in `applicableTariffCodes`, validity window,
    `perCustomerRedemptionCap` not yet exhausted, `totalRedemptionCap` not yet exhausted) and returns
@@ -144,7 +145,18 @@ out of the MVP shape to keep the aggregate small; flagged here for a later itera
 
 ## 7. Open questions for the sprint 21 feature authoring pass
 
-- Which order-service event campaign-service should treat as "order is real" for redemption commit,
-  given `order.confirmed.v1` is currently a deferred/unproduced event per the event catalog.
+- ~~Which order-service event campaign-service should treat as "order is real" for redemption
+  commit~~ - **RESOLVED** by tech-lead ADR-027 ratification (2026-07-13, Section 4 amendment):
+  `RESERVED` on `order.created.v1`, `CONFIRMED` on `payment.completed.v1` (not `order.confirmed.v1`,
+  confirmed deferred/unproduced), `RELEASED` on `order.cancelled.v1`, plus a required
+  `reservedUntil` reservation-expiry reaper. See ADR-027 Section 4.
+- ~~Endpoint path/auth model for the synchronous validate call~~ - **RESOLVED** by tech-lead
+  ADR-027 ratification addendum (2026-07-13): `POST /internal/campaigns/validate`, tokenless,
+  network-perimeter trust, matching the platform-wide `/internal/**` pattern - not
+  `/api/v1/campaigns/validate`. See ADR-027 Section 4.
+- ~~order-service schema addition to correlate an order/OrderItem back to the campaign that priced
+  it~~ - **RESOLVED** by tech-lead ADR-027 ratification addendum (2026-07-13): approved as scoped -
+  nullable `campaign_id`/`campaign_code` on `order_items` plus `OrderCreatedEvent.OrderItemPayload`.
+  See ADR-027 Section 4.
 - Whether campaign eligibility needs a `channel` attribute (web/app/dealer/call-center) at MVP or can
-  wait - ADVANCED.md Section 2.7 (BFF/channels) is itself a separate deferred item.
+  wait - ADVANCED.md Section 2.7 (BFF/channels) is itself a separate deferred item. Still open.

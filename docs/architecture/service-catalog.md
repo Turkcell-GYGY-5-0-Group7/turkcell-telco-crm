@@ -132,6 +132,22 @@ final Tech Lead Agent approval.
   `.../assign`, `.../resolve`.
 - Events: publish `TicketOpened`, `TicketAssigned`, `TicketResolved`, `SlaBreached`.
 
+### campaign-service (port 9011)
+
+- Bounded context: Campaign and catalog-limits validation at order/catalog time (ADR-027; Sprint 21,
+  narrower slice of the full promotion-engine vision in TELCO-CRM-ADVANCED.md Section 2.4).
+- Architecture mode: CQRS + Mediator.
+- Infrastructure profile: transactional, per-customer-consistent - **not** cache-aside (contrast with
+  product-catalog-service's Redis cache-aside profile, Section 5).
+- Aggregates: Campaign, CampaignRedemption.
+- Key APIs: `POST /api/v1/campaigns/validate` (internal, called synchronously by order-service at
+  order-creation time; no gateway route - see `docs/api-contracts/campaign-service.md`).
+- Events: consume `order.created.v1` (reserve), `payment.completed.v1` (confirm),
+  `order.cancelled.v1` (release), `tariff.created.v1`/`tariff.price-changed.v1` (defensive staleness
+  detection); publish campaign lifecycle/redemption events (not yet wired - Feature 21.4).
+- Status: skeleton and schema only as of Sprint 21 Feature 21.1 - no domain behavior, API, or
+  eventing wiring yet (21.2-21.4).
+
 ---
 
 ## 3. Architecture Mode Summary
@@ -139,7 +155,7 @@ final Tech Lead Agent approval.
 | Mode (ADR-004) | Services |
 | --- | --- |
 | Simple Service Layer | notification-service |
-| CQRS + Mediator | identity, customer, product-catalog, subscription, usage, ticket |
+| CQRS + Mediator | identity, customer, product-catalog, subscription, usage, ticket, campaign |
 | Domain Orchestration | order, billing, payment |
 | N/A (infrastructure) | api-gateway, discovery-server, config-server |
 
@@ -161,6 +177,7 @@ Each service MUST declare its mode in its own `README.md` (ADR-004).
 | payment-service | Payment, PaymentAttempt, Wallet |
 | notification-service | NotificationTemplate, Notification, Channel |
 | ticket-service | Ticket, TicketComment, SLA |
+| campaign-service | Campaign, CampaignRedemption |
 
 Detailed entity-relationship diagrams: [`docs/erd/`](../erd/).
 
@@ -187,6 +204,7 @@ database. Cache/search are added only where justified.
 | payment-service | PostgreSQL | Redis (idempotency keys) | - | - |
 | notification-service | **MongoDB** (approved exception) + PostgreSQL outbox | - | - | - |
 | ticket-service | PostgreSQL | - | - | - |
+| campaign-service | PostgreSQL | - (transactional, per-customer-consistent - ADR-027) | - | - |
 
 Notes:
 

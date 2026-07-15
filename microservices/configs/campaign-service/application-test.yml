@@ -1,0 +1,6 @@
+# campaign-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_CAMPAIGN_DB_URL:jdbc:postgresql://localhost:5432/campaign_test_db}
+    username: ${TEST_CAMPAIGN_DB_USER:campaign_test}
+    password: ${TEST_CAMPAIGN_DB_PASSWORD:campaign_test}

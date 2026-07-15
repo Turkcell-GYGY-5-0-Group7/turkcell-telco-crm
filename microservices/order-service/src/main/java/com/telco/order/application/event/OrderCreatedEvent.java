@@ -19,12 +19,19 @@ public record OrderCreatedEvent(
         String occurredAt
 ) implements Event {
 
-    /** Lightweight item snapshot embedded in the event. */
+    /**
+     * Lightweight item snapshot embedded in the event. {@code campaignId} is a nullable, additive
+     * field (Feature 21.3.3, ADR-027 Decision Section 4 third ratification addendum, Avro-backward-
+     * compatible per ADR-019): the campaign, if any, that discounted {@code unitPrice}. This is what
+     * lets campaign-service's Feature 21.4 {@code order.created.v1} consumer create the correctly
+     * attributed {@code RESERVED} redemption row.
+     */
     public record OrderItemPayload(
             String tariffId,
             String tariffName,
             BigDecimal unitPrice,
-            int quantity
+            int quantity,
+            String campaignId
     ) {
     }
 }

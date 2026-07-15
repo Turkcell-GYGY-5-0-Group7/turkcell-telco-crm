@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "CampaignCancelledV1",
+  "namespace": "com.telco.platform.events.campaign",
+  "doc": "Emitted when a campaign transitions any non-terminal status -> CANCELLED (campaign.cancelled.v1). Producer: campaign-service.",
+  "fields": [
+    {
+      "name": "campaignId",
+      "type": "string",
+      "doc": "Unique campaign identifier (UUID)."
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "doc": "Admin-assigned campaign code, unique."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the campaign was cancelled, ISO-8601 (UTC)."
+    }
+  ]
+}

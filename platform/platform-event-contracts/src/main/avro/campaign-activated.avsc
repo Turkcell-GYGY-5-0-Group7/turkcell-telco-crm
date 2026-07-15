@@ -1,0 +1,23 @@
+{
+  "type": "record",
+  "name": "CampaignActivatedV1",
+  "namespace": "com.telco.platform.events.campaign",
+  "doc": "Emitted when a campaign transitions DRAFT/PAUSED -> ACTIVE (campaign.activated.v1). Producer: campaign-service.",
+  "fields": [
+    {
+      "name": "campaignId",
+      "type": "string",
+      "doc": "Unique campaign identifier (UUID)."
+    },
+    {
+      "name": "code",
+      "type": "string",
+      "doc": "Admin-assigned campaign code, unique."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the campaign was activated, ISO-8601 (UTC)."
+    }
+  ]
+}

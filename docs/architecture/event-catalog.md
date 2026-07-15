@@ -39,12 +39,12 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `customer.kyc-approved.v1` | customer-service | notification, order | KYC approved; customer becomes ACTIVE. |
 | `customer.kyc-rejected.v1` | customer-service | notification | KYC rejected. |
 | `customer.updated.v1` | customer-service | notification | Customer profile changed. |
-| `tariff.created.v1` | product-catalog-service | notification | New tariff published. |
-| `tariff.price-changed.v1` | product-catalog-service | billing, notification | Tariff price updated (versioned). |
-| `order.created.v1` | order-service | payment, notification | Order placed; starts the saga. |
+| `tariff.created.v1` | product-catalog-service | notification, campaign | New tariff published. campaign-service consumes defensively (Feature 21.4.3, ADR-027 Section 4) to log when a tariff code referenced by an ACTIVE campaign is (re)created. |
+| `tariff.price-changed.v1` | product-catalog-service | billing, notification, campaign | Tariff price updated (versioned). campaign-service consumes defensively (Feature 21.4.3, ADR-027 Section 4) to flag an ACTIVE campaign whose `applicable_tariff_codes` references the repriced tariff - never to mirror pricing data. |
+| `order.created.v1` | order-service | payment, notification, campaign | Order placed; starts the saga. campaign-service consumes it (Feature 21.4.3) to create a `RESERVED` `CampaignRedemption` row per campaign-priced order item, keyed by `(campaignId, customerId, orderId)`. |
 | `order.confirmed.v1` | order-service | subscription, notification | Order confirmed for fulfillment. (deferred; not produced in the MVP - subscription activates on `payment.completed.v1`) |
-| `order.cancelled.v1` | order-service | payment, subscription, notification | Order cancelled; triggers compensation. |
-| `payment.completed.v1` | payment-service | order, subscription, billing, notification | Payment succeeded. |
+| `order.cancelled.v1` | order-service | payment, subscription, notification, campaign | Order cancelled; triggers compensation. campaign-service consumes it (Feature 21.4.2) to release a `RESERVED` `CampaignRedemption` back to available. |
+| `payment.completed.v1` | payment-service | order, subscription, billing, notification, campaign | Payment succeeded. campaign-service consumes it (Feature 21.4.2, ADR-027 Section 4 ratification) as the "order is real" trigger, transitioning the matching `CampaignRedemption` RESERVED -> CONFIRMED. |
 | `payment.failed.v1` | payment-service | order, subscription, notification | Payment failed; may trigger retry. |
 | `payment.refunded.v1` | payment-service | order, notification | Refund issued (compensation). |
 | `msisdn.allocated.v1` | subscription-service | notification | MSISDN allocated to a subscription. |
@@ -65,6 +65,11 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `ticket.resolved.v1` | ticket-service | notification | Ticket resolved. |
 | `ticket.sla-breached.v1` | ticket-service | notification | SLA breached for a ticket. |
 | `notification.dispatched.v1` | notification-service | - | Notification sent on a channel. |
+| `campaign.created.v1` | campaign-service | - | Campaign created in DRAFT status (Feature 21.4.1). No current consumer; registered for future notification/reporting integration. |
+| `campaign.activated.v1` | campaign-service | - | Campaign transitioned DRAFT/PAUSED -> ACTIVE (Feature 21.4.1). No current consumer; registered for future notification/reporting integration. |
+| `campaign.paused.v1` | campaign-service | - | Campaign transitioned ACTIVE -> PAUSED (Feature 21.4.1). No current consumer; registered for future notification/reporting integration. |
+| `campaign.expired.v1` | campaign-service | - | Campaign transitioned ACTIVE/PAUSED -> EXPIRED, explicitly or defensively when `validTo` has passed (Feature 21.4.1). No current consumer; registered for future notification/reporting integration. |
+| `campaign.cancelled.v1` | campaign-service | - | Campaign transitioned any non-terminal status -> CANCELLED (Feature 21.4.1). No current consumer; registered for future notification/reporting integration. |
 
 ---
 
