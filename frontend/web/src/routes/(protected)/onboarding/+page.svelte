@@ -56,6 +56,11 @@
 	import CatalogStep from './CatalogStep.svelte';
 	import ReviewStep from './ReviewStep.svelte';
 	import ResultStep from './ResultStep.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Card from '$lib/ui/Card.svelte';
+	import PageHeader from '$lib/ui/PageHeader.svelte';
+	import { motionDuration } from '$lib/ui/motion';
+	import { fade } from 'svelte/transition';
 
 	// Exactly the BFF's CustomerRegistration fields; INDIVIDUAL is the only type the
 	// MVP registers (customer-service validates identityNumber as a TCKN either way).
@@ -365,120 +370,90 @@
 </script>
 
 <section class="page">
-	<h1>Onboarding</h1>
+	<PageHeader
+		title="Onboarding"
+		subtitle="Register, verify your identity, and pick a plan - about five minutes."
+	/>
+
 	<WizardProgress current={step} />
 
-	<div class="card">
-		{#if step === 'register'}
-			<RegisterStep form={registration} />
-		{:else if step === 'kyc'}
-			<KycStep
-				documentType={kyc.type}
-				file={kyc.file}
-				onTypeSelected={onKycType}
-				onFileSelected={onKycFile}
-			/>
-		{:else if step === 'catalog'}
-			<CatalogStep
-				{catalog}
-				loading={catalogLoading}
-				error={catalogError}
-				{selectedTariffCode}
-				{selectedAddonCodes}
-				total={monthlyTotal}
-				{currency}
-				{onSelectTariff}
-				{onToggleAddon}
-			/>
-		{:else if step === 'review'}
-			<ReviewStep
-				form={registration}
-				documentLabel={DOCUMENT_LABELS[kyc.type]}
-				filename={kycFilename}
-				tariff={selectedTariff}
-				addons={selectedAddons}
-				total={monthlyTotal}
-				{currency}
-				{placing}
-				{reusingCustomer}
-				error={placeError}
-			/>
-		{:else if step === 'result'}
-			<ResultStep
-				{polling}
-				liveStatus={pollLiveStatus}
-				attempts={pollAttempts}
-				result={pollResult}
-				error={pollError}
-				recovery={recoveryAction}
-				onRetryOrder={retryOrder}
-				onStartOver={startOver}
-			/>
-		{/if}
-	</div>
+	<Card padding="lg">
+		{#key step}
+			<div in:fade={{ duration: motionDuration(160) }}>
+				{#if step === 'register'}
+					<RegisterStep form={registration} />
+				{:else if step === 'kyc'}
+					<KycStep
+						documentType={kyc.type}
+						file={kyc.file}
+						onTypeSelected={onKycType}
+						onFileSelected={onKycFile}
+					/>
+				{:else if step === 'catalog'}
+					<CatalogStep
+						{catalog}
+						loading={catalogLoading}
+						error={catalogError}
+						{selectedTariffCode}
+						{selectedAddonCodes}
+						total={monthlyTotal}
+						{currency}
+						{onSelectTariff}
+						{onToggleAddon}
+					/>
+				{:else if step === 'review'}
+					<ReviewStep
+						form={registration}
+						documentLabel={DOCUMENT_LABELS[kyc.type]}
+						filename={kycFilename}
+						tariff={selectedTariff}
+						addons={selectedAddons}
+						total={monthlyTotal}
+						{currency}
+						{placing}
+						{reusingCustomer}
+						error={placeError}
+					/>
+				{:else if step === 'result'}
+					<ResultStep
+						{polling}
+						liveStatus={pollLiveStatus}
+						attempts={pollAttempts}
+						result={pollResult}
+						error={pollError}
+						recovery={recoveryAction}
+						onRetryOrder={retryOrder}
+						onStartOver={startOver}
+					/>
+				{/if}
+			</div>
+		{/key}
+	</Card>
 
 	<div class="actions">
 		{#if showBack}
-			<button type="button" class="secondary" onclick={goBack} disabled={placing}> Back </button>
+			<Button variant="ghost" onclick={goBack} disabled={placing}>Back</Button>
 		{/if}
 
 		{#if step === 'register' || step === 'kyc' || step === 'catalog'}
-			<button type="button" class="primary" onclick={goNext} disabled={!canAdvance}>
-				Continue
-			</button>
+			<Button onclick={goNext} disabled={!canAdvance}>Continue</Button>
 		{:else if step === 'review'}
-			<button type="button" class="primary" onclick={placeOrder} disabled={placing}>
-				Place order
-			</button>
+			<Button onclick={placeOrder} loading={placing}>Place order</Button>
 		{/if}
 	</div>
 </section>
 
 <style>
 	.page {
-		max-width: 40rem;
-	}
-
-	h1 {
-		margin: 0 0 1rem;
-		font-size: 1.5rem;
-	}
-
-	.card {
-		background: #ffffff;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		padding: 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-6);
+		max-width: 46rem;
 	}
 
 	.actions {
 		display: flex;
-		gap: 0.75rem;
+		gap: var(--space-3);
 		justify-content: flex-end;
-		margin-top: 1.25rem;
-	}
-
-	button {
-		font: inherit;
-		padding: 0.5rem 1.1rem;
-		border-radius: 0.375rem;
-		cursor: pointer;
-	}
-
-	.primary {
-		border: 1px solid #16213e;
-		background: #16213e;
-		color: #ffffff;
-	}
-
-	.secondary {
-		border: 1px solid #d1d5db;
-		background: #ffffff;
-		color: #374151;
-	}
-
-	button:disabled {
-		opacity: 0.6;
-		cursor: default;
 	}
 </style>

@@ -6,102 +6,99 @@
 	import type { AccountSubscription } from '$lib/api/client';
 	import { usageMetrics } from '$lib/account/usage';
 	import UsageGauge from './UsageGauge.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Card from '$lib/ui/Card.svelte';
+	import { subscriptionTone } from '$lib/ui/status';
 
 	let { entry }: { entry: AccountSubscription } = $props();
 
 	const metrics = $derived(entry.usage ? usageMetrics(entry.usage) : []);
-	const statusClass = $derived(entry.subscription.status.toLowerCase());
 </script>
 
-<article class="card">
-	<header>
-		<div class="ids">
-			<span class="msisdn">{entry.subscription.msisdn}</span>
-			<span class="tariff">{entry.subscription.tariffCode}</span>
-		</div>
-		<span class={`status ${statusClass}`}>{entry.subscription.status}</span>
-	</header>
+<Card>
+	<div class="body">
+		<header>
+			<div class="ids">
+				<span class="msisdn">{entry.subscription.msisdn}</span>
+				<span class="tariff">{entry.subscription.tariffCode}</span>
+			</div>
+			<Badge tone={subscriptionTone(entry.subscription.status)}>
+				{entry.subscription.status}
+			</Badge>
+		</header>
 
-	{#if metrics.length > 0}
-		<div class="gauges">
-			{#each metrics as metric (metric.label)}
-				<UsageGauge {metric} />
-			{/each}
-		</div>
-	{:else}
-		<p class="no-quota">No active quota for this subscription.</p>
-	{/if}
-</article>
+		{#if metrics.length > 0}
+			<div class="gauges">
+				{#each metrics as metric (metric.label)}
+					<UsageGauge {metric} />
+				{/each}
+			</div>
+		{:else}
+			<p class="no-quota">
+				<svg viewBox="0 0 24 24" aria-hidden="true">
+					<circle cx="12" cy="12" r="9" />
+					<path d="M12 8v4.5M12 15.5v.5" />
+				</svg>
+				No active quota for this subscription.
+			</p>
+		{/if}
+	</div>
+</Card>
 
 <style>
-	.card {
-		background: #ffffff;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		padding: 1.25rem;
+	.body {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: var(--space-4);
 	}
 
 	header {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
-		gap: 1rem;
+		gap: var(--space-4);
 	}
 
 	.ids {
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
+		gap: var(--space-1);
+		min-width: 0;
 	}
 
 	.msisdn {
+		font-family: var(--font-mono);
+		font-size: var(--text-lg-size);
+		line-height: var(--text-lg-lh);
 		font-weight: 600;
-		font-size: 1.05rem;
 	}
 
 	.tariff {
-		color: #6b7280;
-		font-size: 0.85rem;
-	}
-
-	.status {
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		padding: 0.2rem 0.55rem;
-		border-radius: 999px;
-		background: #e5e7eb;
-		color: #374151;
-	}
-
-	.status.active {
-		background: #dcfce7;
-		color: #166534;
-	}
-
-	.status.suspended {
-		background: #fef9c3;
-		color: #854d0e;
-	}
-
-	.status.terminated {
-		background: #fee2e2;
-		color: #991b1b;
+		color: var(--color-text-muted);
+		font-size: var(--text-sm-size);
 	}
 
 	.gauges {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: var(--space-4);
 	}
 
 	.no-quota {
-		margin: 0;
-		color: #6b7280;
-		font-size: 0.85rem;
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		color: var(--color-text-muted);
+		font-size: var(--text-sm-size);
+	}
+
+	.no-quota svg {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		fill: none;
+		stroke: currentColor;
+		stroke-width: 1.8;
+		stroke-linecap: round;
 	}
 </style>

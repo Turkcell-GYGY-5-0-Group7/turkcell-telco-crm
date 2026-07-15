@@ -12,6 +12,7 @@
 	import type { Addon, Tariff } from '$lib/api/client';
 	import type { RegistrationForm } from '$lib/onboarding/wizard';
 	import { formatMoney } from '$lib/onboarding/money';
+	import Alert from '$lib/ui/Alert.svelte';
 
 	let {
 		form,
@@ -39,57 +40,70 @@
 </script>
 
 <div class="step-body">
-	<h2>Review your order</h2>
+	<header>
+		<h2>Review your order</h2>
+		<p class="hint">
+			Placing the order starts your activation: we charge the first month and activate your line
+			automatically, and this wizard follows the real order status until it is done.
+		</p>
+	</header>
 
 	<dl class="summary">
-		<dt>Customer</dt>
-		<dd>{form.firstName} {form.lastName}</dd>
-
-		<dt>Identity number</dt>
-		<dd>{form.identityNumber}</dd>
-
-		<dt>Date of birth</dt>
-		<dd>{form.dateOfBirth || '-'}</dd>
-
-		<dt>KYC document</dt>
-		<dd>{filename ? `${documentLabel} - ${filename}` : 'None'}</dd>
-
-		<dt>Tariff</dt>
-		<dd>
-			{tariff ? `${tariff.name} (${formatMoney(tariff.monthlyPrice, tariff.currency)}/mo)` : '-'}
-		</dd>
-
-		<dt>Add-ons</dt>
-		<dd>
-			{#if addons.length > 0}
-				{addons.map((addon) => addon.name).join(', ')}
-			{:else}
-				None
-			{/if}
-		</dd>
-
-		<dt>Monthly total</dt>
-		<dd><strong>{formatMoney(total, currency)}</strong></dd>
+		<div class="row">
+			<dt>Customer</dt>
+			<dd>{form.firstName} {form.lastName}</dd>
+		</div>
+		<div class="row">
+			<dt>Identity number</dt>
+			<dd class="mono">{form.identityNumber}</dd>
+		</div>
+		<div class="row">
+			<dt>Date of birth</dt>
+			<dd>{form.dateOfBirth || '-'}</dd>
+		</div>
+		<div class="row">
+			<dt>KYC document</dt>
+			<dd>{filename ? `${documentLabel} - ${filename}` : 'None'}</dd>
+		</div>
+		<div class="row">
+			<dt>Tariff</dt>
+			<dd>
+				{tariff ? `${tariff.name} (${formatMoney(tariff.monthlyPrice, tariff.currency)}/mo)` : '-'}
+			</dd>
+		</div>
+		<div class="row">
+			<dt>Add-ons</dt>
+			<dd>
+				{#if addons.length > 0}
+					{addons.map((addon) => addon.name).join(', ')}
+				{:else}
+					None
+				{/if}
+			</dd>
+		</div>
+		<div class="row total">
+			<dt>Monthly total</dt>
+			<dd class="tabular"><strong>{formatMoney(total, currency)}</strong></dd>
+		</div>
 	</dl>
 
-	<p class="hint">
-		Placing the order starts your activation: we charge the first month and activate your line
-		automatically, and this wizard follows the real order status until it is done.
-	</p>
-
 	{#if reusingCustomer}
-		<p class="hint">
-			You are already registered, so this places a new order for your existing customer record - you
-			will not be registered twice.
-		</p>
+		<Alert tone="info" role="status">
+			<p>
+				You are already registered, so this places a new order for your existing customer record -
+				you will not be registered twice.
+			</p>
+		</Alert>
 	{/if}
 
 	{#if placing}
-		<p class="hint">Placing your order...</p>
+		<p class="hint" role="status">Placing your order...</p>
 	{/if}
 
 	{#if error}
-		<p class="error" role="alert">{error}</p>
+		<Alert tone="danger">
+			<p>{error}</p>
+		</Alert>
 	{/if}
 </div>
 
@@ -97,40 +111,70 @@
 	.step-body {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: var(--space-5);
+	}
+
+	header {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
 	}
 
 	h2 {
-		margin: 0;
-		font-size: 1.15rem;
+		font-size: var(--text-lg-size);
+		line-height: var(--text-lg-lh);
+		font-weight: 700;
+	}
+
+	.hint {
+		color: var(--color-text-muted);
+		font-size: var(--text-sm-size);
+		line-height: var(--text-sm-lh);
 	}
 
 	.summary {
-		display: grid;
-		grid-template-columns: max-content 1fr;
-		gap: 0.4rem 1rem;
 		margin: 0;
-		font-size: 0.95rem;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.row {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: var(--space-6);
+		padding: var(--space-3) 0;
+		border-bottom: 1px solid var(--color-border);
+		font-size: var(--text-sm-size);
 	}
 
 	dt {
-		color: #6b7280;
+		color: var(--color-text-muted);
+		flex-shrink: 0;
 	}
 
 	dd {
 		margin: 0;
-		color: #1f2937;
+		text-align: right;
+		color: var(--color-text);
+		font-weight: 500;
+		overflow-wrap: anywhere;
 	}
 
-	.hint {
-		margin: 0;
-		color: #6b7280;
-		font-size: 0.9rem;
+	.mono {
+		font-family: var(--font-mono);
 	}
 
-	.error {
-		margin: 0;
-		color: #b91c1c;
-		font-size: 0.9rem;
+	.row.total {
+		margin-top: var(--space-2);
+		padding-top: var(--space-4);
+		border-top: 2px solid var(--color-border-strong);
+		border-bottom: 0;
+		font-size: var(--text-lg-size);
+	}
+
+	.row.total dt {
+		color: var(--color-text);
+		font-weight: 600;
 	}
 </style>

@@ -23,11 +23,30 @@
 	import { loadLinkedResource } from '$lib/onboarding/link-state';
 	import NotOnboardedNotice from '$lib/onboarding/NotOnboardedNotice.svelte';
 	import SubscriptionCard from '$lib/account/SubscriptionCard.svelte';
+	import Alert from '$lib/ui/Alert.svelte';
+	import Badge from '$lib/ui/Badge.svelte';
+	import Button from '$lib/ui/Button.svelte';
+	import Card from '$lib/ui/Card.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import PageHeader from '$lib/ui/PageHeader.svelte';
+	import Skeleton from '$lib/ui/Skeleton.svelte';
+	import { customerTone } from '$lib/ui/status';
 
 	let account = $state<AccountOverview | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let notOnboarded = $state(false);
+
+	// Up to two initials for the avatar. Purely decorative (the full name is right
+	// beside it), so an empty or single-word name simply yields fewer letters.
+	const initials = $derived(
+		(account?.profile.fullName ?? '')
+			.split(/\s+/)
+			.filter(Boolean)
+			.slice(0, 2)
+			.map((part) => part[0]?.toUpperCase() ?? '')
+			.join('')
+	);
 
 	onMount(() => {
 		void load();
@@ -54,25 +73,55 @@
 </script>
 
 <section class="page">
-	<h1>Account</h1>
+	<PageHeader title="Account" subtitle="Your profile, lines, and usage this period." />
 
 	{#if loading}
-		<p class="hint">Loading your account...</p>
-	{:else if error}
-		<div class="notice error" role="alert">
-			<p>{error}</p>
-			<button type="button" onclick={() => load()}>Retry</button>
+		<div class="stack" aria-busy="true" aria-label="Loading your account">
+			<Card>
+				<div class="profile-skeleton">
+					<Skeleton variant="circle" width="3rem" height="3rem" />
+					<div class="profile-skeleton-text">
+						<Skeleton variant="text" width="40%" />
+						<Skeleton variant="text" width="60%" />
+					</div>
+				</div>
+			</Card>
+			<div class="list">
+				{#each [0, 1] as index (index)}
+					<Card>
+						<div class="stack">
+							<Skeleton variant="text" width="50%" />
+							<Skeleton variant="block" height="2.5rem" />
+							<Skeleton variant="block" height="2.5rem" />
+						</div>
+					</Card>
+				{/each}
+			</div>
 		</div>
+	{:else if error}
+		<Alert tone="danger">
+			{#snippet children()}
+				<p>{error}</p>
+			{/snippet}
+			{#snippet actions()}
+				<Button variant="secondary" size="sm" onclick={() => load()}>Retry</Button>
+			{/snippet}
+		</Alert>
 	{:else if notOnboarded}
 		<NotOnboardedNotice
 			message="You have not completed onboarding yet, so there is no profile or subscription to show. Your details, lines, and usage will appear here once your subscription is activated."
 		/>
 	{:else if account}
-		<div class="profile">
-			<span class="name">{account.profile.fullName}</span>
-			<span class="meta">Customer {account.profile.customerId}</span>
-			<span class="meta">Status: {account.profile.status}</span>
-		</div>
+		<Card>
+			<div class="profile">
+				<span class="avatar" aria-hidden="true">{initials}</span>
+				<div class="identity">
+					<span class="name">{account.profile.fullName}</span>
+					<span class="customer-id">Customer {account.profile.customerId}</span>
+				</div>
+				<Badge tone={customerTone(account.profile.status)}>{account.profile.status}</Badge>
+			</div>
+		</Card>
 
 		<h2>Subscriptions</h2>
 		{#if account.subscriptions.length > 0}
@@ -82,88 +131,102 @@
 				{/each}
 			</div>
 		{:else}
-			<p class="hint">You have no subscriptions yet.</p>
+			<EmptyState
+				title="No subscriptions yet"
+				message="Lines you activate will appear here, with their remaining data, minutes, and SMS."
+			>
+				{#snippet action()}
+					<Button href="/onboarding">Start onboarding</Button>
+				{/snippet}
+			</EmptyState>
 		{/if}
 	{/if}
 </section>
 
 <style>
 	.page {
-		max-width: 44rem;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
-	}
-
-	h1 {
-		margin: 0;
-		font-size: 1.5rem;
+		gap: var(--space-5);
+		max-width: 56rem;
 	}
 
 	h2 {
-		margin: 0.5rem 0 0;
-		font-size: 1.15rem;
+		margin-top: var(--space-2);
+		font-size: var(--text-lg-size);
+		line-height: var(--text-lg-lh);
+		font-weight: 700;
+	}
+
+	.stack {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+
+	.list {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+		gap: var(--space-4);
 	}
 
 	.profile {
 		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		background: #ffffff;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		padding: 1.25rem;
+		align-items: center;
+		gap: var(--space-4);
 	}
 
-	.profile .name {
-		font-weight: 600;
-		font-size: 1.15rem;
+	.avatar {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 3rem;
+		height: 3rem;
+		flex-shrink: 0;
+		border-radius: var(--radius-full);
+		/* Deliberately the navy ramp, not --color-brand: brand inverts to a light
+		   navy in dark mode, and yellow initials on it would fall under AA. */
+		background: var(--tk-navy-800);
+		color: var(--color-accent);
+		font-weight: 700;
+		font-size: var(--text-base-size);
+		letter-spacing: 0.02em;
 	}
 
-	.profile .meta {
-		color: #6b7280;
-		font-size: 0.85rem;
-	}
-
-	.list {
+	.identity {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: var(--space-1);
+		min-width: 0;
 	}
 
-	.hint {
-		margin: 0;
-		color: #6b7280;
-		font-size: 0.9rem;
+	.name {
+		font-size: var(--text-xl-size);
+		line-height: var(--text-xl-lh);
+		font-weight: 600;
 	}
 
-	.notice {
+	.customer-id {
+		font-family: var(--font-mono);
+		font-size: var(--text-sm-size);
+		color: var(--color-text-muted);
+		overflow-wrap: anywhere;
+	}
+
+	.profile :global(.badge) {
+		margin-left: auto;
+	}
+
+	.profile-skeleton {
 		display: flex;
 		align-items: center;
-		gap: 1rem;
-		padding: 1rem 1.25rem;
-		border-radius: 0.5rem;
+		gap: var(--space-4);
 	}
 
-	.notice.error {
-		background: #fef2f2;
-		border: 1px solid #fecaca;
-	}
-
-	.notice.error p {
-		margin: 0;
-		color: #b91c1c;
-		font-size: 0.9rem;
-	}
-
-	.notice button {
-		font: inherit;
-		font-size: 0.85rem;
-		padding: 0.35rem 0.9rem;
-		border-radius: 0.375rem;
-		border: 1px solid #b91c1c;
-		background: #ffffff;
-		color: #b91c1c;
-		cursor: pointer;
+	.profile-skeleton-text {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		flex: 1;
 	}
 </style>
