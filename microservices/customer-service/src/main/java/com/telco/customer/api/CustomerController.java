@@ -101,11 +101,24 @@ public class CustomerController {
         return selfService ? caller.userId() : null;
     }
 
-    // Staff-only until the customerId-to-Keycloak-subject linkage lands (see
-    // docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md); a
-    // SUBSCRIBER caller cannot yet be verified as the owner of a given customer record.
+    /**
+     * Staff (ADMIN, CALL_CENTER_AGENT) may read any customer record; a SUBSCRIBER may read only
+     * their OWN record. Ownership is decided against the {@code customerId} resolved by
+     * {@link com.telco.platform.common.context.CurrentUserProvider} - the linked claim minted by
+     * identity-service from {@code users.customer_id} (Sprint 14 feature 14.4, ADR-011) and
+     * forwarded by the gateway as {@code X-Customer-Id} - never against a client-supplied value.
+     *
+     * <p>This replaces the interim staff-only gate that stood while the identity-to-customer linkage
+     * was missing (see
+     * {@code docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md}).
+     *
+     * <p>Null-safety: an unlinked identity resolves {@code customerId} to null, and the SpEL
+     * {@code ==} comparison of the non-null {@code #id.toString()} against null is false, so an
+     * unlinked SUBSCRIBER can never accidentally match a record (the trap the ruling calls out).
+     */
     @GetMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT') "
+            + "or #id.toString() == @currentUserProvider.currentUser().customerId()")
     public ApiResult<CustomerResponse> get(@PathVariable UUID id) {
         return responses.ok(mediator.query(new GetCustomerQuery(id)));
     }
@@ -118,14 +131,26 @@ public class CustomerController {
         return responses.ok(mediator.query(new ListCustomersQuery(page, size)));
     }
 
+    /**
+     * Same ownership rule as {@link #get(UUID)}: a SUBSCRIBER may maintain their own profile
+     * (name, date of birth - the only mutable fields; identity number and KYC status are not
+     * editable here), staff may maintain any. The change is audit-logged either way (NFR-12).
+     */
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT') "
+            + "or #id.toString() == @currentUserProvider.currentUser().customerId()")
     public ApiResult<CustomerResponse> update(@PathVariable UUID id,
                                               @Valid @RequestBody UpdateCustomerRequest request) {
         return responses.ok(mediator.send(new UpdateCustomerCommand(
                 id, request.firstName(), request.lastName(), request.dateOfBirth())));
     }
 
+    /**
+     * Deliberately ADMIN-only, and NOT extended to owners: soft-deleting a customer is an
+     * irreversible account-closure with cross-service consequences (subscriptions, billing) and is
+     * not a self-service action. Owner access here would let a single compromised subscriber token
+     * destroy the record it can otherwise only read. Least privilege (ADR-011) keeps it with ADMIN.
+     */
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResult<Unit> delete(@PathVariable UUID id) {

@@ -35,6 +35,7 @@ behind it is private and trusts the gateway.
 | `/api/v1/payments/**` | payment-service (9008) | JWT |
 | `/api/v1/notifications/**` | notification-service (9009) | JWT |
 | `/api/v1/tickets/**` | ticket-service (9010) | JWT |
+| `/bff/v1/**` | web-bff (9020) | JWT |
 
 ## Standard Headers
 

@@ -33,6 +33,11 @@ channel security boundary (the browser never calls a domain service directly).
   gateway (e.g. order creation carries the `Idempotency-Key`).
 - No domain logic or persistence in the BFF (ADR-022); it is a thin aggregation/transformation layer.
 - Responses are UI-shaped; they need not use `ApiResult<T>` internally, but downstream domain calls do.
+- `POST /bff/v1/onboarding/order` reuse path: when the request carries a `customerId` the BFF reuses that
+  customer (skipping register/KYC) rather than deriving identity from the token, so ownership MUST be
+  re-checked by the owning domain service (order-service) against the relayed identity. Unlike the
+  `/home`, `/account`, and `/invoices` reads - which are strictly self-scoped from the gateway-forwarded
+  identity and bind no client id - this one write accepts a client-supplied id by design for the wizard.
 
 Reference: [api-gateway](api-gateway.md), [keycloak-and-auth.md](../architecture/keycloak-and-auth.md),
 ADR-011, ADR-022.
