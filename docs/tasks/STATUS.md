@@ -14,7 +14,83 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
+Last updated: 2026-07-14 (Sprint 20 Chaos Engineering - **all 5 features authored this session
+(5/5), zero live-verified** - a genuinely different completion shape than most prior sprints, so
+read carefully before treating this as "done". Built on branch `feature/sprint-20-chaos-engineering`
+(new, off `master`; Sprint 19 - see the entry directly below - was confirmed already merged via
+`git log`, PR #29, contradicting that entry's own "nothing committed yet" text, itself a live
+example of the 2026-07-13 lessons.md rule about not trusting a stale claim without checking). No new
+ADR (tech-lead ruling, extends ADR-012/ADR-013, per the sprint README). **20.1**: `deploy/chaos/`
+Chart.yaml/Chart.lock/charts/chaos-mesh-2.8.3.tgz (first repo chart to vendor an upstream dependency
+via `dependencies:`+`Chart.lock`, mirroring `deploy/helm/vault`'s existing precedent - not the
+self-authored-template shape of `deploy/helm/dependencies`), values.yaml (telco-namespace scoped,
+pinned image tags, `dashboard.create: false`, containerd runtime override for Kind), README.md
+(install/CRD-verification/dashboard-decision docs). Live-verified for real before Docker died:
+`helm dependency update`, `helm lint`, `helm template`, and two `helm upgrade --install` runs
+(chart deployed=true both times); `chaos-daemon` confirmed `2/2 Running`. NOT verified:
+`chaos-controller-manager` reaching `Running` (last seen `Pending`/`Insufficient memory` - a
+pre-existing, unrelated leftover Kind cluster from an earlier session was already at ~99% node
+memory with 13 services + deps mid-reschedule after its node container had been stopped and
+restarted) and the CRD-registration checks (20.1.2) - Docker Desktop itself then became unresponsive
+(`500 Internal Server Error` / connection timeouts on `docker info`/`docker ps`, `wsl -d
+docker-desktop` unreachable) and did not recover for the rest of this session despite repeated
+polling. **20.2**: `deploy/chaos/STEADY-STATE.md` - hypothesis/dashboard/panel/alert mapping table,
+pre-flight dashboard-reachability section, baseline PromQL queries, all citing real, verified values
+(not the README's loose phrasing) - and explicitly corrects two inaccuracies found in the sprint's
+own source docs: (1) `platform-overview` has no p99 latency panel, only p95 ("HTTP p95 Latency by
+Service (s)"); (2) the README/20.3 task file's assumed `order-service -> payment-service`
+Resilience4j pairing does not exist (that link is Kafka-only/async) - the real pairing is
+`order-service -> customer-service` (the only two breakers order-service's `ResilienceConfig.java`
+actually registers are named `customer-service` and `product-catalog-service`), and there is no
+`slowCallDurationThreshold` configured, so the breaker trips via the failure-rate path, not a
+slow-call path. Documentation-only, no live cluster needed - fully authored, no live gap. **20.3**:
+`deploy/chaos/experiments/{pod-kill-order-service,latency-order-to-customer,
+partition-billing-service-kafka}.yaml` (the second file renamed from the task's original
+`latency-order-to-payment.yaml` per the 20.2 correction above), each with a bounded `duration`,
+header hypothesis/abort-command comments, and `selector.namespaces`/`target.selector.namespaces`
+hard-set to `["telco"]` only; selectors grounded in the real Helm chart label conventions
+(`deploy/helm/telco-service/templates/_helpers.tpl`, `deploy/helm/dependencies/templates/kafka.yaml`)
+and the real `outbox_event` table (`starter-outbox`'s `V900__platform_outbox.sql`), not invented.
+Per this repo's lessons.md rule (2026-06-23, propagate a corrected assumption to its source, not
+just the deliverable), subtask 20.3.2 and the README's Feature 20.3 note were corrected in place to
+match the real pairing. A genuine new finding surfaced and documented (not silently papered over):
+`order-service`'s `customerRestClient` bean has no configured connect/read timeout at all, so a
+delay-only `NetworkChaos` fault may not reliably produce failures for the breaker to count - flagged
+in the manifest header for live investigation, not assumed to work. Entirely authored, zero
+`kubectl apply` runs - Docker was down for this feature's whole session. **20.4**:
+`deploy/chaos/GAMEDAY-RUNBOOK.md` (prerequisites + one subsection per experiment with copy-paste
+apply/dashboard/abort steps, sourced from 20.1-20.3's real outputs) plus a post-game-day findings
+template (explicitly marked unfilled/example-only - no fabricated results) and a two-line
+cross-link added to `deploy/RUNBOOK.md` Section 10 (Observability - corrected from the task files'
+assumed Section 9, since Sprint 15.5's runbook has grown to 15 sections and Observability is
+actually Section 10). Documentation only; explicitly flagged in the file itself that none of its
+commands have been dry-run against a live cluster yet. **20.5**: real, not assumed, RBAC finding -
+extracted the vendored `chaos-mesh-2.8.3.tgz` and read its actual `controller-manager-rbac.yaml`
+Go templates rather than accepting the task file's "likely cannot be namespace-scoped" assumption:
+the fault-injection permission set (pods/configmaps/secrets/chaos-mesh.org CRs - the one that
+matters) CAN be namespace-scoped via the chart's own `clusterScoped`/`controllerManager.targetNamespace`
+values, so `deploy/chaos/values.yaml` was updated to set `clusterScoped: false` and
+`controllerManager.targetNamespace: telco` - closing a real gap rather than only documenting it as
+residual risk. One permission set (read-only node/PV/PVC watch + SAR create) is irreducibly
+cluster-wide by the chart's own unconditional `ClusterRoleBinding` template - documented as accepted
+residual risk (read-only, no fault-injection capability, and every experiment's own selector is
+`telco`-only regardless). 20.5.2's guardrail checklist and 20.5.3's manual-only/CI-untouched grep
+checks were both run for real (`grep -rl "kind: Schedule\|kind: Workflow" deploy/chaos/*.yaml
+deploy/chaos/experiments/*.yaml deploy/chaos/values.yaml` and `grep -rl "deploy/chaos"
+.github/workflows/`, both empty as required). Deferred to a live cluster: the `kubectl auth can-i
+--list` confirmation and the `helm template` render check proving a `RoleBinding` (not
+`ClusterRoleBinding`) actually renders - the conclusion is from reading the chart's raw template
+source, not a live render, since `helm` dropped out of this session's `PATH`-augmented shell once
+Docker died mid-session. **Overall**: this sprint is **feature-complete in authored form** but
+**none of its live-cluster exit criteria are proven** - a pod actually being killed and rescheduled,
+a breaker actually tripping, a partition actually healing with zero lost `outbox_event` rows, and
+dashboards actually rendering live data are all open follow-up work for the next session with a
+healthy Docker Desktop. Nothing committed yet (user choice, matches this repo's established
+pattern of leaving commits to explicit user instruction). Detail: sprint-20 README's Features table
+and Feature notes, `deploy/chaos/README.md`, `deploy/chaos/STEADY-STATE.md`,
+`deploy/chaos/GAMEDAY-RUNBOOK.md`.
+
+Prior update, 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
 verification complete, plus Feature 19.5's diff-only subtask, session continued from 19.1/19.2 (DONE,
 prior sessions, uncommitted). **19.3**: authored
 `deploy/helm/telco-service/templates/{server,authorizationpolicy,meshtlsauthentication}.yaml` (one

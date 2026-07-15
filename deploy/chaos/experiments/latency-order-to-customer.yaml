@@ -1,0 +1,124 @@
+# Latency-injection experiment (Sprint 20, Feature 20.3, subtask 20.3.2 - CORRECTED PAIRING).
+#
+# Correction (verified this session, mirrored from deploy/chaos/STEADY-STATE.md
+# "Corrections to upstream task text"): the 20.3 task file and the Sprint 20
+# README's Feature 20.3 note both name "order-service -> payment-service" as
+# the Resilience4j-guarded call to inject latency against. That is factually
+# wrong. order-service <-> payment-service is Kafka-only/asynchronous (no
+# synchronous call, no circuit breaker). Reading
+# microservices/order-service/src/main/java/com/telco/order/config/ResilienceConfig.java
+# shows order-service registers exactly two circuit breakers for its real
+# synchronous outbound calls: "customer-service" and "product-catalog-service".
+# This manifest targets the corrected pairing: order-service -> customer-service
+# (breaker name "customer-service"). File is named
+# latency-order-to-customer.yaml, not latency-order-to-payment.yaml as the
+# (now-corrected) task file originally said.
+#
+# Trip mechanism (failure-rate path, not slow-call-duration):
+# ResilienceConfig.java's DEFAULT_CONFIG configures only
+# failureRateThreshold(50), slidingWindowSize(10), waitDurationInOpenState(30s),
+# and permittedNumberOfCallsInHalfOpenState(3) - there is NO
+# slowCallDurationThreshold configured. Injected latency therefore cannot trip
+# the breaker via a slow-call path (there is nothing to exceed); it must trip
+# via the failure-rate path: enough of the last 10 calls in the sliding window
+# must fail (>= 50%) for the breaker to open.
+#
+# Additional finding (verified this session, not previously documented
+# anywhere in the sprint docs): microservices/order-service's
+# CustomerServiceClient / RestClientConfig.java
+# (microservices/order-service/src/main/java/com/telco/order/config/RestClientConfig.java)
+# builds its RestClient with `RestClient.builder().baseUrl(baseUrl).build()` -
+# no ClientHttpRequestFactorySettings, no connect-timeout/read-timeout
+# property anywhere in microservices/configs/order-service/*.yml. There is
+# therefore NO configured HTTP client timeout to "exceed" on this call path.
+# Without a client-side read timeout, an injected NetworkChaos delay alone
+# makes the call slower, not necessarily failed - the JDK HTTP client will
+# simply wait out the delay and the call can still succeed, in which case the
+# sliding window sees successes, not failures, and the breaker does NOT open.
+# This is a real configuration gap (no timeout budget on customerRestClient),
+# not an invented number, and it is called out here rather than papered over:
+# the delay value below is chosen as an operator-observable magnitude (an
+# order of magnitude above the platform-overview p95 budget of 0.3s from
+# STEADY-STATE.md), but this experiment cannot be assumed to reliably trip the
+# breaker via delay alone until a connect/read timeout is added to
+# RestClientConfig.java's customerRestClient bean. That follow-up belongs to
+# platform-engineer/domain-engineer, not this authoring pass - flagged here so
+# it is not silently assumed away.
+#
+# Steady-state hypothesis (verbatim from deploy/chaos/STEADY-STATE.md, 20.2.1):
+#   "Injecting network delay on the order-service -> customer-service call
+#   does not cascade into upstream failures - once injected latency causes
+#   enough timeouts to push the failure rate over 50% across the 10-call
+#   sliding window, the customer-service-named circuit breaker on
+#   order-service opens (per the failure-rate path, since no
+#   slowCallDurationThreshold is configured) and calls fail fast instead of
+#   piling up."
+#
+# Watch (per STEADY-STATE.md 20.2.1):
+#   Dashboard: circuit-breakers
+#   Panel:     "Circuit Breaker State per Instance" (state transition to
+#              "open"), corroborated by "Circuit Breaker Calls
+#              (success / failed / not-permitted)"
+#   Alert:     CircuitBreakerOpen
+#              (resilience4j_circuitbreaker_state{state="open"} == 1, for 30s)
+#   Abort threshold: abort if the breaker does NOT open within the expected
+#     sliding window (10 calls) after latency injection starts, or if
+#     order-service's own p95 latency (platform-overview, "HTTP p95 Latency
+#     by Service (s)") breaches 0.3s for longer than 2 minutes before the
+#     breaker opens.
+#
+# Manual abort (per README Feature 20.5 guardrail):
+#   kubectl delete -f deploy/chaos/experiments/latency-order-to-customer.yaml
+#
+# CRD schema note: NetworkChaos delay selects the SOURCE pod(s) via
+# spec.selector (this experiment: order-service pods) and, per the vendored
+# CRD (deploy/chaos/charts/chaos-mesh-2.8.3.tgz, crds/chaos-mesh.org_networkchaos.yaml),
+# an optional spec.target.selector to scope the affected path to a specific
+# destination; spec.direction (to/from/both) controls which leg of the
+# connection the delay applies to. Selecting "to" + a target selector for
+# customer-service isolates the delay to the order-service -> customer-service
+# leg without affecting order-service's other outbound calls
+# (product-catalog-service) or inbound traffic.
+#
+# Verification status: NOT verified this session. Docker Desktop is down;
+# this manifest has not been kubectl-applied to any cluster. A follow-up pass
+# once Docker recovers must confirm: the circuit-breakers panel actually
+# shows the "customer-service" breaker transition to OPEN/HALF_OPEN within
+# the sliding window, and must also confirm/refute the timeout-gap finding
+# above by observing whether calls actually fail under injected delay in
+# practice.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: latency-order-to-customer
+  namespace: telco
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - telco
+    labelSelectors:
+      app.kubernetes.io/name: order-service
+  direction: to
+  target:
+    mode: one
+    selector:
+      namespaces:
+        - telco
+      labelSelectors:
+        app.kubernetes.io/name: customer-service
+  delay:
+    # No slowCallDurationThreshold is configured (see finding above) and no
+    # client-side read timeout exists on customerRestClient - there is no
+    # configured number to "exceed". 5s is chosen only as an
+    # operator-observable magnitude, roughly 16x the platform-overview p95
+    # budget (0.3s, STEADY-STATE.md), not derived from a timeout that does
+    # not exist in this codebase.
+    latency: "5s"
+    jitter: "1s"
+    correlation: "25"
+  # Bounded duration long enough to accumulate >= 10 calls in the sliding
+  # window at expected order-service traffic, short enough to bound blast
+  # radius per README Feature 20.5.
+  duration: "120s"
