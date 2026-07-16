@@ -49,6 +49,14 @@ describe('isProtectedPath', () => {
 		expect(isProtectedPath('/login')).toBe(false);
 		expect(isProtectedPath('/auth/callback')).toBe(false);
 	});
+
+	it('guards the expanded portal and CRM console areas', () => {
+		for (const route of ['/usage', '/orders', '/tickets', '/notifications', '/crm']) {
+			expect(isProtectedPath(route)).toBe(true);
+		}
+		expect(isProtectedPath('/crm/customers')).toBe(true);
+		expect(isProtectedPath('/orders/ord-1')).toBe(true);
+	});
 });
 
 describe('safeReturnTo', () => {

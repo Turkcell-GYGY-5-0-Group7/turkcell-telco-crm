@@ -28,14 +28,75 @@
 	import Button from '$lib/ui/Button.svelte';
 	import Card from '$lib/ui/Card.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import Input from '$lib/ui/Input.svelte';
+	import Modal from '$lib/ui/Modal.svelte';
 	import PageHeader from '$lib/ui/PageHeader.svelte';
 	import Skeleton from '$lib/ui/Skeleton.svelte';
 	import { customerTone } from '$lib/ui/status';
+	import { toasts } from '$lib/ui/toast.svelte';
 
 	let account = $state<AccountOverview | null>(null);
 	let loading = $state(true);
 	let error = $state('');
 	let notOnboarded = $state(false);
+
+	// Profile-edit dialog. The account overview carries only a display name, so the
+	// dialog fetches the customer record (first/last name, DOB) to prefill, then PUTs
+	// the three mutable fields customer-service accepts.
+	let editOpen = $state(false);
+	let editLoading = $state(false);
+	let saving = $state(false);
+	let firstName = $state('');
+	let lastName = $state('');
+	let dateOfBirth = $state('');
+	let editError = $state('');
+
+	async function openEdit() {
+		if (!account) return;
+		editOpen = true;
+		editLoading = true;
+		editError = '';
+		try {
+			const customer = await api.getCustomer(account.profile.customerId);
+			firstName = customer.firstName;
+			lastName = customer.lastName;
+			dateOfBirth = customer.dateOfBirth;
+		} catch (err) {
+			editError =
+				err instanceof ApiError
+					? `Could not load your profile. (HTTP ${err.status})`
+					: 'Could not load your profile.';
+		} finally {
+			editLoading = false;
+		}
+	}
+
+	async function saveProfile() {
+		if (!account) return;
+		editError = '';
+		if (firstName.trim().length === 0 || lastName.trim().length === 0) {
+			editError = 'First and last name are required.';
+			return;
+		}
+		saving = true;
+		try {
+			await api.updateCustomer(account.profile.customerId, {
+				firstName: firstName.trim(),
+				lastName: lastName.trim(),
+				dateOfBirth
+			});
+			toasts.success('Profile updated.');
+			editOpen = false;
+			await load();
+		} catch (err) {
+			editError =
+				err instanceof ApiError
+					? (err.serverMessage ?? `Could not save your profile. (HTTP ${err.status})`)
+					: 'Could not save your profile.';
+		} finally {
+			saving = false;
+		}
+	}
 
 	// Up to two initials for the avatar. Purely decorative (the full name is right
 	// beside it), so an empty or single-word name simply yields fewer letters.
@@ -73,7 +134,13 @@
 </script>
 
 <section class="page">
-	<PageHeader title="Account" subtitle="Your profile, lines, and usage this period." />
+	<PageHeader title="Account" subtitle="Your profile, lines, and usage this period.">
+		{#snippet actions()}
+			{#if account}
+				<Button variant="secondary" size="sm" onclick={openEdit}>Edit profile</Button>
+			{/if}
+		{/snippet}
+	</PageHeader>
 
 	{#if loading}
 		<div class="stack" aria-busy="true" aria-label="Loading your account">
@@ -142,6 +209,31 @@
 		{/if}
 	{/if}
 </section>
+
+<Modal bind:open={editOpen} title="Edit profile">
+	{#snippet children()}
+		{#if editLoading}
+			<Skeleton variant="text" lines={3} />
+		{:else}
+			{#if editError}
+				<div class="edit-error">
+					<Alert tone="danger">{#snippet children()}<p>{editError}</p>{/snippet}</Alert>
+				</div>
+			{/if}
+			<div class="edit-form">
+				<Input id="edit-first" label="First name" bind:value={firstName} required />
+				<Input id="edit-last" label="Last name" bind:value={lastName} required />
+				<Input id="edit-dob" label="Date of birth" type="date" bind:value={dateOfBirth} />
+			</div>
+		{/if}
+	{/snippet}
+	{#snippet footer()}
+		<Button variant="secondary" size="sm" onclick={() => (editOpen = false)}>Cancel</Button>
+		<Button size="sm" loading={saving} disabled={editLoading} onclick={saveProfile}
+			>Save changes</Button
+		>
+	{/snippet}
+</Modal>
 
 <style>
 	.page {
@@ -228,5 +320,15 @@
 		flex-direction: column;
 		gap: var(--space-2);
 		flex: 1;
+	}
+
+	.edit-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-4);
+	}
+
+	.edit-error {
+		margin-bottom: var(--space-4);
 	}
 </style>

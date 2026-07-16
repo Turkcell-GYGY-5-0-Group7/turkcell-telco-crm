@@ -174,11 +174,13 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		justify-content: center;
 		text-align: center;
 		gap: var(--space-5);
-		max-width: 40rem;
+		max-width: 42rem;
+		min-height: min(66vh, 38rem);
 		margin-inline: auto;
-		padding-block: var(--space-16);
+		padding-block: var(--space-12);
 	}
 
 	h1 {

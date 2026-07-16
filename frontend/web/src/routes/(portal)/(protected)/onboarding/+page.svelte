@@ -16,6 +16,7 @@
 	// Browser-only APIs (crypto, File, fetch) run only inside handlers / onMount, so
 	// the adapter-node build (this group is ssr=false) does not break.
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import {
 		ApiError,
 		api,
@@ -49,7 +50,7 @@
 		readFileAsBase64,
 		validateKycFile
 	} from '$lib/onboarding/file';
-	import { renewSession } from '$lib/auth/oidc';
+	import { login, renewSession } from '$lib/auth/oidc';
 	import WizardProgress from './WizardProgress.svelte';
 	import RegisterStep from './RegisterStep.svelte';
 	import KycStep from './KycStep.svelte';
@@ -281,6 +282,24 @@
 		step = 'register';
 	}
 
+	// After activation, land the user on a working dashboard. The best-effort silent
+	// renew above often already refreshes the token, but the `customerId` attribute is
+	// written to Keycloak ASYNCHRONOUSLY (identity-service consumes customer.registered.v1
+	// then pushes the attribute), so a renew can still race it and yield a token without
+	// the claim - leaving the user staring at the onboarding CTA again. A full re-login is
+	// the reliable fix: the Keycloak SSO session is live, so it round-trips without a
+	// password prompt and returns a fresh token that is GUARANTEED to carry the linked
+	// claim, landing on '/'.
+	async function goToDashboard() {
+		try {
+			await login('/');
+		} catch {
+			// If the redirect cannot start, fall back to a plain client navigation; the
+			// account pages still attempt their own one-shot renew on the unlinked path.
+			void goto('/');
+		}
+	}
+
 	async function startPolling(orderId: string) {
 		polling = true;
 		pollError = '';
@@ -424,6 +443,7 @@
 						recovery={recoveryAction}
 						onRetryOrder={retryOrder}
 						onStartOver={startOver}
+						onGoToDashboard={goToDashboard}
 					/>
 				{/if}
 			</div>

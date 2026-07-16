@@ -34,6 +34,13 @@ export default ts.config(
 			parserOptions: {
 				parser: ts.parser
 			}
+		},
+		rules: {
+			// TypeScript (svelte-check) already resolves identifiers, including the
+			// `generics="T"` type parameter on a component's <script>, which the core
+			// no-undef rule cannot see and would falsely flag. Disable it for Svelte
+			// files per the typescript-eslint recommendation.
+			'no-undef': 'off'
 		}
 	},
 	{

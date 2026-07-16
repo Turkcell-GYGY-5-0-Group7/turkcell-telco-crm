@@ -19,11 +19,20 @@ export const RETURN_TO_PARAM = 'returnTo';
 
 /**
  * Routes protected behind an authenticated Keycloak session. This list mirrors
- * the `(protected)` route-group membership; it exists for documentation and unit
- * assertions - runtime protection is enforced by the group's `+layout.ts` guard,
- * not by matching against this array.
+ * the `(protected)` route-group membership plus the `crm` group; it exists for
+ * documentation and unit assertions - runtime protection is enforced by each
+ * group's `+layout.ts` guard, not by matching against this array.
  */
-export const PROTECTED_ROUTES = ['/onboarding', '/account', '/invoices'] as const;
+export const PROTECTED_ROUTES = [
+	'/onboarding',
+	'/account',
+	'/invoices',
+	'/usage',
+	'/orders',
+	'/tickets',
+	'/notifications',
+	'/crm'
+] as const;
 
 export type GuardDecision = { allow: true } | { allow: false; redirectTo: string };
 

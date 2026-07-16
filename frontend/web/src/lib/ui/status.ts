@@ -49,6 +49,55 @@ export function invoiceToneToBadge(tone: InvoiceTone): BadgeTone {
 	}
 }
 
+/** Order lifecycle -> tone. Terminal-good is green; cancelled/failed are red. */
+export function orderTone(status: string): BadgeTone {
+	switch ((status ?? '').trim().toUpperCase()) {
+		case 'FULFILLED':
+		case 'COMPLETED':
+		case 'CONFIRMED':
+			return 'success';
+		case 'PENDING':
+		case 'PROCESSING':
+			return 'warning';
+		case 'CANCELLED':
+		case 'FAILED':
+			return 'danger';
+		default:
+			return 'neutral';
+	}
+}
+
+/** Support-ticket lifecycle -> tone. An open/assigned ticket is in-progress. */
+export function ticketTone(status: string): BadgeTone {
+	switch ((status ?? '').trim().toUpperCase()) {
+		case 'RESOLVED':
+		case 'CLOSED':
+			return 'success';
+		case 'OPEN':
+		case 'ASSIGNED':
+		case 'IN_PROGRESS':
+			return 'warning';
+		default:
+			return 'neutral';
+	}
+}
+
+/** Notification delivery status -> tone. */
+export function notificationTone(status: string): BadgeTone {
+	switch ((status ?? '').trim().toUpperCase()) {
+		case 'SENT':
+		case 'DELIVERED':
+			return 'success';
+		case 'PENDING':
+		case 'QUEUED':
+			return 'warning';
+		case 'FAILED':
+			return 'danger';
+		default:
+			return 'neutral';
+	}
+}
+
 /**
  * Usage gauge fill tone. Consumption is only worth flagging as it approaches the
  * allowance: 80% warns, 95% is effectively spent.

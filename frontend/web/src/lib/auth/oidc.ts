@@ -144,6 +144,21 @@ function getManager(): UserManager {
  */
 export async function initAuth(): Promise<void> {
 	if (!browser) return;
+	wireBffClientSeams();
+	const user = await getManager().getUser();
+	applyUser(user);
+}
+
+/**
+ * Register the three BFF-client seams (bearer provider, silent-renew, /login
+ * redirect). Idempotent. Called from {@link initAuth} (root layout onMount) AND
+ * from {@link getActiveUser} (the route guards), because Svelte fires a child
+ * page's onMount BEFORE the root layout's: without wiring here, a protected
+ * page's first data fetch on a cold load would run while the client still had the
+ * default no-auth provider and 401. The guards await getActiveUser before the
+ * page mounts, so wiring there closes that window.
+ */
+function wireBffClientSeams(): void {
 	// Feed the in-memory access token into the single BFF client seam.
 	setAccessTokenProvider(getAccessToken);
 	// Graceful 401 handling (16.3.3): let the single BFF client recover an
@@ -151,8 +166,6 @@ export async function initAuth(): Promise<void> {
 	// (return-to preserved) instead of ever surfacing a raw 401 to the user.
 	setRenewAccessTokenHandler(renewSession);
 	setAuthRedirectHandler(redirectToLogin);
-	const user = await getManager().getUser();
-	applyUser(user);
 }
 
 /**
@@ -202,8 +215,18 @@ function redirectToLogin(): void {
  */
 export async function getActiveUser(): Promise<User | null> {
 	if (!browser) return null;
+	// Wire the client seams here too (not only in initAuth's onMount): the guards
+	// await this before a protected page mounts, and Svelte runs a child page's
+	// onMount before the root layout's, so this is the earliest reliable point.
+	wireBffClientSeams();
 	const user = await getManager().getUser();
-	return user && !user.expired ? user : null;
+	if (user && !user.expired) {
+		// Populate the in-memory token cache eagerly so the page's first data fetch on
+		// a cold load already carries the bearer (no spurious 401 -> renew -> retry).
+		setAccessToken(user.access_token);
+		return user;
+	}
+	return null;
 }
 
 /**

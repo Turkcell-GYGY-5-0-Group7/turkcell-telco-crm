@@ -24,7 +24,8 @@
 		error,
 		recovery,
 		onRetryOrder,
-		onStartOver
+		onStartOver,
+		onGoToDashboard
 	}: {
 		polling: boolean;
 		liveStatus: string;
@@ -34,6 +35,9 @@
 		recovery: RecoveryAction;
 		onRetryOrder: () => void;
 		onStartOver: () => void;
+		/** Continue to the dashboard via a full re-login, so the fresh token carries
+		 * the newly-minted customerId claim (see the onboarding page). */
+		onGoToDashboard: () => void;
 	} = $props();
 </script>
 
@@ -65,11 +69,12 @@
 			<h2>Your subscription is active</h2>
 			<p class="detail mono">Order {result.orderId} - status {result.status}</p>
 			<!--
-				The session was silently renewed on activation (see the page), so the token
-				behind this link now carries the `customerId` claim and the dashboard loads
-				the real account instead of the BFF's unlinked 403.
+				Continue via a full re-login (onGoToDashboard), not a plain link: it
+				guarantees a fresh token carrying the newly-linked `customerId` claim, so the
+				dashboard loads the real account instead of the BFF's unlinked 403. The
+				Keycloak SSO session is live, so there is no password prompt.
 			-->
-			<Button href="/">Go to my dashboard</Button>
+			<Button onclick={onGoToDashboard}>Go to my dashboard</Button>
 		</div>
 	{:else if result?.outcome === 'failed' && recovery === 'retry-order'}
 		<Alert tone="danger">

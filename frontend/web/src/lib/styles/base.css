@@ -12,7 +12,14 @@
 body {
 	margin: 0;
 	min-height: 100vh;
-	background: var(--color-bg);
+	background-color: var(--color-bg);
+	/* Low-poly polygon backdrop (Keycloak-style). Fixed and covering the viewport so
+	   the pattern stays put as content scrolls, reading as one continuous canvas. */
+	background-image: var(--app-bg-image);
+	background-attachment: fixed;
+	background-repeat: no-repeat;
+	background-position: center;
+	background-size: cover;
 	color: var(--color-text);
 	font-family: var(--font-sans);
 	font-size: var(--text-base-size);
@@ -29,7 +36,8 @@ h3,
 h4 {
 	margin: 0;
 	color: var(--color-text);
-	letter-spacing: -0.01em;
+	font-family: var(--font-display);
+	letter-spacing: -0.005em;
 }
 
 p {
@@ -40,12 +48,27 @@ a {
 	color: var(--color-link);
 }
 
-/* One focus ring for the whole app. Inside the navy header the ring colour is
-   locally re-pointed at the yellow, which clears 3:1 against navy in both themes. */
+/* One focus ring for the whole app. Inside the dark header the ring colour is
+   locally re-pointed at the brighter accent, which clears 3:1 on the charcoal. */
 :focus-visible {
 	outline: 2px solid var(--color-focus);
 	outline-offset: 2px;
 	border-radius: var(--radius-sm);
+}
+
+/* A scoped LIGHT surface context on the dark canvas: the Keycloak sign-in card is
+   white with dark text even though the app is dark. Setting the surface/text tokens
+   locally makes any Card + text inside render as that white card, without a single
+   component knowing about it. Used by the login and anonymous-landing pages. */
+.on-light {
+	--color-surface: #ffffff;
+	--color-surface-alt: #f4f5f7;
+	--color-text: #151519;
+	--color-text-secondary: #3f434c;
+	--color-text-muted: #6a6f79;
+	--color-border: #e2e4ea;
+	--color-border-strong: #cfd2da;
+	--surface-highlight: rgb(255 255 255 / 0.6);
 }
 
 ::selection {

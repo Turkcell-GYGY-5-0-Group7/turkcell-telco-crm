@@ -6,8 +6,9 @@
 // the wrong theme) and the reactive store the toggle drives. Keeping the rules
 // here means those two can never disagree.
 //
-// There is no tri-state "system" mode: an untouched install follows the OS
-// preference, and the first explicit toggle becomes a persisted choice.
+// There is no tri-state "system" mode: an untouched install renders DARK (the
+// product's default look), and the first explicit toggle becomes a persisted
+// choice. The OS preference is no longer consulted for the initial render.
 
 /** The two themes the app renders. Mirrors the `data-theme` attribute on <html>. */
 export type Theme = 'light' | 'dark';
@@ -22,14 +23,17 @@ export function isTheme(value: unknown): value is Theme {
 
 /**
  * The theme to render on load: the user's stored choice when they have made one,
- * otherwise the OS preference. A missing or corrupt stored value is ignored rather
- * than trusted, so a bad localStorage entry can never render an unreadable page.
+ * otherwise the product default, DARK. A missing or corrupt stored value is ignored
+ * rather than trusted, so a bad localStorage entry can never render an unreadable
+ * page. `systemPrefersDark` is accepted for signature stability but no longer
+ * consulted - the app opens dark until the user toggles.
  */
-export function resolveInitialTheme(stored: string | null, systemPrefersDark: boolean): Theme {
-	if (isTheme(stored)) {
-		return stored;
-	}
-	return systemPrefersDark ? 'dark' : 'light';
+export function resolveInitialTheme(
+	stored: string | null,
+	systemPrefersDark: boolean = true
+): Theme {
+	void systemPrefersDark;
+	return isTheme(stored) ? stored : 'dark';
 }
 
 /** The other theme. */

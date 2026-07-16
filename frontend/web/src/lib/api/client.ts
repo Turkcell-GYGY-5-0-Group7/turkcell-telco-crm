@@ -3,10 +3,15 @@
 // ADR-022 / ADR-011 Section 2: the browser never calls a domain service
 // directly. This module is the SINGLE place in the frontend that constructs
 // outbound request URLs. Composed reads target the BFF surface (`/bff/v1/**`).
-// ONE read that the web-bff does not compose falls back to the API GATEWAY
-// surface (`/api/v1/**`) under ADR-022's thin-slice allowance: order-status
-// polling (`GET /api/v1/orders/{id}`), which the onboarding wizard uses to
-// observe the saga's terminal outcome. Both surfaces resolve against the same
+// Reads and writes the web-bff does not compose fall back to the API GATEWAY
+// thin-slice surface (`/api/v1/**`) under ADR-022's thin-slice allowance. This
+// started as one call (order-status polling for the onboarding saga) and now
+// covers the broader self-service and CRM-console surface the expanded frontend
+// needs (usage, tickets, notifications, orders, subscriptions, catalog, customer
+// reads) - every one of these is a real gateway endpoint the caller is authorized
+// for, and each is re-checked server-side by the owning service's RBAC and
+// ownership rules (the browser decoding its own token only decides what to SHOW,
+// never what it is ALLOWED to do). Both surfaces resolve against the same
 // configurable gateway base URL; a domain-service host/port is never targeted,
 // and this remains the only HTTP path in the frontend.
 //
@@ -392,6 +397,238 @@ export interface OrderStatus {
 	status: string;
 }
 
+// ---------------------------------------------------------------------------
+// Gateway thin-slice types (derived from the domain services' Java DTOs, which
+// answer wrapped in ApiResult<T>). These back the expanded self-service and
+// CRM-console pages the BFF does not compose. Each mirrors a real response record
+// field-for-field; see the owning service under microservices/<svc>/.
+// ---------------------------------------------------------------------------
+
+/** usage-service `UsageType`. */
+export type UsageType = 'VOICE' | 'DATA' | 'SMS';
+
+/** Cursor-based page envelope (platform `CursorPage<T>`, ADR-015). */
+export interface CursorPage<T> {
+	content: T[];
+	/** Opaque cursor for the next page; null when there is none. */
+	nextCursor: string | null;
+	hasNext: boolean;
+	limit: number;
+}
+
+/** Offset-based page envelope (platform `PageResult<T>`, ADR-015). */
+export interface PageResult<T> {
+	content: T[];
+	page: number;
+	size: number;
+	totalElements: number;
+	totalPages: number;
+}
+
+/** usage-service `QuotaResponse` - remaining allowance for the current period. */
+export interface Quota {
+	quotaId: string;
+	subscriptionId: string;
+	periodStart: string;
+	periodEnd: string;
+	minutesTotal: number;
+	smsTotal: number;
+	mbTotal: number;
+	minutesRemaining: number;
+	smsRemaining: number;
+	mbRemaining: number;
+}
+
+/** usage-service `UsageHistoryItem` - one CDR. */
+export interface UsageHistoryItem {
+	id: string;
+	subscriptionId: string;
+	type: UsageType;
+	quantity: number;
+	overage: boolean;
+	cdrRef: string;
+	recordedAt: string;
+}
+
+/** ticket-service `TicketCommentResponse`. */
+export interface TicketComment {
+	id: string;
+	authorId: string;
+	body: string;
+	createdAt: string;
+}
+
+/** ticket-service `TicketResponse`. */
+export interface Ticket {
+	id: string;
+	customerId: string;
+	category: string;
+	priority: string;
+	status: string;
+	assignedTeam: string | null;
+	subject: string;
+	slaDueAt: string | null;
+	slaBreached: boolean;
+	createdAt: string;
+	resolvedAt: string | null;
+	comments: TicketComment[];
+}
+
+/** ticket-service `OpenTicketRequest`. */
+export interface OpenTicketRequest {
+	category: string;
+	priority: string;
+	subject: string;
+}
+
+/** notification-service `NotificationResponse`. */
+export interface NotificationRecord {
+	id: string;
+	userId: string;
+	templateCode: string;
+	channel: string;
+	status: string;
+	createdAt: string;
+	sentAt: string | null;
+}
+
+/** notification-service `CommunicationPreference` (Mongo document, Jackson-shaped). */
+export interface CommunicationPreference {
+	id: string;
+	userId: string;
+	channel: string;
+	optedIn: boolean;
+	updatedAt: string;
+}
+
+/** order-service `OrderItemResponse`. */
+export interface OrderItem {
+	id: string;
+	tariffId: string;
+	tariffCode: string;
+	tariffVersion: number;
+	tariffName: string;
+	unitPrice: number;
+	quantity: number;
+}
+
+/** order-service `OrderResponse`. */
+export interface Order {
+	id: string;
+	customerId: string;
+	status: string;
+	idempotencyKey: string;
+	totalAmount: number;
+	items: OrderItem[];
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** subscription-service `SubscriptionResponse`. */
+export interface SubscriptionDetail {
+	id: string;
+	customerId: string;
+	msisdn: string;
+	tariffCode: string;
+	tariffVersion: number;
+	status: string;
+	activatedAt: string | null;
+	terminatedAt: string | null;
+	createdAt: string;
+}
+
+/** billing-service `InvoiceResponse` (a single invoice with lines). */
+export interface InvoiceDetail {
+	id: string;
+	customerId: string;
+	subscriptionId: string;
+	periodStart: string;
+	periodEnd: string;
+	subTotal: number;
+	tax: number;
+	grandTotal: number;
+	currency: string;
+	status: string;
+	dueDate: string;
+	issuedAt: string | null;
+	pdfRef: string | null;
+	createdAt: string;
+	lines?: InvoiceLine[];
+}
+
+/** billing-service `InvoiceLineResponse`. */
+export interface InvoiceLine {
+	description: string;
+	amount: number;
+}
+
+/** customer-service `CustomerResponse` (identity number is masked server-side). */
+export interface Customer {
+	id: string;
+	type: string;
+	firstName: string;
+	lastName: string;
+	identityNumberMasked: string;
+	dateOfBirth: string;
+	status: string;
+	createdAt: string;
+}
+
+/** customer-service `UpdateCustomerRequest` - only these three fields are mutable. */
+export interface UpdateCustomerRequest {
+	firstName: string;
+	lastName: string;
+	/** ISO date (`YYYY-MM-DD`). */
+	dateOfBirth: string;
+}
+
+/** product-catalog-service `TariffResponse`. */
+export interface CatalogTariff {
+	id: string;
+	code: string;
+	name: string;
+	type: string;
+	status: string;
+	monthlyFee: number;
+	currency: string;
+	minutesIncluded: number;
+	smsIncluded: number;
+	dataMbIncluded: number;
+	targetSegment: string;
+	effectiveFrom: string;
+	effectiveTo: string | null;
+	version: number;
+	createdAt: string;
+	updatedAt: string;
+}
+
+/** product-catalog-service `AddonResponse`. */
+export interface CatalogAddon {
+	id: string;
+	code: string;
+	name: string;
+	price: number;
+	currency: string;
+	type: string;
+	validityDays: number;
+	status: string;
+	createdAt: string;
+}
+
+/** payment-service `PaymentResponse`. */
+export interface Payment {
+	id: string;
+	orderId: string;
+	customerId: string;
+	amount: number;
+	status: string;
+	paymentRequestId: string;
+	invoiceId: string | null;
+	createdAt: string;
+	updatedAt: string;
+	attemptCount: number;
+}
+
 interface RequestOptions {
 	method: string;
 	path: string;
@@ -511,20 +748,315 @@ export class ApiClient {
 	 * place that knows about the envelope.
 	 */
 	async getOrderStatus(orderId: string): Promise<OrderStatus> {
-		const path = `${API_V1}/orders/${encodeURIComponent(orderId)}`;
-		const envelope = await this.request<ApiResult<GatewayOrderResponse>>({
+		const order = await this.requestGateway<GatewayOrderResponse>({
 			method: 'GET',
-			path
+			path: `${API_V1}/orders/${encodeURIComponent(orderId)}`
 		});
-
-		const order = envelope?.data;
-		if (!envelope?.success || !order) {
-			// A 2xx that is not a successful envelope means the gateway answered with a
-			// shape we cannot trust; fail loudly rather than reporting a fake status.
-			throw new ApiError(502, joinUrl(this.baseUrl, path), envelope);
-		}
-
 		return { orderId: order.id, customerId: order.customerId, status: order.status };
+	}
+
+	// -- gateway thin-slice (ADR-022): expanded self-service + CRM surface ----
+	//
+	// Everything below is a real `/api/v1` endpoint the caller is authorized for,
+	// answered with the platform envelope `ApiResult<T>` and unwrapped by the
+	// shared {@link ApiClient.requestGateway}. The owning service enforces RBAC and
+	// per-record ownership; the frontend only reaches endpoints scoped to the
+	// signed-in user (self-service) or gated in the UI to a staff role (CRM), and
+	// the gateway rejects anything else. See the module header.
+
+	/** Active quota for one subscription (self-scoped or ADMIN). */
+	getQuota(subscriptionId: string): Promise<Quota> {
+		return this.requestGateway<Quota>({
+			method: 'GET',
+			path: `${API_V1}/usage/subscriptions/${encodeURIComponent(subscriptionId)}/quota`
+		});
+	}
+
+	/** Cursor-paginated CDR history for one subscription within a time window. */
+	getUsageHistory(
+		subscriptionId: string,
+		fromIso: string,
+		toIso: string,
+		cursor?: string,
+		limit?: number
+	): Promise<CursorPage<UsageHistoryItem>> {
+		const params = new URLSearchParams({ from: fromIso, to: toIso });
+		if (cursor) params.set('cursor', cursor);
+		if (limit !== undefined) params.set('limit', String(limit));
+		return this.requestGateway<CursorPage<UsageHistoryItem>>({
+			method: 'GET',
+			path: `${API_V1}/usage/subscriptions/${encodeURIComponent(subscriptionId)}/history?${params.toString()}`
+		});
+	}
+
+	/** Open a support ticket for the caller's own linked customer. Returns the new id. */
+	openTicket(request: OpenTicketRequest): Promise<string> {
+		return this.requestGateway<string>({
+			method: 'POST',
+			path: `${API_V1}/tickets`,
+			body: request
+		});
+	}
+
+	/** Read a single ticket (owner or ADMIN), including its comment thread. */
+	getTicket(ticketId: string): Promise<Ticket> {
+		return this.requestGateway<Ticket>({
+			method: 'GET',
+			path: `${API_V1}/tickets/${encodeURIComponent(ticketId)}`
+		});
+	}
+
+	/** Append a comment to a ticket. Returns the new comment id. */
+	addTicketComment(ticketId: string, body: string): Promise<string> {
+		return this.requestGateway<string>({
+			method: 'POST',
+			path: `${API_V1}/tickets/${encodeURIComponent(ticketId)}/comments`,
+			body: { body }
+		});
+	}
+
+	/** Assign a ticket to a support team (ADMIN). */
+	assignTicket(ticketId: string, team: string): Promise<void> {
+		return this.requestGatewayVoid({
+			method: 'POST',
+			path: `${API_V1}/tickets/${encodeURIComponent(ticketId)}/assign`,
+			body: { team }
+		});
+	}
+
+	/** Resolve a ticket (ADMIN). */
+	resolveTicket(ticketId: string): Promise<void> {
+		return this.requestGatewayVoid({
+			method: 'POST',
+			path: `${API_V1}/tickets/${encodeURIComponent(ticketId)}/resolve`
+		});
+	}
+
+	/**
+	 * A page of the caller's notification history. The path segment is the caller's
+	 * own customerId (the notification service keys history by customerId and the
+	 * gateway's SpEL rule requires the path id to equal the caller's claim).
+	 */
+	getNotificationHistory(
+		customerId: string,
+		page?: number,
+		size?: number
+	): Promise<PageResult<NotificationRecord>> {
+		const params = new URLSearchParams();
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		const query = params.toString();
+		const base = `${API_V1}/notifications/users/${encodeURIComponent(customerId)}/history`;
+		return this.requestGateway<PageResult<NotificationRecord>>({
+			method: 'GET',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/** The caller's communication (channel opt-in) preferences. */
+	getNotificationPreferences(customerId: string): Promise<CommunicationPreference[]> {
+		return this.requestGateway<CommunicationPreference[]>({
+			method: 'GET',
+			path: `${API_V1}/notifications/users/${encodeURIComponent(customerId)}/preferences`
+		});
+	}
+
+	/** Set the opt-in flag for one channel and return the stored preference. */
+	updateNotificationPreference(
+		customerId: string,
+		channel: string,
+		optedIn: boolean
+	): Promise<CommunicationPreference> {
+		return this.requestGateway<CommunicationPreference>({
+			method: 'PUT',
+			path: `${API_V1}/notifications/users/${encodeURIComponent(customerId)}/preferences/${encodeURIComponent(channel)}`,
+			body: { optedIn }
+		});
+	}
+
+	/** A page of the caller's own orders. */
+	listMyOrders(customerId: string, page?: number, size?: number): Promise<PageResult<Order>> {
+		const params = new URLSearchParams();
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		const query = params.toString();
+		const base = `${API_V1}/orders/customer/${encodeURIComponent(customerId)}`;
+		return this.requestGateway<PageResult<Order>>({
+			method: 'GET',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/** Read a single order (owner or ADMIN). */
+	getOrder(orderId: string): Promise<Order> {
+		return this.requestGateway<Order>({
+			method: 'GET',
+			path: `${API_V1}/orders/${encodeURIComponent(orderId)}`
+		});
+	}
+
+	/**
+	 * Cancel an order (owner or ADMIN). Only PENDING/CONFIRMED orders are
+	 * cancellable; a rejected state transition surfaces as an {@link ApiError} whose
+	 * {@link ApiError.serverMessage} carries the reason. Uses HTTP DELETE.
+	 */
+	cancelOrder(orderId: string, reason?: string): Promise<Order> {
+		const params = new URLSearchParams();
+		if (reason) params.set('reason', reason);
+		const query = params.toString();
+		const base = `${API_V1}/orders/${encodeURIComponent(orderId)}`;
+		return this.requestGateway<Order>({
+			method: 'DELETE',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/** A page of subscriptions for a customer (own, or any for ADMIN). */
+	listSubscriptions(
+		customerId: string,
+		page?: number,
+		size?: number
+	): Promise<PageResult<SubscriptionDetail>> {
+		const params = new URLSearchParams({ customerId });
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		return this.requestGateway<PageResult<SubscriptionDetail>>({
+			method: 'GET',
+			path: `${API_V1}/subscriptions?${params.toString()}`
+		});
+	}
+
+	/** Read a single subscription (owner or ADMIN). */
+	getSubscription(subscriptionId: string): Promise<SubscriptionDetail> {
+		return this.requestGateway<SubscriptionDetail>({
+			method: 'GET',
+			path: `${API_V1}/subscriptions/${encodeURIComponent(subscriptionId)}`
+		});
+	}
+
+	/** Suspend a subscription (ADMIN in this UI). Returns the affected id. */
+	suspendSubscription(subscriptionId: string, reason?: string): Promise<string> {
+		return this.requestGateway<string>({
+			method: 'POST',
+			path: `${API_V1}/subscriptions/${encodeURIComponent(subscriptionId)}/suspend`,
+			body: reason ? { reason } : undefined
+		});
+	}
+
+	/** Reactivate a suspended subscription (ADMIN in this UI). */
+	reactivateSubscription(subscriptionId: string): Promise<string> {
+		return this.requestGateway<string>({
+			method: 'POST',
+			path: `${API_V1}/subscriptions/${encodeURIComponent(subscriptionId)}/reactivate`
+		});
+	}
+
+	/** Terminate a subscription (ADMIN in this UI). */
+	terminateSubscription(subscriptionId: string): Promise<string> {
+		return this.requestGateway<string>({
+			method: 'POST',
+			path: `${API_V1}/subscriptions/${encodeURIComponent(subscriptionId)}/terminate`
+		});
+	}
+
+	/** Read a single invoice with its line items (owner or ADMIN). */
+	getInvoiceById(invoiceId: string): Promise<InvoiceDetail> {
+		return this.requestGateway<InvoiceDetail>({
+			method: 'GET',
+			path: `${API_V1}/invoices/${encodeURIComponent(invoiceId)}`
+		});
+	}
+
+	/** A page of a customer's invoices (owner or ADMIN). */
+	listInvoicesForCustomer(
+		customerId: string,
+		page?: number,
+		size?: number
+	): Promise<PageResult<InvoiceDetail>> {
+		const params = new URLSearchParams({ customerId });
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		return this.requestGateway<PageResult<InvoiceDetail>>({
+			method: 'GET',
+			path: `${API_V1}/invoices?${params.toString()}`
+		});
+	}
+
+	/** A page of customers (ADMIN / CALL_CENTER_AGENT). */
+	listCustomers(page?: number, size?: number): Promise<PageResult<Customer>> {
+		const params = new URLSearchParams();
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		const query = params.toString();
+		const base = `${API_V1}/customers`;
+		return this.requestGateway<PageResult<Customer>>({
+			method: 'GET',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/** Read a single customer (staff, or the customer's own record). */
+	getCustomer(customerId: string): Promise<Customer> {
+		return this.requestGateway<Customer>({
+			method: 'GET',
+			path: `${API_V1}/customers/${encodeURIComponent(customerId)}`
+		});
+	}
+
+	/** Update a customer's editable profile fields (staff, or the owner). */
+	updateCustomer(customerId: string, request: UpdateCustomerRequest): Promise<Customer> {
+		return this.requestGateway<Customer>({
+			method: 'PUT',
+			path: `${API_V1}/customers/${encodeURIComponent(customerId)}`,
+			body: request
+		});
+	}
+
+	/**
+	 * A page of the tariff catalog (any authenticated caller). product-catalog-service
+	 * answers with a paginated `PageResult`, so this returns the page and the caller
+	 * reads `.content`.
+	 */
+	listTariffs(page?: number, size?: number): Promise<PageResult<CatalogTariff>> {
+		const params = new URLSearchParams();
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		const query = params.toString();
+		const base = `${API_V1}/tariffs`;
+		return this.requestGateway<PageResult<CatalogTariff>>({
+			method: 'GET',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/**
+	 * A page of the addon catalog, optionally filtered to one tariff (any
+	 * authenticated caller). Also a paginated `PageResult`. Note addons are keyed to a
+	 * tariff, so an unfiltered call returns whatever the service pages by default.
+	 */
+	listAddons(tariffCode?: string, page?: number, size?: number): Promise<PageResult<CatalogAddon>> {
+		const params = new URLSearchParams();
+		if (tariffCode) params.set('tariffCode', tariffCode);
+		if (page !== undefined) params.set('page', String(page));
+		if (size !== undefined) params.set('size', String(size));
+		const query = params.toString();
+		const base = `${API_V1}/addons`;
+		return this.requestGateway<PageResult<CatalogAddon>>({
+			method: 'GET',
+			path: query ? `${base}?${query}` : base
+		});
+	}
+
+	/**
+	 * The payment recorded for an order, when one exists. Best-effort: charging is
+	 * event-driven, so an order may have no payment yet (the caller treats a thrown
+	 * {@link ApiError} as "no payment information").
+	 */
+	getPaymentByOrder(orderId: string): Promise<Payment> {
+		return this.requestGateway<Payment>({
+			method: 'GET',
+			path: `${API_V1}/payments/order/${encodeURIComponent(orderId)}`
+		});
 	}
 
 	// -- internals ----------------------------------------------------------
@@ -537,6 +1069,35 @@ export class ApiClient {
 		}
 
 		return (await response.json()) as T;
+	}
+
+	/**
+	 * Gateway thin-slice variant of {@link request}: shares the exact same URL
+	 * construction, auth, and 401 handling, then unwraps the platform envelope
+	 * `ApiResult<T>` that every `/api/v1` service returns (ADR-015). A 2xx that is
+	 * not a successful envelope means the gateway answered with a shape we cannot
+	 * trust, so it fails loudly (502) rather than returning a fabricated value. This
+	 * is the SINGLE place that knows about the envelope; all gateway methods above
+	 * route through it and receive a flat payload.
+	 */
+	private async requestGateway<T>(options: RequestOptions): Promise<T> {
+		const envelope = await this.request<ApiResult<T>>(options);
+		if (!envelope?.success || envelope.data === undefined || envelope.data === null) {
+			throw new ApiError(502, joinUrl(this.baseUrl, options.path), envelope);
+		}
+		return envelope.data;
+	}
+
+	/**
+	 * Gateway variant for endpoints that answer with `ApiResult<Unit>` (no
+	 * meaningful payload, e.g. ticket assign/resolve). Shares dispatch/401 handling
+	 * and asserts only that the envelope reports success.
+	 */
+	private async requestGatewayVoid(options: RequestOptions): Promise<void> {
+		const envelope = await this.request<ApiResult<unknown>>(options);
+		if (!envelope?.success) {
+			throw new ApiError(502, joinUrl(this.baseUrl, options.path), envelope);
+		}
 	}
 
 	/**

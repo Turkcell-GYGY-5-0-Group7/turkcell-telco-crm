@@ -35,7 +35,11 @@
 		background: var(--color-surface);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		box-shadow: var(--shadow-sm);
+		/* A hairline top highlight over the token shadow reads as a lifted, premium
+		   surface - barely-there in light, a faint sheen in dark. */
+		box-shadow:
+			inset 0 1px 0 0 var(--surface-highlight),
+			var(--shadow-sm);
 		overflow: hidden;
 	}
 

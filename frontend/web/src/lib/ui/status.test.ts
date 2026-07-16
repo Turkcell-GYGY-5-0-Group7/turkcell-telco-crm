@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { customerTone, gaugeTone, invoiceToneToBadge, subscriptionTone } from './status';
+import {
+	customerTone,
+	gaugeTone,
+	invoiceToneToBadge,
+	notificationTone,
+	orderTone,
+	subscriptionTone,
+	ticketTone
+} from './status';
 
 describe('subscriptionTone', () => {
 	it('maps the lifecycle states', () => {
@@ -39,6 +47,41 @@ describe('invoiceToneToBadge', () => {
 		expect(invoiceToneToBadge('overdue')).toBe('danger');
 		expect(invoiceToneToBadge('pending')).toBe('warning');
 		expect(invoiceToneToBadge('neutral')).toBe('neutral');
+	});
+});
+
+describe('orderTone', () => {
+	it('greens fulfilled/confirmed, warns pending, reds cancelled/failed', () => {
+		expect(orderTone('FULFILLED')).toBe('success');
+		expect(orderTone('CONFIRMED')).toBe('success');
+		expect(orderTone('PENDING')).toBe('warning');
+		expect(orderTone('CANCELLED')).toBe('danger');
+		expect(orderTone('FAILED')).toBe('danger');
+	});
+
+	it('is neutral for an unknown status', () => {
+		expect(orderTone('SOMETHING')).toBe('neutral');
+	});
+});
+
+describe('ticketTone', () => {
+	it('greens resolved, warns open/assigned', () => {
+		expect(ticketTone('RESOLVED')).toBe('success');
+		expect(ticketTone('OPEN')).toBe('warning');
+		expect(ticketTone('ASSIGNED')).toBe('warning');
+	});
+
+	it('is neutral for an unknown status', () => {
+		expect(ticketTone('PARKED')).toBe('neutral');
+	});
+});
+
+describe('notificationTone', () => {
+	it('maps delivery states', () => {
+		expect(notificationTone('SENT')).toBe('success');
+		expect(notificationTone('PENDING')).toBe('warning');
+		expect(notificationTone('FAILED')).toBe('danger');
+		expect(notificationTone('UNKNOWN')).toBe('neutral');
 	});
 });
 
