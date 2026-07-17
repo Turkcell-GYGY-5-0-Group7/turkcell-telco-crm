@@ -73,6 +73,8 @@
         <module>ticket-service</module>
         <!-- Channel (post-MVP, ADR-022) -->
         <module>web-bff</module>
+        <!-- Invoice dispute / chargeback (post-MVP, ADR-028) -->
+        <module>dispute-service</module>
     </modules>
 
     <dependencyManagement>

@@ -55,13 +55,22 @@ public class Ticket {
 
     private Instant resolvedAt;
 
+    @Column(name = "external_ref")
+    private String externalRef;
+
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<TicketComment> comments = new ArrayList<>();
 
     protected Ticket() {}
 
+    /** Original 6-arg form, preserved for every existing (non-dispute) caller - externalRef defaults to null. */
     public static Ticket open(UUID customerId, String category, String priority, String subject,
                                String assignedTeam, Instant slaDueAt) {
+        return open(customerId, category, priority, subject, assignedTeam, slaDueAt, null);
+    }
+
+    public static Ticket open(UUID customerId, String category, String priority, String subject,
+                               String assignedTeam, Instant slaDueAt, String externalRef) {
         var t = new Ticket();
         t.customerId = customerId;
         t.category = category;
@@ -70,6 +79,7 @@ public class Ticket {
         t.status = TicketStatus.OPEN;
         t.assignedTeam = assignedTeam;
         t.slaDueAt = slaDueAt;
+        t.externalRef = externalRef;
         t.createdAt = Instant.now();
         t.updatedAt = t.createdAt;
         return t;
@@ -110,5 +120,6 @@ public class Ticket {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
+    public String getExternalRef() { return externalRef; }
     public List<TicketComment> getComments() { return Collections.unmodifiableList(comments); }
 }

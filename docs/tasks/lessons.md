@@ -13,6 +13,23 @@ Format:
 
 ---
 
+## 2026-07-18 - `mvn verify` without `clean` silently inflates JaCoCo coverage claims
+- Mistake: reported "JaCoCo 70% gate met" for billing-service/payment-service (Sprint 22, Features
+  22.4/22.5) after running `mvn verify -Dtest='!DockerGatedTest,...'` without `clean` first. The
+  incremental run merged in `jacoco.exec` data left over in `target/` from a prior full/Docker-available
+  test run, inflating the reported line coverage. A genuine `mvn clean verify` with the identical
+  exclusions showed the two services actually sit at 61.3%/54.1% - well under gate - because their
+  Docker-gated integration/perf tests carry real coverage weight that no unit test replaces. Caught only
+  because a later phase re-ran the same exclusion set and got a different-looking result, prompting a
+  clean rebuild to check.
+- Rule: any coverage-gate claim ("JaCoCo gate met/not met") must be based on a build that started with
+  `mvn clean` (or a fresh `target/`) - never trust `jacoco.exec` from an incremental `verify`, especially
+  when excluding Docker-gated tests via `-Dtest='!X,!Y'` in a no-Docker session. Test **pass/fail**
+  counts from an incremental run are still accurate (surefire doesn't have this staleness problem) -
+  only the coverage percentage is at risk. When a service's real coverage genuinely depends on its
+  Docker-gated tests to clear the gate, say so explicitly rather than reporting "gate met" from a
+  Docker-free run.
+
 ## 2026-06-23 - propagate ADR changes down to subtasks, not just summaries
 - Mistake: after changing ADR-006 (Mongo/MinIO), ADR-011 (Keycloak issues tokens), and adding ADR-022,
   only sprint READMEs and contracts were updated; granular subtask files (Sprint 04/05 auth, Sprint 12

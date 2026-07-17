@@ -7,7 +7,7 @@
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
 > This is a **post-MVP** sprint. The MVP is Sprints 01-15 (backend + Swagger). All 5 features are
-> now authored (see the Features table) on branch `feature/sprint-20-chaos-engineering`. **Not yet
+> now authored (see the Features table) on branch `feature/sprint-20-chaos-experiment-library`. **Not yet
 > DONE**: every feature's live-cluster acceptance criteria (Chaos Mesh pods actually Running, CRDs
 > actually registered, experiments actually applied and observed against a live Kind cluster) are
 > unverified this session - Docker Desktop was down throughout. See `docs/tasks/STATUS.md`'s latest
@@ -66,7 +66,7 @@ References.
   scoped to the `telco` namespace on the same Kind cluster proven in Sprint 15 (`deploy/RUNBOOK.md`
   Section 2), gated so experiments never run in a namespace tagged `production`.
 - **20.2 Steady-state hypotheses and observability wiring.** Reuse, do not duplicate, the Sprint 13
-  Grafana dashboards as the sole observability surface for chaos: `platform-overview` (p95/p99
+  Grafana dashboards as the sole observability surface for chaos: `platform-overview` (p95
   latency, error rate, throughput), `kafka-billing-ops` (consumer lag, bill-run duration), and
   `circuit-breakers` (breaker state transitions). Each experiment in 20.3 states a steady-state
   hypothesis in terms of an existing panel/alert threshold (e.g. "p95 latency on `order-service`

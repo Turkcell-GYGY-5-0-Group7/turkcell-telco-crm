@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "DisputeClosedV1",
+  "namespace": "com.telco.platform.events.dispute",
+  "doc": "Emitted when a dispute reaches its terminal CLOSED state (dispute.closed.v1). Producer: dispute-service.",
+  "fields": [
+    {
+      "name": "disputeId",
+      "type": "string",
+      "doc": "Unique dispute identifier (UUID)."
+    },
+    {
+      "name": "closedAt",
+      "type": "string",
+      "doc": "Instant the dispute was closed, ISO-8601 (UTC)."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco</groupId>
+        <artifactId>domain-services-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../domain-services-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>dispute-service</artifactId>
+    <name>dispute-service</name>
+    <description>Invoice dispute / chargeback workflow (port 9012, Domain Orchestration, ADR-028).
+        Coordinates billing-service and payment-service via outbox/inbox events; never writes to
+        billing-db or payment-db directly (ADR-006). Sprint 22 Feature 22.2: state machine,
+        commands/handlers, event contracts.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
+        </dependency>
+
+        <!-- Per-service OpenAPI / Swagger UI (ARC-08). -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
+        <!-- MinIO client for dispute evidence object storage (ADR-006). -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+        </dependency>
+
+        <!-- Canonical Avro event contracts and the shared AvroContractAssertions test-jar (ADR-019):
+             DisputeEventSchemaCompatTest compares real event records against the governed schema in
+             platform-event-contracts, not a local test-resources snapshot. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

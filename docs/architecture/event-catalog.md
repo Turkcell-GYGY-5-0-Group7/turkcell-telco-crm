@@ -8,7 +8,7 @@
 | Version | 1.0 |
 | Parent | [../product/BRD.md](../product/BRD.md) |
 | Technical authority | ADR-009 (event-driven architecture), ADR-019 (event contract and schema governance) |
-| Last updated | 2026-07-07 |
+| Last updated | 2026-07-18 |
 
 All events are immutable, versioned (`domain.event.v1`), Avro-encoded, and registered in the
 Schema Registry. Events are published through the transactional outbox and consumed
@@ -65,6 +65,12 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `ticket.resolved.v1` | ticket-service | notification | Ticket resolved. |
 | `ticket.sla-breached.v1` | ticket-service | notification | SLA breached for a ticket. |
 | `notification.dispatched.v1` | notification-service | - | Notification sent on a channel. |
+| `dispute.opened.v1` | dispute-service | billing, payment, ticket, notification | Dispute opened; moves straight to `UNDER_REVIEW`. The only signal a provisional hold ever travels on (ADR-028 Section 5) - never a financial instruction. |
+| `dispute.evidence-submitted.v1` | dispute-service | - | Evidence attached to a dispute under review. No current consumer; registered for future audit/notification integration. |
+| `dispute.resolved-customer.v1` | dispute-service | billing, payment, notification | Dispute resolved in the customer's favor - the only dispute event a consumer may treat as authorization for a real credit/refund (ADR-028 Section 5). |
+| `dispute.resolved-merchant.v1` | dispute-service | billing, payment, notification | Dispute resolved in the merchant's favor - always a no-financial-change hold release, by contract. |
+| `dispute.withdrawn.v1` | dispute-service | notification | Customer withdrew the dispute. |
+| `dispute.closed.v1` | dispute-service | notification | Dispute reached its terminal `CLOSED` state. |
 
 ---
 
@@ -84,7 +90,37 @@ Compensation on activation failure:
 
 ---
 
-## 4. Schema Governance
+## 4. Saga: Dispute Resolution (event sequence)
+
+```text
+dispute.opened.v1
+  -> billing (Invoice.disputeStatus = ON_HOLD, excluded from dunning)
+  -> payment (Payment.disputed = true, excluded from retry/expiry)
+  -> ticket (auto-opens a DISPUTE-category ticket, existing SLA machinery)
+
+dispute.evidence-submitted.v1 (zero or more, loops back to UNDER_REVIEW)
+
+Resolution branch A - upheld:
+  dispute.resolved-customer.v1
+    -> billing (unpaid invoice: real ADJUSTMENT InvoiceLine, grandTotal reduced), OR
+    -> payment (already-paid: real refund via the existing RefundPaymentCommand)
+       [exactly one of the two acts, never both - selected by invoice/payment paid state]
+  -> dispute.closed.v1
+
+Resolution branch B - rejected:
+  dispute.resolved-merchant.v1
+    -> billing (hold cleared, no financial change)
+    -> payment (disputed flag cleared, no financial change)
+  -> dispute.closed.v1
+
+Withdrawal (either OPENED or UNDER_REVIEW):
+  dispute.withdrawn.v1
+  -> dispute.closed.v1
+```
+
+---
+
+## 5. Schema Governance
 
 - Each event has an Avro schema registered before first publish (ADR-019).
 - Compatibility mode: backward (consumers can read older producer schemas).
@@ -93,7 +129,7 @@ Compensation on activation failure:
 
 ---
 
-## 5. Schema Evolution Log
+## 6. Schema Evolution Log
 
 Additive, backward-compatible field changes (ADR-019). Each entry is a new nullable/optional
 field only; no field was renamed, removed, or retyped.
@@ -106,7 +142,7 @@ field only; no field was renamed, removed, or retyped.
 
 ---
 
-## 6. Schema Governance Reconciliation Log (Feature 14.5)
+## 7. Schema Governance Reconciliation Log (Feature 14.5)
 
 Tracking reference: `docs/tasks/sprint-14-testing-and-hardening/14.5-avro-schema-governance-ruling.md`
 (tech-lead ruling, ADR-019 Amendment (2026-07-07)). Unlike Section 5 above (additive field changes to
@@ -119,6 +155,7 @@ that actually publishes each event.
 | --- | --- | --- |
 | 2026-07-07 | Reconciled (type/shape fix, no behavior change) | 7 pre-existing canonical schemas corrected to match the real, already-shipping payload: `order-created.avsc` (added `items` array of the nested `OrderItemPayload` record, added `idempotencyKey`, removed `currency`, renamed/retyped `createdAt`(long) to `occurredAt`(string)); `payment-completed.avsc` (added `customerId`, removed `currency`, renamed/retyped `completedAt`(long) to `occurredAt`(string)); `cdr-recorded.avsc` (retyped `occurredAt` from `long`/timestamp-millis to `string`); `usage-aggregated.avsc` (retyped `periodStart`, `periodEnd`, `aggregatedAt` from `long` to `string`); `usage-recorded.avsc` (retyped `recordedAt` from `long` to `string`); `quota-exceeded.avsc` (retyped `exceededAt` from `long` to `string`); `quota-threshold-reached.avsc` (retyped `reachedAt` from `long` to `string`). The nested `OrderItemPayload` type required for `order-created.avsc`'s `items` field is defined inline within `order-created.avsc` itself (not an independent Schema Registry subject - see tracking doc's tech-lead ruling on the registry-parsing conflict). |
 | 2026-07-07 | Added (new canonical schema, closing a previously-unregistered gap) | 14 event types that were already being published in production code but had no canonical `.avsc` file at all: `order.cancelled.v1`, `payment.failed.v1`, `payment.refunded.v1`, `tariff.created.v1`, `tariff.price-changed.v1`, `ticket.opened.v1`, `ticket.assigned.v1`, `ticket.resolved.v1`, `ticket.sla-breached.v1`, `invoice.paid.v1`, `invoice.overdue.v1`, `notification.dispatched.v1`, `user.created.v1`, `user.deleted.v1`. All 14 are now registered in the Schema Registry under the standard backward-compatibility mode. See Section 2 above for the two identity-service rows this addition required in the event registry table. |
+| 2026-07-18 | Added (new canonical schema, Sprint 22 Feature 22.6.1, ADR-028) | 6 new event types for the new dispute-service: `dispute.opened.v1`, `dispute.evidence-submitted.v1`, `dispute.resolved-customer.v1`, `dispute.resolved-merchant.v1`, `dispute.withdrawn.v1`, `dispute.closed.v1`. `aggregate_id = disputeId` for all six (load-bearing for per-dispute Kafka ordering, ADR-028 Section 6). A new `DisputeEventSchemaCompatTest` in dispute-service verifies all six field-for-field against these schemas (Docker-free, live-run this session, all 6 green). See Section 2 above for the new event-registry rows and Section 4 for the new Dispute Resolution saga sequence. |
 | 2026-07-07 | Renamed (naming-convention fix, no shape change) | `EventEnvelope.avsc` -> `event-envelope.avsc`, closing a kebab-case-filename convention violation (ADR-019 Amendment, point A5). The Avro record's own `name` field is unchanged (`EventEnvelope`, PascalCase, drives Java class generation) - only the filename changed, along with the corresponding `avro-maven-plugin` property in `platform/platform-event-contracts/pom.xml`. |
 | 2026-07-07 | Tooling (process change, going forward) | Added `AvroContractAssertions`, a shared, type-and-nullability-aware compatibility checker (`platform/platform-event-contracts/src/test/java/com/telco/platform/events/testsupport/AvroContractAssertions.java`, shipped as this module's test-jar). Every one of the 32 canonical schemas (18 reconciled/unchanged + 14 newly added above) now has a per-service `*EventSchemaCompatTest`/`*EventContractTest` that loads the schema directly from the canonical `platform-event-contracts` module (not a hand-maintained local copy) and asserts field name, type, and nullability against the real Java payload class or captured runtime payload. Going forward, any producing service whose payload class drifts from its canonical schema (field removed/renamed/retyped, or a nullability mismatch) fails that service's build - this is now a required, standing quality gate for every service that publishes a domain event, not a one-time manual reconciliation. |
 
