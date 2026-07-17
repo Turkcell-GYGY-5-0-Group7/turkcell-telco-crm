@@ -36,6 +36,8 @@
 		"vitest": "^3.0.0"
 	},
 	"dependencies": {
+		"@fontsource-variable/red-hat-display": "^5.2.8",
+		"@fontsource-variable/red-hat-text": "^5.2.8",
 		"oidc-client-ts": "^3.5.0"
 	}
 }

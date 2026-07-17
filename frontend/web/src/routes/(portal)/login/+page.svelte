@@ -35,7 +35,7 @@
 	}
 </script>
 
-<section class="page">
+<section class="page on-light">
 	<Card padding="lg">
 		<div class="body">
 			<BrandLogo variant="hero" />
@@ -60,10 +60,23 @@
 </section>
 
 <style>
+	/* Center the sign-in card in the viewport over the textured backdrop, echoing the
+	   Keycloak sign-in page the app hands off to. */
 	.page {
+		width: 100%;
 		max-width: 26rem;
 		margin-inline: auto;
-		padding-block: var(--space-12);
+		min-height: min(70vh, 40rem);
+		display: flex;
+		align-items: center;
+		padding-block: var(--space-8);
+	}
+
+	.page :global(.card) {
+		width: 100%;
+		box-shadow:
+			inset 0 1px 0 0 var(--surface-highlight),
+			var(--shadow-lg);
 	}
 
 	.body {

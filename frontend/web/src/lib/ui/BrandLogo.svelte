@@ -1,8 +1,8 @@
 <script lang="ts">
-	// The app's brand mark: an original signal-arc glyph on the Turkcell yellow, plus
-	// a wordmark. It is deliberately NOT the Turkcell corporate logo - this is a demo
-	// platform, and shipping the real trademark would misrepresent it. The mark is
-	// inline SVG rather than an asset so it inherits the theme and needs no request.
+	// The app's brand mark: an original signal-arc glyph on the accent fill, plus a
+	// wordmark ("Telco CRM"). It is an original mark for this demo platform, not any
+	// real company's logo. The mark is inline SVG rather than an asset so it inherits
+	// the theme and needs no request.
 	let {
 		variant = 'header'
 	}: {
@@ -21,7 +21,7 @@
 		<circle cx="11" cy="21" r="2.4" fill="var(--color-on-accent)" />
 	</svg>
 	<span class="wordmark">
-		<span class="name">turkcell</span>
+		<span class="name">Telco</span>
 		<span class="suffix">CRM</span>
 	</span>
 </span>
@@ -48,6 +48,7 @@
 		display: inline-flex;
 		align-items: baseline;
 		gap: 0.35rem;
+		font-family: var(--font-display);
 		font-weight: 700;
 		letter-spacing: -0.01em;
 	}
@@ -57,14 +58,15 @@
 		color: var(--color-header-text);
 	}
 
+	/* Hero wordmark echoes the Keycloak title: uppercase, wide-tracked, lighter. */
 	.hero .name {
 		font-size: var(--text-2xl-size);
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
 		color: var(--color-text);
 	}
 
-	/* The yellow suffix sits on the navy header, where it clears AA comfortably.
-	   On the hero it sits on a light page surface, so it takes the navy instead -
-	   yellow text on white would be unreadable. */
 	.suffix {
 		font-size: var(--text-xs-size);
 		letter-spacing: 0.08em;
@@ -73,6 +75,8 @@
 
 	.hero .suffix {
 		font-size: var(--text-sm-size);
+		text-transform: uppercase;
+		letter-spacing: 0.14em;
 		color: var(--color-text-secondary);
 	}
 </style>

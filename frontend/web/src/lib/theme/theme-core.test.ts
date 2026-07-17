@@ -17,19 +17,20 @@ describe('isTheme', () => {
 });
 
 describe('resolveInitialTheme', () => {
-	it('honours an explicit stored choice over the system preference', () => {
+	it('honours an explicit stored choice over the default', () => {
 		expect(resolveInitialTheme('light', true)).toBe('light');
 		expect(resolveInitialTheme('dark', false)).toBe('dark');
 	});
 
-	it('falls back to the system preference when nothing is stored', () => {
+	it('defaults to dark when nothing is stored, regardless of OS preference', () => {
 		expect(resolveInitialTheme(null, true)).toBe('dark');
-		expect(resolveInitialTheme(null, false)).toBe('light');
+		expect(resolveInitialTheme(null, false)).toBe('dark');
+		expect(resolveInitialTheme(null)).toBe('dark');
 	});
 
-	it('ignores a corrupt stored value rather than trusting it', () => {
+	it('ignores a corrupt stored value rather than trusting it (falls back to dark)', () => {
 		expect(resolveInitialTheme('purple', true)).toBe('dark');
-		expect(resolveInitialTheme('', false)).toBe('light');
+		expect(resolveInitialTheme('', false)).toBe('dark');
 	});
 });
 
