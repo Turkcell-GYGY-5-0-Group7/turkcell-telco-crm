@@ -149,6 +149,24 @@ public final class GatewayApi {
                 .post("/api/v1/orders");
     }
 
+    /**
+     * Places a single-item order that requests a specific campaign ({@code OrderItemRequest
+     * .campaignCode}, Feature 21.3.3): order-service asks campaign-service to validate that campaign
+     * for the item's tariff and, if eligible, prices the item at the discounted rate; ineligible or
+     * unreachable-campaign-service outcomes leave the item at the undiscounted tariff rate
+     * (fail-open, ADR-027 Decision Section 4).
+     */
+    public static Response createOrderWithCampaign(String token, UUID customerId, UUID tariffId,
+                                                   String campaignCode, String idempotencyKey) {
+        Map<String, Object> body = Map.of(
+                "customerId", customerId,
+                "items", List.of(Map.of("tariffId", tariffId, "quantity", 1, "campaignCode", campaignCode)));
+        return auth(token)
+                .header("Idempotency-Key", idempotencyKey)
+                .body(body)
+                .post("/api/v1/orders");
+    }
+
     /** Ownership: SUBSCRIBER may fetch only an order they created themselves (OrderController). */
     public static Response getOrder(String token, UUID orderId) {
         return auth(token).get("/api/v1/orders/{orderId}", orderId);
