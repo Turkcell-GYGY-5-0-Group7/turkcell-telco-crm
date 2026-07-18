@@ -22,7 +22,13 @@ description: >-
   NEVER committed to this repository.
 type: application
 version: 0.1.0
-appVersion: "stable-2.14.10"
+# Edge channel (Finding A fix, 2026-07-18): stable-2.14.10's control plane does
+# not enforce L7 AuthorizationPolicy on current Kubernetes (policy-controller
+# indexed zero resources; unauthorized identity reached the app; live-verified
+# failing on k8s 1.36 and 1.28). Open-source Linkerd stable is EOL at 2.14.10;
+# the edge channel is the maintained OSS line. Pinned for reproducibility. See
+# ADR-026 Section 4 and docs/tasks/sprint-19-service-mesh-mtls/README.md.
+appVersion: "edge-2026.6.3"
 keywords:
   - telco-crm
   - linkerd
@@ -32,5 +38,5 @@ maintainers:
   - name: Telco CRM DevOps
 dependencies:
   - name: linkerd-control-plane
-    version: 1.16.11
-    repository: https://helm.linkerd.io/stable
+    version: 2026.6.3
+    repository: https://helm.linkerd.io/edge
