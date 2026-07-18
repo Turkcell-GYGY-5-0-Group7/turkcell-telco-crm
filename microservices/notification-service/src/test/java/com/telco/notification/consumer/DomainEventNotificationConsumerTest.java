@@ -193,6 +193,42 @@ class DomainEventNotificationConsumerTest {
         verify(notificationService).dispatch(eq("unknown"), eq("WELCOME"), eq("SMS"), any(), eq("en"));
     }
 
+    @Test
+    void fraud_case_opened_raises_exactly_one_internal_ops_alert() throws Exception {
+        var record = record("fraud.events", "evt-8", "fraud.case-opened.v1",
+                Map.of("eventId", "evt-8", "caseId", "case-1", "customerId", "cust-8",
+                        "highestSeverity", "HIGH"));
+
+        consumer.onFraudEvent(record);
+
+        // Internal OPS_ALERT channel, not a customer-facing SMS/email, keyed to the ops responder queue.
+        verify(notificationService).dispatch(eq("security-ops"), eq("FRAUD_CASE_OPENED"),
+                eq("OPS_ALERT"), any(), eq("en"));
+    }
+
+    @Test
+    void replaying_fraud_case_opened_raises_no_second_alert() throws Exception {
+        when(inboxService.firstSeen(eq("evt-dup-fraud"), anyString())).thenReturn(false);
+        var record = record("fraud.events", "key", "fraud.case-opened.v1",
+                Map.of("eventId", "evt-dup-fraud", "caseId", "case-2", "customerId", "cust-9",
+                        "highestSeverity", "MEDIUM"));
+
+        consumer.onFraudEvent(record);
+
+        verify(notificationService, never()).dispatch(anyString(), anyString(), anyString(), any(), anyString());
+    }
+
+    @Test
+    void fraud_event_with_unrecognised_type_is_silently_ignored() throws Exception {
+        // fraud.signal-raised.v1 is a real fraud-service event this consumer does not alert on.
+        var record = record("fraud.events", "key", "fraud.signal-raised.v1",
+                Map.of("customerId", "cust-1"));
+
+        consumer.onFraudEvent(record);
+
+        verify(notificationService, never()).dispatch(anyString(), anyString(), anyString(), any(), anyString());
+    }
+
     private ConsumerRecord<String, String> record(String topic, String key,
                                                    String eventType, Map<String, ?> payload)
             throws Exception {

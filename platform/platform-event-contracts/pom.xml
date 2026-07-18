@@ -132,6 +132,9 @@
                         <tariff.price-changed.v1>${project.basedir}/src/main/avro/tariff-price-changed.avsc</tariff.price-changed.v1>
                         <user.created.v1>${project.basedir}/src/main/avro/user-created.avsc</user.created.v1>
                         <user.deleted.v1>${project.basedir}/src/main/avro/user-deleted.avsc</user.deleted.v1>
+                        <fraud.signal-raised.v1>${project.basedir}/src/main/avro/fraud-signal-raised.avsc</fraud.signal-raised.v1>
+                        <fraud.case-opened.v1>${project.basedir}/src/main/avro/fraud-case-opened.avsc</fraud.case-opened.v1>
+                        <fraud.case-resolved.v1>${project.basedir}/src/main/avro/fraud-case-resolved.avsc</fraud.case-resolved.v1>
                     </subjects>
                     <schemaType>AVRO</schemaType>
                     <compatibilityLevel>BACKWARD</compatibilityLevel>

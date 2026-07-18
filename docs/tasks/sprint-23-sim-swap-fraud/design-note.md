@@ -59,8 +59,9 @@ A `FraudRule` aggregate holds a small, fixed set of rule *codes* with admin-conf
 (not a boolean-expression DSL - that would be over-engineering for the MVP-appropriate scope):
 
 1. **RAPID_SIM_SWAP** - an `msisdn.released.v1` followed by an `msisdn.allocated.v1` for the same
-   MSISDN (reassigned to a different SimCard/subscription) within a short window (default 15 minutes)
-   -> raise a signal, severity HIGH.
+   MSISDN (reassigned to a different `subscriptionId` - neither event carries a SimCard/ICCID
+   identifier, so `subscriptionId` is the observable re-assignment key; ADR-029 Amendment 2) within a
+   short window (default 15 minutes) -> raise a signal, severity HIGH.
 2. **MSISDN_CHURN_VELOCITY** - more than N (default 3) allocate/release cycles for the same
    `customerId` within a rolling 24-hour window -> raise a signal, severity MEDIUM.
 3. **SUSPEND_REACTIVATE_VELOCITY** (second priority, include if straightforward) - unusual

@@ -1,0 +1,16 @@
+# fraud-service Kubernetes (in-cluster Helm) overrides, activated as SPRING_PROFILES_ACTIVE=dev,k8s
+# (Feature 18.5, ADR-025 Section 4). Same in-cluster hostnames as application-docker.yml (kept,
+# non-secret), but the DB username/password are read from the pod environment (Vault-sourced via the
+# CSI-synced Secret) instead of the committed plaintext the `docker` profile bakes in.
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/fraud_db
+    username: ${FRAUD_DB_USER}
+    password: ${FRAUD_DB_PASSWORD}
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs

@@ -1,0 +1,6 @@
+# fraud-service test overrides. Testcontainers wires the actual URL at runtime.
+spring:
+  datasource:
+    url: ${TEST_FRAUD_DB_URL:jdbc:postgresql://localhost:5432/fraud_test_db}
+    username: ${TEST_FRAUD_DB_USER:fraud_test}
+    password: ${TEST_FRAUD_DB_PASSWORD:fraud_test}

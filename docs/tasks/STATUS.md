@@ -14,7 +14,97 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-15 (Merged branch `feature/sprint-21-campaign-catalog-validation` into `master`,
+Last updated: 2026-07-17 (Sprint 23 SIM-Swap / Fraud Detection - **DONE (5/5), the second post-MVP
+sprint (17-23) to reach full DONE after Sprint 21**. Built this session on top of this session's own
+ADR-029 ratification (see the entry directly below), one specialized sub-agent per feature, with a
+front-loaded event-integration "eventing foundation" pass carved out of ADR-029 Amendment 1 and 23.4.1
+so no downstream feature had to stub-then-rework an Avro payload. Delivery, in build order:
+**Eventing foundation (event-integration):** ADR-029 Amendment 1 landed - `msisdn.released.v1` gained a
+BACKWARD-compatible nullable `customerId` (`["null","string"]` default null) in
+`platform/platform-event-contracts/src/main/avro/msisdn-released.avsc` + `MsisdnReleasedV1`, populated by
+subscription-service's `TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()` (the one
+and only publish site, grep-confirmed); `MsisdnEventSchemaCompatTest` proves the evolution non-breaking.
+The three outbound fraud contracts (`fraud.signal-raised.v1`, `fraud.case-opened.v1`,
+`fraud.case-resolved.v1`) were defined (avsc + payload records), registered in the
+`platform-event-contracts` pom `<subjects>`, given `event-catalog.md` producer rows, a
+`fraud-outbox-connector.json` Debezium registration, and a `FraudEventSchemaCompatTest`. **23.1
+(microservice-generator):** `fraud-service` scaffolded from the ADR-017 template (port 9013, CQRS +
+Mediator, starters only - zero direct platform-core, ADR-018 confirmed by dependency tree), `fraud-db`
+(PostgreSQL 17) with four tables + platform outbox/inbox + the three seeded `FraudRule` rows
+(RAPID_SIM_SWAP 15/1/HIGH, MSISDN_CHURN_VELOCITY 1440/3/MEDIUM, SUSPEND_REACTIVATE_VELOCITY 60/2/LOW),
+four JPA aggregates + repositories with rolling-window queries, full infra/config/catalog parity with
+campaign-service. **23.2 (domain-engineer):** four idempotent inbox consumers (fan-out consumer groups on
+the shared `subscription.events` topic, `eventType`-header filtered, `starter-inbox` firstSeen) appending
+to `MsisdnLifecycleSignal`; all three rule evaluators (Amendment 2: RAPID_SIM_SWAP keys on a different
+`subscriptionId`, not a SimCard; Amendment 3: SUSPEND_REACTIVATE_VELOCITY excludes `reason=NON_PAYMENT`
+via a persisted `reason` column, `V3` migration); Amendment 1's release-`customerId` used with a
+defensive prior-allocation join-back fallback; `FraudCase` escalation - all publishing via `OutboxService`,
+never Kafka directly, and all detect-and-alert-only (an explicit zero-outbound-subscription-call test on
+the escalation handler). **23.3 (domain-engineer):** the five-route case/rule API (`GET`/`GET {id}`/`POST
+{id}/resolve` on `/api/v1/fraud-cases`, `GET`/`PUT {code}` on `/api/v1/fraud-rules`), thin controllers ->
+mediator, `ApiResult`/`PageResult`, reused `ResourceNotFoundException`/`BusinessRuleException`, `resolvedBy`
+from the platform `CurrentUserProvider`, RBAC reusing the existing `SUPPORT`/`ADMIN` taxonomy (ADMIN gates
+rule writes), publishing `fraud.case-resolved.v1`; live rule-tuning confirmed (evaluators read `FraudRule`
+fresh each run). **23.4 (event-integration):** ticket-service auto-opens a `FRAUD_REVIEW` ticket on
+`fraud.case-opened.v1` via a new inbox consumer that reuses the existing `OpenTicketCommandHandler`/
+`SlaPolicy` path (new nullable `external_ref` link column, `V2` migration, `fraud-ops` SLA policies seeded)
+- no parallel ticketing; notification-service raises exactly one internal `OPS_ALERT` (new channel adapter
++ `FRAUD_CASE_OPENED` template); both idempotent, informational-only. **23.5 (qa):** rule-boundary unit
+tests (window-edge +/-1s, at/above/below threshold, disabled-rule short-circuit, same-subscription
+exclusion, no-duplicate-case), Testcontainers integration tests for inbox->outbox atomicity and the API
+surface, and the sprint's most important test - `RapidSimSwapToAutoTicketAcceptanceTest` proving the
+release->reallocate -> FraudSignal -> FraudCase -> auto-ticket chain and asserting, both behaviorally
+(a subscription-service HTTP stand-in records zero `/suspend` calls) and structurally (compiled-class scan
+finds zero RestClient/WebClient/Feign to subscription-service; fraud entities map only fraud-owned tables),
+that NO automated subscription suspension and NO direct `subscription-db` access ever occurs (ADR-029
+Section 5 / Exit Criteria bullets 2-3). **All three Exit Criteria met.** **Verified:** `mvn -pl
+fraud-service test -Dschema.registry.skip=true` -> 66 non-Testcontainers tests pass (0 failures), including
+all 28 handler tests and the 4 acceptance tests; the 3 Testcontainers integration classes are written to
+the campaign-service pattern but cannot run in this sandbox - they fail identically to an untouched
+`CampaignRepositoryTest` with "Could not find a valid Docker environment" (the documented repo-wide
+Testcontainers/Docker-API limitation, `docs/tasks/lessons.md` 2026-07-12, NOT a regression). ticket-service
+(`FraudCaseOpenedEventConsumerTest` 5/5) and notification-service (17/17) consumer suites green.
+**code-review (enforcing gate):** APPROVE after one HIGH fix - `EvaluateRapidSimSwapCommandHandler` logged a
+raw MSISDN, and the platform Layer-B PII masker regex does not cover the `90...` MSISDN format this repo
+uses, so it genuinely leaked (ADR-021); fixed by dropping MSISDN from the log line (now `signalId`/
+`subscriptionId` only), re-verified 11/11 green. All other ADR categories (018/004/006/009/019/015, reuse,
+migrations, no-emojis) clean on first pass. **Follow-ups flagged, not in scope:** (1) the platform MSISDN
+mask pattern missing the `90...` format is a platform-wide gap - raise with platform-engineer; (2) the five
+Sprint 21 campaign avsc subjects were never added to the `platform-event-contracts` pom `<subjects>` list
+(pre-existing, found by the eventing-foundation pass) - close the same way the fraud subjects were
+registered. Nothing committed yet (user choice, consistent with prior post-MVP sprints). Detail:
+`docs/tasks/sprint-23-sim-swap-fraud/` (README + 23.1-23.5), `microservices/fraud-service/`,
+`architecture/adr/ADR-029-fraud-detection-mvp-scope.md`.
+
+Prior update, 2026-07-17 (Sprint 23 SIM-Swap / Fraud Detection - **not started; ADR-029 ratified this
+session, gating build work now unblocked**. ADR-029 was Proposed; ratified (Accepted) by tech-lead with
+three amendments after verification against the codebase - the same not-rubber-stamp process ADR-027
+(Sprint 21) went through. Architecture review found a genuine buildable-design gap of the ADR-027 class:
+`MSISDN_CHURN_VELOCITY` keys on `customerId`, but `msisdn.released.v1` does not carry `customerId` today
+(only `msisdn`/`subscriptionId`/`releasedAt`, per `platform/platform-event-contracts/src/main/avro/
+msisdn-released.avsc` and `MsisdnReleasedV1`), so built as drafted every release row would land with a
+null customer and be silently dropped from the velocity count, defeating the rule. **Amendment 1
+(mandatory, product decision Option A):** add `customerId` to `msisdn.released.v1` as a BACKWARD-compatible
+nullable union (`["null","string"]`, default null), populated by subscription-service's
+`TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()` (already in scope for the
+sibling `SubscriptionTerminatedV1` in the same method) - a prerequisite subtask of Sprint 23 Feature
+23.2; fraud-service also joins a release back to the most recent prior `MSISDN_ALLOCATED` signal as
+defensive resilience for pre-field events. This one producer change means Sprint 23 is no longer purely
+self-contained (chosen over the fraud-service-only join-back Option B, per user direction). **Amendment 2
+(mandatory, wording):** `RAPID_SIM_SWAP` re-assignment key is a different `subscriptionId`, not a
+"different SimCard" - neither MSISDN event carries a SimCard/ICCID identifier. **Amendment 3
+(recommended):** corrected the Section 5 citation (the ADR-028 dispute-service -> ticket-service "reuse
+pattern" is itself unbuilt; ticket-service has zero event consumers today, so 23.4 builds the
+fraud -> ticket inbox consumer new), and added a `reason=NON_PAYMENT` exclusion to
+`SUSPEND_REACTIVATE_VELOCITY` to suppress dunning-cycle false positives. Verified sound and unchanged:
+new `fraud-service` (port 9013, free - 9011 campaign, 9012 dispute), CQRS + Mediator (usage-service
+precedent), `fraud-db` PostgreSQL 17 + Redis-cache-only (ADR-006), detect-and-alert-only response model.
+Product decision this sprint: INCLUDE all three rules. No code written yet; Sprint 23 build work
+(23.1-23.5) may now proceed, executed one feature per specialized sub-agent. Detail:
+`architecture/adr/ADR-029-fraud-detection-mvp-scope.md` (Amendments 1-3, dated 2026-07-17),
+`docs/tasks/sprint-23-sim-swap-fraud/`.
+
+Prior update, 2026-07-15 (Merged branch `feature/sprint-21-campaign-catalog-validation` into `master`,
 reconciling Sprint 21 (Campaign / Catalog Validation) completion with the trunk's Sprint 16/17/18/19
 progress. This entry only reconciles the two branches' status logs - no delivery status changed as a
 result of the merge itself. Combined delivery status is now: Sprint 16 (Web Frontend) **DONE (5/5)**;

@@ -13,6 +13,7 @@ public record TicketResponse(
         String status,
         String assignedTeam,
         String subject,
+        String externalRef,
         Instant slaDueAt,
         boolean slaBreached,
         Instant createdAt,
@@ -26,7 +27,7 @@ public record TicketResponse(
         return new TicketResponse(
                 t.getId(), t.getCustomerId(), t.getCategory(), t.getPriority(),
                 t.getStatus().name(), t.getAssignedTeam(), t.getSubject(),
-                t.getSlaDueAt(), breached,
+                t.getExternalRef(), t.getSlaDueAt(), breached,
                 t.getCreatedAt(), t.getResolvedAt(),
                 t.getComments().stream().map(TicketCommentResponse::from).toList()
         );

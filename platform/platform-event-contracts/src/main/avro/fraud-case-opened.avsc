@@ -1,0 +1,39 @@
+{
+  "type": "record",
+  "name": "FraudCaseOpenedV1",
+  "namespace": "com.telco.platform.events.fraud",
+  "doc": "Emitted when related signals escalate into an actionable case (fraud.case-opened.v1). Producer: fraud-service. Consumers: ticket-service (auto-ticket), notification-service (ops alert) - wired in Feature 23.4.",
+  "fields": [
+    {
+      "name": "caseId",
+      "type": "string",
+      "doc": "Unique fraud-case identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer the case is opened against (UUID)."
+    },
+    {
+      "name": "signalIds",
+      "type": {
+        "type": "array",
+        "items": "string"
+      },
+      "doc": "Identifiers of the FraudSignals (UUIDs) escalated into this case."
+    },
+    {
+      "name": "openedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the case was opened, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "highestSeverity",
+      "type": "string",
+      "doc": "Highest FraudSeverity across the case's signals: LOW, MEDIUM, or HIGH."
+    }
+  ]
+}

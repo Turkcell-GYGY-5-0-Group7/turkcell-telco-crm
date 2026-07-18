@@ -21,6 +21,12 @@
         "logicalType": "timestamp-millis"
       },
       "doc": "Instant the MSISDN was released, in epoch milliseconds (UTC)."
+    },
+    {
+      "name": "customerId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Identifier of the owning customer (UUID), the key MSISDN_CHURN_VELOCITY aggregates on (ADR-029 Amendment 1). Added LAST as a nullable union with default null to stay BACKWARD-compatible (ADR-019), mirroring the orderId addition to subscription.activated.v1 and the customerId addition to quota.threshold-reached.v1. The producer (subscription-service TerminateSubscriptionCommandHandler) always populates it; null only for events emitted before this field existed."
     }
   ]
 }

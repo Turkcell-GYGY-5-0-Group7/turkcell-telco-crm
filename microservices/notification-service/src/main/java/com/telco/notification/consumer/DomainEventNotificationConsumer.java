@@ -42,6 +42,10 @@ public class DomainEventNotificationConsumer {
     private static final String QUOTA_THRESHOLD_REACHED = "quota.threshold-reached.v1";
     private static final String QUOTA_EXCEEDED = "quota.exceeded.v1";
     private static final String TICKET_OPENED = "ticket.opened.v1";
+    private static final String FRAUD_CASE_OPENED = "fraud.case-opened.v1";
+
+    /** Internal ops/security responder queue - not a customer id; keys the ops-facing alert. */
+    private static final String OPS_ALERT_RECIPIENT = "security-ops";
 
     private final NotificationService notificationService;
     private final InboxService inboxService;
@@ -141,6 +145,30 @@ public class DomainEventNotificationConsumer {
                     "ticketId", payload.getOrDefault("ticketId", ""),
                     "assignedTeam", payload.getOrDefault("assignedTeam", "support"));
             notificationService.dispatch(customerId, "TICKET_OPENED", "SMS", vars, "en");
+        });
+    }
+
+    /**
+     * Raises a single internal ops/security alert when a fraud case is opened
+     * ({@code fraud.case-opened.v1}, fraud-service, ADR-029 Section 5). The alert goes to the internal
+     * {@code OPS_ALERT} channel (distinct from customer-facing SMS/email) so a security/ops responder is
+     * aware of the case independently of the ticket-service queue. Informational only: it triggers no
+     * subscription-service call and no automated suspension. Idempotent via the shared inbox
+     * {@link #dispatch} helper - a replayed event raises no second alert.
+     */
+    @KafkaListener(topics = "fraud.events", groupId = "notification-service",
+            containerFactory = "kafkaListenerContainerFactory")
+    public void onFraudEvent(ConsumerRecord<String, String> record) {
+        String eventType = headerValue(record, EVENT_TYPE_HEADER);
+        if (!FRAUD_CASE_OPENED.equals(eventType)) {
+            return;
+        }
+        dispatch(record, eventType, payload -> {
+            Map<String, String> vars = Map.of(
+                    "caseId", payload.getOrDefault("caseId", ""),
+                    "customerId", payload.getOrDefault("customerId", "unknown"),
+                    "severity", payload.getOrDefault("highestSeverity", "unknown"));
+            notificationService.dispatch(OPS_ALERT_RECIPIENT, "FRAUD_CASE_OPENED", "OPS_ALERT", vars, "en");
         });
     }
 
