@@ -84,4 +84,86 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+---
+# Universal Linkerd control-plane egress allow (Finding C fix, 2026-07-18),
+# co-located with the DNS allow above for the same reason: it is universal, not
+# per-service. EVERY meshed pod in `telco` (all 13 telco-service releases AND
+# this chart's own backends, which are meshed too - `linkerdInject: true`) runs
+# a linkerd-proxy that MUST reach the Linkerd control plane in the `linkerd`
+# namespace to obtain and renew its mTLS identity certificate (linkerd-identity)
+# and to receive service-discovery + inbound-authorization policy
+# (linkerd-destination / linkerd-policy). Under the default-deny baseline this
+# egress is denied, so a pod scheduled after default-deny is applied gets stuck
+# at `Init` - its proxy never becomes ready (live-verified 2026-07-18: a fresh
+# customer-service pod hung at Init:1/2 until this rule was added). This must be
+# in the SAME install step as the baseline, and namespace-wide, since the
+# per-service telco-service egress template does not (and should not) know about
+# the control-plane namespace. Scoped to the `linkerd` namespace, which contains
+# only the control plane.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-linkerd-control-plane-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.labels" . | nindent 4 }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: linkerd
+---
+# Backend ingress allow (Finding C fix, 2026-07-18). The stateful dependency
+# backends (postgres/redis/mongo/kafka/schema-registry/kafka-connect/minio/
+# keycloak) are meshed (`linkerdInject: true`) and are selected by the
+# default-deny baseline for Ingress, so under default-deny they receive NO
+# traffic and every client's DB/cache/broker connection fails - live-verified:
+# a fresh customer-service pod crashed at Flyway with a postgres "connection
+# reset" until this rule was added, then started clean. Their clients are
+# meshed telco-service pods, which - exactly like the service-to-service case
+# (see the telco-service egress template's Finding C note) - reach a meshed
+# backend on its linkerd-proxy INBOUND port 4143, NOT the backend's app port.
+# This rule restores that: ingress to each backend on 4143 from any telco-crm
+# pod. The backends carry no mesh AuthorizationPolicy (only telco-service
+# releases get a Server/AuthorizationPolicy), so this coarse pod-to-pod allow is
+# the network-layer control for reaching them; the per-service egress list
+# (`networkPolicy.egress.*`) still bounds which backends each service may reach.
+# Namespace-wide + co-located with the baseline for the same reason as the DNS
+# and control-plane rules above (universal, and the per-service telco-service
+# template does not own the dependency backends).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-ingress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - postgres
+          - redis
+          - mongo
+          - kafka
+          - schema-registry
+          - kafka-connect
+          - minio
+          - keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: telco-crm
+      ports:
+        - protocol: TCP
+          port: 4143
 {{- end }}

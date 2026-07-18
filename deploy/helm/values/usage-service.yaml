@@ -22,6 +22,10 @@ networkPolicy:
     redis: true
     keycloak: true
     kafka: true
+    # Finding B fix (2026-07-18): usage-service's real synchronous callee per
+    # the 19.3 caller audit (ProductCatalogClient -> product-catalog-service).
+    services:
+      - product-catalog-service
 
 config:
   CONFIG_SERVER_URI: http://config-server:8888

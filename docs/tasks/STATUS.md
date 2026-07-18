@@ -14,7 +14,99 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-15 (Merged branch `feature/sprint-21-campaign-catalog-validation` into `master`,
+Last updated: 2026-07-18 (Sprint 19 Service Mesh and mTLS - **Findings B and C RESOLVED (pass 3),
+completing the fix work: the NetworkPolicy layer was redesigned to be mesh-aware and is now functional
+under full default-deny**. Finding C fix: the chart's app-port `NetworkPolicy` rules were incompatible
+with the enforcing edge mesh, which routes meshed pod-to-pod traffic through the linkerd-proxy inbound
+port 4143. Redesigned `networkpolicy-ingress.yaml` (meshed callers -> 4143; un-meshed ingress-nginx ->
+app port) and `networkpolicy-egress.yaml` (all meshed destinations - infra + config/discovery +
+`egress.services` - on 4143), and added two universal policies to the dependencies chart's default-deny
+file: `allow-linkerd-control-plane-egress` (every meshed pod must reach the `linkerd` namespace or its
+proxy never becomes Ready - a fresh pod hung at Init until added) and `allow-backend-ingress` (the
+meshed backends receive nothing under default-deny until telco pods are allowed to reach them on 4143 -
+customer-service crashed at Flyway/postgres until added). **Live-verified under full default-deny
+(chart-only policies): a fresh customer-service pod starts clean 2/2 (reaches config/discovery/postgres
+on 4143), `api-gateway -> customer-service` = 200 (legitimate routing restored, was 504),
+`config-server -> customer-service` = blocked, `ingress-nginx -> api-gateway` via localhost:18080 = 200,
+and the mesh still enforces identity.** 19.5.2 smoke-test infra checks pass (gateway health via ingress
++ key-service readiness); the authenticated-read step needs Keycloak, outside the scoped stack. Noted as
+mechanical follow-ups for a full-13-service deploy (same 4143 pattern): backend inter-dependency edges
+(keycloak->postgres, kafka-connect->kafka) and observability egress. **All three findings (A/B/C) are
+now resolved; 19.3/19.4 DONE for the verified scope, 19.5.1 proven at both mesh and network layers.**
+All Sprint-19 changes remain chart/doc-only (19.5.3 holds). Detail: sprint-19 README "Fix-Pass Live
+Verification Record (2026-07-18, pass 3)"; [lessons.md](lessons.md). Prior sub-entries (pass 2, pass 1)
+follow.
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **fix pass for Findings A/B from the
+verification pass below: Finding A RESOLVED (mesh now enforces the forged-header rejection at Layer 1),
+Finding B authored, and a new Finding C surfaced**. Fix A: bumped the vendored Linkerd charts from the
+EOL `stable-2.14.10` to the **edge channel `2026.6.3`** (`deploy/helm/linkerd-{crds,control-plane}`
+repointed to `https://helm.linkerd.io/edge`, re-vendored, ADR-026 given an implementation note). On a
+rebuilt Calico + k8s-1.36 cluster (edge Linkerd needs k8s >=1.31) the mesh `AuthorizationPolicy` now
+**enforces**: a forged-`X-User-Id`/`X-User-Roles` request to a non-probe path from the `config-server`
+mesh identity (not authorized) is **rejected 403 at the mesh proxy before application code**
+(`inbound_http_authz_deny_total` shows `tls=true`, `client_id=config-server...linkerd.cluster.local` -
+mTLS identity cryptographically verified, then denied), while the same forged headers from `api-gateway`
+(authorized) reach the app (401). **So 19.5.1's forged-header rejection is now proven at BOTH ADR-026
+layers - the mesh identity layer (this pass) and the NetworkPolicy layer (pass below).** Correction to
+the pass below: its behavioral "2.14.10 does not enforce" test used `/actuator/health`, which Linkerd
+*always* allows as a probe path regardless of policy, so that 200 alone did not prove non-enforcement
+(the sound evidence was the policy-controller indexing zero resources); the edge re-verification used a
+proper non-probe path and is unambiguous. Fix B: authored `.Values.networkPolicy.egress.services` (the
+egress-side caller-list) in `networkpolicy-egress.yaml` + the 5 caller value files (api-gateway -> its
+10 routed domain services + web-bff; order/subscription/billing/usage -> their documented callees) -
+renders correctly. **New Finding C (open, blocks 19.4/19.5.2):** edge Linkerd routes ALL meshed
+pod-to-pod traffic through the linkerd-proxy inbound port **4143** (every pod, incl. the meshed
+dependency backends, runs the proxy as a native sidecar), so the chart's app-port-based `NetworkPolicy`
+rules (ingress `containerPort`, egress `postgres:5432`/`config:8888`/`egress.services:http`/...) never
+match meshed traffic - `api-gateway -> customer-service` is blocked 504 under the chart's own policies;
+allowing port 4143 instead succeeds (200). The NetworkPolicy port scheme needs a **mesh-aware redesign**
+(4143 for meshed pod-to-pod edges, app port only for the un-meshed ingress-nginx edge) - a genuine
+devops/tech-lead design decision, not taken unilaterally. The full smoke test with NetworkPolicies
+(19.5.2) is blocked on it; the mesh is now the enforcing control regardless. Net: 19.3 objects
+live-correct + mesh enforcement proven; 19.4 default-deny/ingress proven but egress blocked on Finding
+C; 19.5.1 proven at both layers; 19.5.2 blocked on C; 19.5.3 holds (chart/doc-only). Sprint stays
+**IN PROGRESS (2/5 DONE)** pending the Finding C design decision. Detail: sprint-19 README "Fix-Pass
+Live Verification Record (2026-07-18, pass 2)"; [lessons.md](lessons.md) 2026-07-18 entries. Prior
+sub-entry (pass 1) follows.
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **first live-cluster verification pass;
+the sprint's primary exit gate is now PROVEN LIVE, and two real defects were surfaced that static
+verification could not catch**. Ran a scoped live verification (user-chosen scope: a minimal meshed
+stack, not all 13 services) on a Kind cluster stood up this session - Calico v3.28.2 CNI on k8s
+v1.28.15 (the committed kindnet/k8s-1.36 default was tried first but kindnet does not honour
+podSelector NetworkPolicy allow rules; Calico is the reference implementation and 1.28 is inside
+Linkerd 2.14.10's support window). Deployed `postgres`/`redis`/`config-server`/`discovery-server`/
+`api-gateway`/`customer-service`, all meshed `2/2`, reusing the existing `telco-<svc>:local` compose
+images retagged for Kind. **PROVEN LIVE:** (19.3) `kubectl get server,authorizationpolicy,
+meshtlsauthentication` shows exactly the expected objects - 4 `Server`, 3 `AuthorizationPolicy` (none
+for `api-gateway`, correct), `customer-service-authn` = `[api-gateway, order-service]`, config/
+discovery = all 13 - selectors and ports correct. (19.4.1) `default-deny` blocks all pod-to-pod
+traffic (both directions 504 after Calico's ~15-20s program latency). (19.4.2) the `customer-service`
+ingress allow-list discriminates - `api-gateway` (authorized) 200, `config-server` (not authorized)
+504. (**19.5.1, the primary exit gate**) a forged-`X-User-Id`/`X-User-Roles` request from a
+non-gateway pod (`config-server`) to `customer-service` is **rejected - HTTP 504, and the request
+never reaches application code** (unique marker path appears 0 times in the app log), while the same
+forged headers from `api-gateway` reach the app (200): the header-forgery residual risk
+`security-posture.md` Section 8 accepted is demonstrably closed at the NetworkPolicy layer (ADR-026
+Section 3's named companion control). (19.5.3) unchanged - no `.java`/security edits this session.
+**TWO REAL DEFECTS FOUND (both block full DONE; both are environment/chart-completeness issues, not
+authoring errors in what shipped):** **Finding A** - the pinned Linkerd **stable-2.14.10** control
+plane does not enforce L7 `AuthorizationPolicy` at all (unauthorized identity reaches the app with
+200; even a `default-inbound-policy: deny` annotation does not deny; the policy-controller logs only
+2 startup lines with zero resource indexing; zero `inbound_http_authz` proxy metrics; RBAC and
+liveness are fine; reproduced on both k8s 1.36 and 1.28) - so the mesh identity/authz layer (ADR-026
+Layer 1) is unverified for enforcement; follow-up is to bump Linkerd to a current release and re-run.
+**Finding B** - 19.4's `networkpolicy-egress.yaml` grants egress only to infra + config/discovery, so
+under default-deny `api-gateway` cannot reach the domain services it routes to (504) and the 5
+documented domain->domain calls are likewise blocked; the full unmodified smoke test (19.5.2) cannot
+pass until service-to-service HTTP egress is added (a devops/tech-lead chart-design call, not made
+unilaterally here). Net Sprint 19 status stays **IN PROGRESS (2/5 DONE)** but with the primary exit
+gate live-proven and 19.3's objects live-correct; 19.3/19.4/19.5 completion is gated on Findings A/B.
+Detail: sprint-19 README "19.3/19.4/19.5 Live Verification Record (2026-07-18)" section, and
+[lessons.md](lessons.md) 2026-07-18 entries. Prior updates below.)
+
+Prior update, 2026-07-15 (Merged branch `feature/sprint-21-campaign-catalog-validation` into `master`,
 reconciling Sprint 21 (Campaign / Catalog Validation) completion with the trunk's Sprint 16/17/18/19
 progress. This entry only reconciles the two branches' status logs - no delivery status changed as a
 result of the merge itself. Combined delivery status is now: Sprint 16 (Web Frontend) **DONE (5/5)**;

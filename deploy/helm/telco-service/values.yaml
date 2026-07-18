@@ -284,3 +284,16 @@ networkPolicy:
     minio: false
     mongo: false
     keycloak: false
+    # Feature 19.4.3 (Finding B fix, 2026-07-18). Service-to-service HTTP egress:
+    # the list of OTHER telco-service releases this service makes synchronous
+    # HTTP calls to (api-gateway -> the domain services it routes to; the
+    # documented domain -> domain callers). This is the egress-side mirror of
+    # networkpolicy-ingress.yaml's `authorizedClients` ("who I call", vs "who
+    # may call me") - without it, under the 19.4.1 default-deny baseline the
+    # caller's OWN egress is denied to the callee even though the callee's
+    # ingress rule admits it (both halves are required). Each entry is another
+    # release's `serviceName`; rendered against the callee's named `http`
+    # container port so no per-target port map is needed. Empty by default
+    # (a service that calls no other service needs no service egress); set per
+    # caller in deploy/helm/values/<service>.yaml.
+    services: []
