@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| DONE - exit criteria MET (live E2E run 2026-07-13) | 5/5 | 2026-07-13 |
+| DONE - exit criteria MET (live E2E run 2026-07-13; re-proven 2026-07-18) | 5/5 | 2026-07-18 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -74,6 +74,17 @@ three defects were reachable only by a human in a browser).
 | 2 | ANY oversized multipart returns 500, not 413: `starter-api`'s `GlobalExceptionHandler` catches `Exception` before Spring's own 413 mapping. Platform-starter issue. | platform-engineer / tech-lead |
 | 3 | `POST /api/v1/addons` is documented in `docs/api-contracts/product-catalog-service.md` but NOT implemented (`AddonController` has only a GET); it returns 500. Pre-existing Sprint 07 gap. Addons are optional in the wizard so it did not block the E2E - but **the addon selection path is therefore UNPROVEN end-to-end**. | domain-engineer |
 | 4 | Customer status remains PENDING after onboarding (KYC approval is a separate admin step). Expected behaviour, recorded for clarity - not a bug. | n/a |
+
+## Re-verification (2026-07-18)
+
+The full browser journey was re-proven end to end during the post-Sprint-21 E2E re-test (Feature
+14.6): first-attempt PKCE login with a freshly provisioned linkable subscriber, register/KYC/plan/
+order through the wizard, saga observed to FULFILLED in the UI, dashboard/account composed with real
+MSISDN and quota, invoice self-scoping re-verified (1 of 8 visible), invoice PDF download 200. A new
+permanent `WebBffSmokeAcceptanceIT` (5 tests) now guards the four `/bff/v1` GET composition
+endpoints in the acceptance suite. Follow-ups 1-3 above remain open (off the happy path, unchanged).
+Full detail:
+[../sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md](../sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md).
 
 ## References
 

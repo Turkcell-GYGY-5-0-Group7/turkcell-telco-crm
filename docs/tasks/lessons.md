@@ -13,6 +13,20 @@ Format:
 
 ---
 
+## 2026-07-18 - a feature is not environment-proven until the full composed stack boots with it
+
+- Mistake: Sprint 17's starter-lock adopters (subscription/billing) and Sprint 21's campaign-service
+  each passed unit tests, code review, and even live host-run proofs - yet all three crashlooped on
+  the next real full-stack Docker boot, because the compose env anchor never supplied `REDIS_HOST`
+  and nobody had booted the full `apps` profile since Sprint 17. A capacity twin of the same
+  mistake: adding the 11th outbox connector silently overflowed the hardcoded
+  `max_replication_slots=10`.
+- Rule: whenever a change adds a new runtime dependency (a starter that dials out, a new service, a
+  new connector/slot/queue), boot the full composed stack once before calling it done - host-run and
+  unit proofs do not cover the container environment's env wiring or shared infra ceilings. When a
+  count-limited resource (replication slots, partitions, pools) gains a consumer, grep for its
+  configured ceiling in the same PR.
+
 ## 2026-07-18 - never test mesh/authz enforcement against a health-probe path
 - Mistake: "proved" Linkerd was not enforcing its `AuthorizationPolicy` by curling
   `/actuator/health` from an unauthorized identity and seeing HTTP 200. Linkerd (and most meshes)
