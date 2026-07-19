@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| DONE | 5/5 | 2026-07-15 |
+| DONE | 5/5 | 2026-07-18 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -132,6 +132,19 @@ pricing (`CampaignDiscountedOrderIntegrationTest`, `CampaignServiceFailOpenInteg
 `CampaignServiceFailOpenIntegrationTest`), and ADR-006 database isolation
 (`CampaignSchemaMigrationTest`). Sprint 21 is now 5/5, DONE. Detail: `docs/tasks/STATUS.md` (2026-07-15
 top entry).
+
+## Re-verification (2026-07-18) - first containerized E2E proof
+
+During the post-Sprint-21 E2E re-test (Feature 14.6), campaign-service was wired into the compose
+`apps` profile for the first time (port 9011, own block in `infra/docker/compose.yml`) and both
+sprint exit criteria were re-proven against the fully containerized stack by new, permanent
+acceptance ITs: `CampaignDiscountedOrderAcceptanceIT` (discounted unitPrice through the real
+gateway, redemption RESERVED -> CONFIRMED in `campaign_db` across the Debezium/Kafka saga) and
+`CampaignFailOpenAcceptanceIT` (real `docker stop` outage, order succeeds undiscounted). Two infra
+gaps this surfaced (both fixed in compose): the `x-app-env` anchor never passed `REDIS_HOST`, so the
+`starter-lock` redemption reaper crashlooped the service at boot; and the 11th Debezium connector
+overflowed `max_replication_slots=10`. Full detail:
+[../sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md](../sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md).
 
 ## References
 

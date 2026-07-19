@@ -71,6 +71,33 @@ public final class AcceptanceConfig {
     public static final String KAFKA_BOOTSTRAP_SERVERS =
             env("KAFKA_BOOTSTRAP_SERVERS", "localhost:29092");
 
+    /**
+     * campaign-service admin API, called DIRECTLY on its host-published port - the one deliberate
+     * exception to this suite's everything-through-the-gateway rule. No gateway route exists for
+     * campaign-service by explicit tech-lead ruling (Feature 21.1.3 / ADR-027: internal
+     * service-to-service surface only; a route would only be added for a future admin UI), so the
+     * campaign fixtures a scenario needs (create/activate) cannot be set up any other way. The
+     * order under test still goes through the gateway; only campaign administration bypasses it.
+     */
+    public static final String CAMPAIGN_SERVICE_BASE_URL =
+            env("CAMPAIGN_SERVICE_BASE_URL", "http://localhost:9011");
+
+    /**
+     * Direct JDBC access to campaign_db, host-published Postgres port (compose {@code POSTGRES_PORT},
+     * default 5432). campaign-service exposes no redemption read API and publishes no redemption
+     * outbox event (Feature 21.4 scope), so the only deterministic way to assert the
+     * RESERVED -> CONFIRMED redemption lifecycle is to observe {@code campaign_redemptions} itself -
+     * same precedent as this suite's raw Kafka producer for AC-03 (no HTTP surface exists).
+     * Credentials are the compose-initdb dev defaults
+     * (infra/docker/postgres/initdb/01-create-databases.sql).
+     */
+    public static final String CAMPAIGN_DB_JDBC_URL =
+            env("CAMPAIGN_DB_JDBC_URL", "jdbc:postgresql://localhost:5432/campaign_db");
+
+    public static final String CAMPAIGN_DB_USER = env("CAMPAIGN_DB_USER", "campaign");
+
+    public static final String CAMPAIGN_DB_PASSWORD = env("CAMPAIGN_DB_PASSWORD", "campaign");
+
     /** Upper bound while polling for saga/event propagation across services. */
     public static final Duration SAGA_TIMEOUT = Duration.ofSeconds(
             Long.parseLong(env("ACCEPTANCE_SAGA_TIMEOUT_SECONDS", "60")));

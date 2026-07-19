@@ -14,7 +14,27 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-18 (Sprint 19 Service Mesh and mTLS - **Findings B and C RESOLVED (pass 3),
+Last updated: 2026-07-18 (Sprint 14 Feature 14.6 - **post-Sprint-21 full E2E re-test: PASS on all
+four layers, two real infra bugs found and fixed.** Fresh-stack (`infra-destroy`, all images rebuilt)
+Sprint-14-style re-validation, extended to the post-MVP surfaces that had no acceptance coverage:
+campaign-service was wired into the compose `apps` profile for the first time (port 9011) and three
+permanent new acceptance ITs were added - `CampaignDiscountedOrderAcceptanceIT` (discounted order
+through the real gateway, redemption RESERVED->CONFIRMED asserted in `campaign_db`),
+`CampaignFailOpenAcceptanceIT` (real container outage, order succeeds undiscounted; env-gated,
+separate invocation), and `WebBffSmokeAcceptanceIT` (the four `/bff/v1` GET compositions + 401).
+Backend: 7/7 scenarios green. Browser: complete Sprint 16 journey re-proven (first-attempt PKCE
+login -> onboarding -> saga FULFILLED -> real MSISDN/quota -> self-scoped invoice 1-of-8 -> PDF 200).
+Perf: NFR-01 re-validated, p95 99.17ms served vs 300ms budget. **The two bugs, both invisible until
+this first full-stack boot since Sprint 17:** (1) compose `x-app-env` never passed `REDIS_HOST`, so
+all three `starter-lock` adopters (subscription/billing/campaign) crashlooped at boot - Redisson
+resolved `localhost:6379` in-container; fixed in the anchor, and the Sprint 17 bill-run lock then
+executed live in Docker for the first time; (2) `max_replication_slots=10` was exactly the
+pre-campaign connector count, so the 11th Debezium connector's slot creation failed - raised to 16.
+Also live-verifies the order-service RestClient-timeout commit `c3ee8a1`. Detail:
+sprint-14 README 2026-07-18 entry and
+[sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md](sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md).)
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **Findings B and C RESOLVED (pass 3),
 completing the fix work: the NetworkPolicy layer was redesigned to be mesh-aware and is now functional
 under full default-deny**. Finding C fix: the chart's app-port `NetworkPolicy` rules were incompatible
 with the enforcing edge mesh, which routes meshed pod-to-pod traffic through the linkerd-proxy inbound
@@ -1678,7 +1698,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | DONE | 6/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
-| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
+| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 6/6 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
