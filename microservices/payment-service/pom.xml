@@ -17,6 +17,12 @@
         Implements features 8.4-8.5: CQRS handlers, inbox consumer, retry scheduler, PSP circuit breaker.</description>
 
     <dependencies>
+        <!-- Per-service OpenAPI / Swagger UI (ARC-08). -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>com.telco.platform</groupId>
             <artifactId>starter-mediator</artifactId>

@@ -19,6 +19,12 @@
         consumers, reservation-expiry reaper) lands in Sprint 21 Feature 21.4.</description>
 
     <dependencies>
+        <!-- Per-service OpenAPI / Swagger UI (ARC-08). -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
         <!-- CQRS + Mediator dispatch (ADR-027 Decision Section 2). -->
         <dependency>
             <groupId>com.telco.platform</groupId>
