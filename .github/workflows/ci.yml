@@ -221,6 +221,9 @@ jobs:
   #   - microservices/<svc>/** changed => only <svc> is rebuilt.
   # reference-service, service-template (ADR-017 templates) and web-bff
   # (Sprint 16, post-MVP) are intentionally excluded from SERVICES below.
+  # campaign-service (Sprint 21), dispute-service (Sprint 22), and
+  # fraud-service (Sprint 23) are post-MVP domain services and belong in
+  # SERVICES like every other domain service.
   changes:
     name: Detect changed services
     runs-on: ubuntu-latest
@@ -244,7 +247,8 @@ jobs:
           set -euo pipefail
           SERVICES="api-gateway discovery-server config-server identity-service \
             customer-service product-catalog-service order-service subscription-service \
-            usage-service billing-service payment-service notification-service ticket-service"
+            usage-service billing-service payment-service notification-service ticket-service \
+            campaign-service dispute-service fraud-service"
           ZERO="0000000000000000000000000000000000000000"
 
           rebuild_all() {

@@ -83,9 +83,12 @@ echo "== 18.4.1: shared-credential paths, one per service (same value, per-servi
 declare -A SERVICE_FIELDS=(
   [api-gateway]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
   [billing-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
+  [campaign-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
   [config-server]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD"
   [customer-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
   [discovery-server]="EUREKA_PASSWORD"
+  [dispute-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD"
+  [fraud-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD"
   [identity-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
   [notification-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
   [order-service]="CONFIG_SERVER_PASSWORD EUREKA_PASSWORD REDIS_PASSWORD"
@@ -156,6 +159,9 @@ declare -A DB_ROLE=(
   [payment-service]="payment"
   [notification-service]="notification"
   [ticket-service]="ticket"
+  [campaign-service]="campaign"
+  [dispute-service]="dispute"
+  [fraud-service]="fraud"
 )
 
 for svc in "${!DB_ROLE[@]}"; do

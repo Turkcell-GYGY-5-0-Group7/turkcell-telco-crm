@@ -1,0 +1,71 @@
+# dispute-service (port 9012). Domain Orchestration (Sprint 22, ADR-028).
+serviceName: dispute-service
+containerPort: 9012
+service:
+  port: 9012
+
+image:
+  tag: latest
+
+# Feature 19.3.2 (ADR-026 Section 2). dispute-service's only real caller is
+# api-gateway - the customer/agent-facing dispute open/evidence-submit/
+# resolve API is externally routed (docs/api-contracts/dispute-service.md).
+# It coordinates with billing-service/payment-service/ticket-service purely
+# via outbox/inbox events (ADR-006/009), never a direct service-to-service
+# HTTP call in either direction, so no `meshPolicy.authorizedClients`
+# override is needed - the chart default (`[api-gateway]`) is already
+# correct.
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record - Dispute/DisputeEvidence/
+# DisputeStateHistory aggregates), MinIO (evidence objects, Feature 22.3),
+# Keycloak (JWKS validation - DisputeSecurityConfig is its own OAuth2
+# resource server, same pattern as every other domain service), Kafka
+# (publishes dispute.*.v1 via the outbox - dispute-service is an event
+# producer only this sprint, ADR-028 Section 6, no inbox consumer, but the
+# outbox still needs the same egress every other producing service has,
+# e.g. identity-service).
+networkPolicy:
+  egress:
+    postgres: true
+    minio: true
+    keycloak: true
+    kafka: true
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  # Same in-cluster profile convention as every other PostgreSQL-backed
+  # domain service (Feature 18.5): dev,k8s reads DB credentials from the
+  # environment instead of the docker profile's plaintext DB block.
+  SPRING_PROFILES_ACTIVE: dev,k8s
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/dispute-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  DISPUTE_DB_USER: dispute
+  DISPUTE_DB_PASSWORD: dispute
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/dispute-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: dispute-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: dispute-service/app
+      field: EUREKA_PASSWORD
+    - key: DISPUTE_DB_USER
+      path: dispute-service/db-credentials
+      field: username
+    - key: DISPUTE_DB_PASSWORD
+      path: dispute-service/db-credentials
+      field: password
