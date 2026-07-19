@@ -22,6 +22,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
     Optional<Invoice> findBySubscriptionIdAndPeriodStart(UUID subscriptionId, Instant periodStart);
 
+    @Query("SELECT i FROM Invoice i LEFT JOIN FETCH i.lines WHERE i.id = :id")
+    Optional<Invoice> findByIdWithLines(@Param("id") UUID id);
+
     @Query("SELECT i FROM Invoice i LEFT JOIN FETCH i.lines WHERE i.subscriptionId = :subscriptionId AND i.periodStart = :periodStart")
     Optional<Invoice> findBySubscriptionIdAndPeriodStartWithLines(
             @Param("subscriptionId") UUID subscriptionId,

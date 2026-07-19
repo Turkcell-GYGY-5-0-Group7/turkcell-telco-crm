@@ -188,7 +188,7 @@ class DisputeConsumersIntegrationTest {
                 "resolvedAt", Instant.now().toString()));
 
         await().atMost(TIMEOUT).untilAsserted(() -> {
-            Invoice reloaded = invoiceRepository.findById(invoice.getId()).orElseThrow();
+            Invoice reloaded = invoiceRepository.findByIdWithLines(invoice.getId()).orElseThrow();
             assertThat(reloaded.getDisputeStatus()).isEqualTo(InvoiceDisputeStatus.NONE);
             assertThat(reloaded.getLines()).hasSize(1);
             assertThat(reloaded.getLines().get(0).getLineType()).isEqualTo(InvoiceLineType.ADJUSTMENT);
