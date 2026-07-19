@@ -84,3 +84,21 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["ticket-service:9010"]
+
+  - job_name: campaign-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["campaign-service:9011"]
+
+  - job_name: dispute-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["dispute-service:9012"]
+
+  - job_name: fraud-service
+    scrape_interval: 30s
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["fraud-service:9013"]

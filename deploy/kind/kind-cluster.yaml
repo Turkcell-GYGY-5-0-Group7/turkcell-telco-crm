@@ -1,8 +1,18 @@
 # Kind cluster for local verification of the Telco CRM Helm charts (Sprint 15).
 # One control-plane node with host port mappings so ingress-nginx is reachable
 # from the host on localhost:8081 (http) / 8443 (https).
+#
+# networking.disableDefaultCNI (Feature 19.4, ADR-026 Section 3): Kind's
+# default CNI (kindnetd) does not enforce Kubernetes NetworkPolicy at all -
+# the platform's default-deny baseline and per-service allow rules would be
+# silent no-ops under it. Calico is installed in its place (see
+# .github/workflows/deploy.yml's "Install Calico CNI" step, and
+# deploy/RUNBOOK.md for the equivalent local procedure) so this cluster
+# actually exercises NetworkPolicy enforcement.
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  disableDefaultCNI: true
 nodes:
   - role: control-plane
     kubeadmConfigPatches:

@@ -111,6 +111,24 @@ jobs:
           config: deploy/kind/kind-cluster.yaml
           cluster_name: telco-ci
 
+      # Feature 19.4 (ADR-026 Section 3): deploy/kind/kind-cluster.yaml disables
+      # Kind's default CNI (kindnetd), which does not enforce Kubernetes
+      # NetworkPolicy at all - the platform's default-deny NetworkPolicy
+      # baseline and per-service allow rules would be silent no-ops under it.
+      # Calico is installed here in its place, matching the local Kind
+      # verification procedure in deploy/RUNBOOK.md, so this CI deploy job
+      # actually exercises NetworkPolicy enforcement rather than accepting it
+      # as inert.
+      - name: Install Calico CNI (NetworkPolicy enforcement, ADR-026 Section 3)
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/calico.yaml \
+            "https://raw.githubusercontent.com/projectcalico/calico/v3.29.3/manifests/calico.yaml"
+          sed -i 's/# - name: CALICO_IPV4POOL_CIDR/- name: CALICO_IPV4POOL_CIDR/; s/#   value: "192.168.0.0\/16"/  value: "10.244.0.0\/16"/' /tmp/calico.yaml
+          kubectl apply -f /tmp/calico.yaml
+          kubectl -n kube-system rollout status daemonset/calico-node --timeout=180s
+          kubectl -n kube-system rollout status deployment/calico-kube-controllers --timeout=180s
+
       - name: Install ingress-nginx (Kind provider)
         run: |
           set -euo pipefail
@@ -196,7 +214,8 @@ jobs:
 
           REST="api-gateway identity-service customer-service product-catalog-service \
                 order-service subscription-service usage-service billing-service \
-                payment-service notification-service ticket-service"
+                payment-service notification-service ticket-service campaign-service \
+                dispute-service fraud-service"
           for svc in $REST; do
             install_service "$svc"
           done
@@ -226,7 +245,8 @@ jobs:
           echo "::group::Deploy/smoke failed - attempting rollback" >&2
           RELEASES="config-server discovery-server api-gateway identity-service \
             customer-service product-catalog-service order-service subscription-service \
-            usage-service billing-service payment-service notification-service ticket-service"
+            usage-service billing-service payment-service notification-service ticket-service \
+            campaign-service dispute-service fraud-service"
           for rel in $RELEASES; do
             # Only a release with a prior revision can be rolled back. On this
             # EPHEMERAL cluster the first deploy is revision 1, so there is nothing
