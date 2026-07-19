@@ -1,62 +1,48 @@
-# Working TODO — Full E2E Re-Test (Sprint 14-style) covering post-Sprint-14 features
+# Working TODO - Sprint 24: PDF Gap Closure
 
-Goal: re-prove the platform end to end on a fresh live Docker Compose stack, now including the
-post-MVP features that shipped without acceptance coverage (campaign-service + order discount
-integration from Sprint 21, web-bff from Sprint 16), plus a browser E2E of the frontend and the k6
-NFR-01 perf re-run. Also live-verifies the unmerged order-service RestClient-timeout commit
-(`c3ee8a1`). Plan approved 2026-07-18; full plan at
-`~/.claude/plans/i-want-to-test-shimmying-hippo.md`. Results land in
-`docs/tasks/sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md`.
+Goal: close every literal requirement gap against the MVP spec PDF ("nothing may be missing";
+extending allowed, scope-out stays out). Plan approved 2026-07-19; full plan at
+`~/.claude/plans/i-want-to-test-shimmying-hippo.md`; decisions in
+`docs/tasks/sprint-24-pdf-gap-closure/design-note.md`. Branch:
+`feat/sprint-24-pdf-gap-closure` (off master post-#34). Commit after every feature.
 
-Thermal constraint: all code/doc work with the stack down; builds never concurrent with a live
-stack; one contiguous stack-up window for all live phases, `make infra-down` immediately after;
-long live commands wrapped in `caffeinate -dims`.
+Thermal rules: code with the stack DOWN; single contiguous stack-up window for 24.8's live
+verification; caffeinate-wrapped long commands; `make infra-down` immediately after.
 
-## Phase 0 — Preconditions
-- [x] Docker Desktop running; VM gate passed (31.3 GiB / 16 CPUs, >= 12 GiB required)
-- [x] Plan mirrored here
+## Phase 0 - Scaffolding
+- [x] master synced (merge #34 verified), branch created
+- [x] sprint-24 docs (README, design-note, 8 feature files), STATUS.md row, this file
+- [ ] scaffolding committed
 
-## Phase 1 — Wire campaign-service into compose (stack down)
-- [x] `infra/docker/compose.yml`: campaign-service block (app-common anchor, port 9011, healthcheck);
-      MEMORY BUDGET comment updated
-- [x] `infra/docker/.env` + `.env.example`: `CAMPAIGN_SERVICE_PORT=9011`;
-      `PSP_MOCK_FORCE_OUTCOME=SUCCESS` in `.env`
-- [x] Gate: `docker compose --profile apps config` renders the merged block
+## Phase 1 - Quick wins (independent)
+- [ ] 24.7a Swagger deps + security permits in 7 services; commit
+- [ ] 24.5a @ValidIdentityForType (TCKN/VKN by type); commit with 24.5b
+- [ ] 24.5b customer email/phone (V2, DTOs, avro additive, event-catalog); commit
+- [ ] 24.6 payment method enum + V5 + Idempotency-Key header; commit
+- [ ] 24.7b QUOTA_EXCEEDED template + update-if-different seeder; commit with 24.7c
+- [ ] 24.7c sort param on main list endpoints; commit
 
-## Phase 2 — New acceptance ITs (stack down)
-- [x] `support/CampaignAdminApi.java` (direct :9011; javadoc cites Feature 21.1.3 no-gateway-route
-      ruling), `support/CampaignDb.java` (JDBC redemption read)
-- [x] `AcceptanceConfig` constants + `GatewayApi.createOrder` campaignCode overload +
-      acceptance-tests pom postgresql test dep
-- [x] `campaign/CampaignDiscountedOrderAcceptanceIT.java` (discounted unitPrice, campaignId,
-      redemption RESERVED->CONFIRMED)
-- [x] `bff/WebBffSmokeAcceptanceIT.java` (home/catalog/account/invoices 200 + 401 unauthenticated)
-- [x] `campaign/CampaignFailOpenAcceptanceIT.java` (env-gated `CAMPAIGN_FAILOPEN_ENABLED`,
-      docker stop/start, full price + null campaignId)
-- [x] Gate: `mvn -pl acceptance-tests -am -Pacceptance verify -DskipITs` compiles clean
+## Phase 2 - 24.1 Catalog addon management
+- [ ] V2 allowances + seeds; CreateAddonCommand/handler; POST /api/v1/addons; internal snapshot;
+      contract doc; unit tests; commit
 
-## Phase 3 — Build then boot (single stack-up window opens)
-- [x] `make infra-destroy` (fresh volumes: campaign_db initdb, realm import, MSISDN pool reset)
-- [x] `make infra-platform-build && make infra-apps-build` (stack down; cool-down after)
-- [x] `make infra-up-full-stack`; health gate: :8080, :9001-:9011, :9020, Keycloak well-known
-- [x] `make infra-connectors`; gate: 11 connectors RUNNING incl. campaign
+## Phase 3 - 24.2 Order model generalization
+- [ ] V8 order/item types; validation matrix; subscription internal read + client; one-line
+      invariant relaxed (two-TARIFF still fails); avro additive + compat; internal DTO mirrors;
+      unit tests; commit
 
-## Phase 4 — Backend suites
-- [x] Main sweep green: AC-01 (+compensation), AC-02, AC-03, discounted-order, web-bff smoke
-- [x] Fail-open IT green (separate invocation, campaign-service restarted healthy after)
+## Phase 4 - 24.3 Addon purchase flow
+- [ ] addon-purchased.avsc + subject + compat + catalog row; order fulfillment publish legs +
+      standalone ADDON saga branch; usage addAllowance/TopUpQuota + consumer; billing
+      addon_charge_record + consumer + invoice lines; web-bff forwards addonCodes; tests; commit
 
-## Phase 5 — Browser E2E (stack stays up)
-- [x] `frontend/web` dev server; PKCE login -> register + KYC -> order + pay -> FULFILLED ->
-      account/usage -> invoice PDF; screenshots at each gate
-- [x] Known Sprint 16 open defects noted if hit (addons 500, duplicate-TCKN 500, multipart 500) —
-      not fixed here
+## Phase 5 - 24.4 Plan change flow
+- [ ] subscription-tariff-changed.avsc + subject + compat + catalog row; changeTariff +
+      ChangeTariffCommand + consumer branch; usage re-provision; billing tariffCode update;
+      order fulfill consumer; contract docs; tests; commit
 
-## Phase 6 — k6 perf re-run (last; then window closes)
-- [x] Cool-down; `caffeinate -dims k6 run microservices/acceptance-tests/perf/api-latency-load-test.js`;
-      p95(expected_response) < 300ms; compare vs 14.3.1 report
-- [x] Evidence captured (logs, compose ps, DB reads); `make infra-down` immediately
-
-## Phase 7 — Documentation (stack down)
-- [x] `docs/tasks/sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md` run report
-- [x] Status touches: sprint-14 / sprint-16 / sprint-21 READMEs, dated STATUS.md entry, this file
-      checked off
+## Phase 6 - 24.8 Tests + E2E re-validation
+- [ ] Three new acceptance ITs + two-TARIFF regression
+- [ ] Fresh-stack full sweep + browser onboarding with addon + Swagger spot-check +
+      Idempotency-Key replay; run report in sprint README
+- [ ] Closeout: README/STATUS/event-catalog/api-contracts/requirements traceability; commit
