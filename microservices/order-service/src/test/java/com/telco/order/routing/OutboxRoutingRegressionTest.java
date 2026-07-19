@@ -2,6 +2,7 @@ package com.telco.order.routing;
 
 import com.telco.order.application.command.CreateOrderCommand;
 import com.telco.order.application.dto.OrderItemRequest;
+import com.telco.order.infrastructure.client.CampaignServiceClient;
 import com.telco.order.infrastructure.client.CustomerClientResponse;
 import com.telco.order.infrastructure.client.CustomerServiceClient;
 import com.telco.order.infrastructure.client.ProductCatalogServiceClient;
@@ -87,6 +88,9 @@ class OutboxRoutingRegressionTest {
     @MockitoBean
     ProductCatalogServiceClient productCatalogServiceClient;
 
+    @MockitoBean
+    CampaignServiceClient campaignServiceClient;
+
     @Autowired
     Mediator mediator;
 
@@ -104,6 +108,8 @@ class OutboxRoutingRegressionTest {
         when(productCatalogServiceClient.getTariff(any()))
                 .thenReturn(new TariffClientResponse(TARIFF_ID, "POSTPAID-001", "Postpaid Basic",
                         new BigDecimal("49.99"), "TRY", 3));
+        when(campaignServiceClient.validate(any(), any(), any()))
+                .thenReturn(CampaignServiceClient.NOT_ELIGIBLE_SENTINEL);
     }
 
     @Test

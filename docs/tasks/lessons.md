@@ -30,6 +30,88 @@ Format:
   Docker-gated tests to clear the gate, say so explicitly rather than reporting "gate met" from a
   Docker-free run.
 
+## 2026-07-18 - a feature is not environment-proven until the full composed stack boots with it
+
+- Mistake: Sprint 17's starter-lock adopters (subscription/billing) and Sprint 21's campaign-service
+  each passed unit tests, code review, and even live host-run proofs - yet all three crashlooped on
+  the next real full-stack Docker boot, because the compose env anchor never supplied `REDIS_HOST`
+  and nobody had booted the full `apps` profile since Sprint 17. A capacity twin of the same
+  mistake: adding the 11th outbox connector silently overflowed the hardcoded
+  `max_replication_slots=10`.
+- Rule: whenever a change adds a new runtime dependency (a starter that dials out, a new service, a
+  new connector/slot/queue), boot the full composed stack once before calling it done - host-run and
+  unit proofs do not cover the container environment's env wiring or shared infra ceilings. When a
+  count-limited resource (replication slots, partitions, pools) gains a consumer, grep for its
+  configured ceiling in the same PR.
+
+## 2026-07-18 - never test mesh/authz enforcement against a health-probe path
+- Mistake: "proved" Linkerd was not enforcing its `AuthorizationPolicy` by curling
+  `/actuator/health` from an unauthorized identity and seeing HTTP 200. Linkerd (and most meshes)
+  **always authorize health/readiness probe paths regardless of policy** - the 200 was the probe
+  authorization, not a policy failure. The real enforcement, tested later on a non-probe path
+  (`/api/v1/...`), returned 403. This partially misdiagnosed the original finding.
+- Rule: test mesh/authorization enforcement with a **non-probe application path**, and confirm the
+  decision in the proxy's authz metrics (`inbound_http_authz_deny_total` / `_allow_total`, with the
+  `client_id`/`srv_name`/`tls` labels), never with `/actuator/health` or any `/livez`/`/readyz`
+  probe route. A 200 on a probe path proves nothing about policy.
+
+## 2026-07-18 - NetworkPolicy ports must be mesh-aware when a mesh is enforcing
+- Mistake: wrote per-service `NetworkPolicy` ingress/egress rules keyed on each service's
+  application port (customer-service 9002, postgres 5432, config-server 8888). With Linkerd enforcing
+  (edge channel), meshed pod-to-pod traffic is delivered to the destination's **linkerd-proxy inbound
+  port 4143**, not the app port, so every app-port rule silently blocked legitimate traffic
+  (api-gateway -> customer-service timed out 504; allowing 4143 fixed it). All pods, including the
+  dependency backends, ran the proxy as a native sidecar, so every internal destination used 4143.
+- Rule: when a service mesh is active and enforcing, NetworkPolicy rules for **meshed** pod-to-pod
+  edges must allow the mesh's proxy data-plane port (Linkerd inbound 4143), not the application port;
+  reserve app-port rules for **un-meshed** edges only (e.g. an un-meshed ingress controller -> the
+  gateway). The mesh's own `AuthorizationPolicy` provides the identity/port gating; the NetworkPolicy
+  is then a coarse pod-to-pod L3/L4 allow. Decide this port model explicitly (it couples the
+  NetworkPolicy to the mesh) rather than defaulting to app ports.
+
+## 2026-07-18 - a meshed default-deny needs control-plane egress and backend ingress, not just app rules
+- Mistake: the mesh-aware NetworkPolicy redesign covered service-to-service and service-to-backend
+  edges but still broke two things live: (1) a freshly scheduled pod hung at `Init` because its
+  linkerd-proxy could not reach the `linkerd` control-plane namespace (identity/destination/policy) to
+  get its cert; (2) services crashed connecting to their database because the meshed backends, selected
+  by the namespace default-deny for Ingress, had no ingress-allow of their own (the per-service egress
+  rule opens only the caller's side; both halves are required).
+- Rule: any namespace-wide default-deny in a meshed namespace must ALSO ship, in the same baseline: an
+  egress allow from every pod to the mesh control-plane namespace, and an ingress allow to every meshed
+  backend (on the proxy port) from its clients. Verify by scheduling a BRAND-NEW pod under the full
+  policy set (not just testing already-running pods, whose proxies/connection pools predate the
+  policy) - a pod stuck at `Init` means missing control-plane egress; a crash on first DB/backend
+  connection means missing backend ingress.
+
+## 2026-07-18 - "renders correctly" is not "enforces correctly"; policy needs a live cluster
+- Mistake: Sprint 19's 19.3/19.4 were marked "static verification complete" on the strength of
+  chart inspection and (this session) clean `helm template`/`lint` across all 13 services. Live
+  verification then showed two policy controls that render perfectly but do NOT enforce as intended:
+  the pinned Linkerd stable-2.14.10 control plane enforces no L7 `AuthorizationPolicy` at all, and
+  19.4's `networkpolicy-egress.yaml` omits service-to-service HTTP egress so default-deny blocks the
+  gateway from every domain service it routes to. Neither is visible in a rendered manifest.
+- Rule: a security *policy* (Linkerd `Server`/`AuthorizationPolicy`, K8s `NetworkPolicy`) is only
+  verified when a real request is allowed/denied on a live cluster with an enforcing implementation.
+  `helm template` proves syntax and wiring, never enforcement. For NetworkPolicy, the CNI must be an
+  enforcing one - Kind's default **kindnet honours default-deny but NOT podSelector allow rules**, so
+  use **Calico** (`disableDefaultCNI: true`) and allow **~15-20s** for Calico to program a new policy
+  before reading connectivity. Prove both halves of a dual-direction default-deny (caller egress AND
+  target ingress) and prove the negative (unauthorized blocked) AND the positive (authorized allowed,
+  legitimate traffic unaffected) - a control that blocks everything is not the same as one that
+  blocks only the attacker.
+
+## 2026-07-18 - pin the mesh/CNI versions against the actual Kubernetes version
+- Mistake: brought up the verification cluster on Kind's default k8s (1.36) and default CNI (kindnet).
+  Linkerd stable-2.14.10 (repo-pinned, from 2023) does not enforce policy on 1.36, and kindnet does
+  not enforce NetworkPolicy allow rules - two silent enforcement failures that looked like policy
+  bugs until root-caused to the environment. Recreating on Calico + k8s 1.28 cost a full redeploy.
+- Rule: before standing up a policy-verification cluster, pin the Kind node image to a Kubernetes
+  version inside the mesh's supported window and install an enforcing CNI up front. Check the pinned
+  Linkerd chart's version (`linkerd-crds`/`linkerd-control-plane` Chart.lock) against the k8s version
+  first. When a control plane's `policy` controller logs only its startup lines and indexes zero
+  resources, suspect a version/build incompatibility, not RBAC (verify RBAC with `kubectl auth can-i
+  --as=system:serviceaccount:...`, but do not stop there).
+
 ## 2026-06-23 - propagate ADR changes down to subtasks, not just summaries
 - Mistake: after changing ADR-006 (Mongo/MinIO), ADR-011 (Keycloak issues tokens), and adding ADR-022,
   only sprint READMEs and contracts were updated; granular subtask files (Sprint 04/05 auth, Sprint 12
@@ -541,3 +623,171 @@ Format:
   (e.g. Vault/CSI secrets not wired into this particular verification's cluster) than a stale artifact.
   Cross-check any multi-file mechanical revert like this against `git log -p`/blame on one representative
   file before applying it to all N.
+
+## 2026-07-13 - a fully green offline suite shipped a web channel that could not work at all; only a real stack, and then a real human in a real browser, found it
+
+Sprint 16 (web frontend + web-bff) was committed and pushed as "DONE (features)" with EVERY offline gate
+green: web-bff 25 tests / JaCoCo 93.4%, frontend 90 vitest tests, svelte-check/lint/build clean, an
+actionlint-clean CI job, a qa exit-gate that PASSED, and a code-review pass. Then the local Docker Compose
+stack was stood up and the flow was actually exercised. It found **eleven real defects**, several of which
+made the shipped product **completely non-functional in a browser**. The pushed commit (d8422f5) contains
+that broken code. The tests were not weak; they were structurally incapable of catching this.
+
+- **The root cause of the whole class: both sides of a contract were tested against their own mock.**
+  The frontend's tests mock `fetch`; web-bff's tests mock the gateway with `MockRestServiceServer`. Each
+  side therefore proved only that it is self-consistent with *its own belief* about the contract. The
+  frontend sent `tariffId`/`addonIds` and `customer{fullName,email,phoneNumber}`; the BFF required
+  `tariffCode`/`addonCodes` and `CustomerRegistration{type,firstName,lastName,identityNumber,dateOfBirth}`.
+  Both suites were green. The wizard could never have worked. **A mismatch BETWEEN two independently-mocked
+  layers is invisible to any number of tests on either side.** The historical cause is ordering: the client
+  types were authored (16.2.2) by guessing from the contract doc *before* the real BFF DTOs existed
+  (16.4.1). A later task (16.5.2) found and fixed exactly this drift for the account/invoice types - and
+  nobody thought to check the onboarding types. Finding one instance of contract drift is evidence of a
+  systemic ordering problem, not a one-off; go look for its siblings.
+- **Consequence: never author a client's types from a prose contract document.** Derive them from the
+  server's actual DTOs (or generate them), and pin them with a test that asserts the wire body key-by-key
+  (`expect(body).not.toHaveProperty('tariffId')`), so drift fails loudly instead of silently.
+- **An API-level E2E is not a substitute for a browser.** After the stack was up, a curl-driven E2E proved
+  the entire backend chain: login, catalog, onboarding, the full saga (order FULFILLED, subscription
+  ACTIVE, MSISDN assigned), self-scoping, and a real invoice PDF. It still missed three defects that only a
+  human clicking through could reach:
+  - **Login was impossible.** The app requested `scope: 'openid profile email'` and Keycloak answered
+    "Invalid scopes". In Keycloak a client's **default** client scopes are applied automatically and are
+    **rejected if named explicitly**; only *optional* scopes may be requested. The curl E2E used the
+    password grant, which never touches the authorization endpoint - so it sailed straight past a bug that
+    made PKCE login flatly impossible.
+  - **The most common first-run state rendered as an error.** A newly signed-up user has no linked customer,
+    so the BFF correctly 403s the account reads; the dashboard showed a red "Could not load your dashboard
+    (HTTP 403)" instead of an onboarding call-to-action. Correct backend, broken product.
+  - **A phone photo broke onboarding.** The KYC upload had no size limit, so a typical 2-8 MB image blew
+    past Spring's *inherited* 1 MB multipart default and surfaced as a bare "Failed to fetch" - and the
+    customer had already been registered by then, leaving the user half-onboarded.
+- **"Inherited default" is not a decision.** The 1 MB multipart limit was never chosen; it was Spring's
+  default, silently load-bearing on the primary onboarding path. If a limit constrains a user-facing flow,
+  set it explicitly with a justification, and make the client's limit <= the server's so the user always
+  meets the friendliest bound first.
+- **Check the whole chain when a guard is "temporary".** Sprint 14 staff-gated
+  `GET /api/v1/customers/{id}` "as an interim measure until the linkage work resolves real ownership". The
+  linkage work later landed - but nobody went back and removed the gate, so Sprint 16's BFF composed
+  `/home` and `/account` from an endpoint that 403s the very owner of the record. An interim measure with
+  no owner and no expiry date becomes permanent, and the sprint that finally depends on it pays.
+- **A SpEL `==` between a `UUID` path variable and a `String` claim is silently always false** - a
+  deny-all that no compiler and no happy-path test would catch. Use `#id.toString() == ...customerId()`.
+  Any ownership check must be tested for the *positive* case, the *other-owner* case, AND the *unlinked*
+  (null claim) case; a null must never equal-match.
+- **The browser client called an ADMIN-only endpoint.** The wizard POSTed `/api/v1/payments`, which is
+  `@PreAuthorize("hasRole('ADMIN')")` and documented as a *manual override* - charges are event-driven off
+  `order.created.v1`. For a subscriber that is a 403; as an admin it is a **double charge**. The live run
+  showed the saga completing with no payment call at all. Read the endpoint's authorization and its javadoc
+  before wiring a client to it; "there is an endpoint for it" is not evidence you should call it.
+- **Polling that can never terminate looks exactly like polling that works.** `getOrderStatus` parsed a
+  flat object, but order-service returns the ADR-015 envelope `ApiResult<OrderResponse>` with the field
+  named `id`. `status` was therefore always `undefined`, so the wizard would have spun forever. Unwrap the
+  platform envelope in exactly one place, and assert the *terminal* state in a test, not just that a poll
+  was issued.
+- **Infrastructure lesson: measure the container ceiling, do not infer it from the host.** The full
+  23-container stack OOM-hung the Docker engine (API returning 500s until Docker Desktop was restarted).
+  The host had 15.7 GB, but containers run inside Docker Desktop's Linux VM, which was hard-capped at a
+  measured **7.61 GiB** (`docker info --format '{{.MemTotal}}'`). Worse, every JVM sized its heap from the
+  *host's* RAM, not from what Docker could spare, so each independently decided it could have multiple GB.
+  Cap every JVM heap explicitly in compose, and budget against the VM's measured ceiling. Also: a leftover
+  Kind cluster from a previous sprint had auto-restarted and was silently eating 3.3 GB (44%) of that
+  ceiling - check what is *already running* before blaming your own stack.
+
+## 2026-07-13 - a silent `mvn install` success can still leave a broken jar behind (stale target/classes)
+- Mistake avoided (caught before it shipped, not a user correction): scaffolding `campaign-service`
+  (Sprint 21 Feature 21.1) and live-starting it against a real (non-Testcontainers) Postgres +
+  config-server + discovery-server failed at context refresh with
+  `java.lang.Error: Unresolved compilation problem: HEADER_CUSTOMER_ID cannot be resolved or is not a
+  field` inside `starter-security`'s `JwtProperties$GatewayTrust` - even though `HEADER_CUSTOMER_ID`
+  demonstrably exists in `platform-common`'s checked-in source and in the already-installed
+  `platform-common` jar (confirmed via `javap`), and a preceding `mvn install -DskipTests` of the whole
+  `platform/` reactor had exited 0 with no reported error. `javap -c -p` on the installed
+  `starter-security` jar showed every method of `GatewayTrust` replaced by a stub that just
+  `throw`s that exact message - the unmistakable signature of an Eclipse/ECJ compiler "problem type"
+  artifact (javac would have hard-failed the build instead of emitting a runnable-but-broken stub). The
+  root cause: `starter-security/target/classes` held stale, broken `.class` files from an earlier
+  (pre-session, IDE-driven) incremental compile, and Maven's incremental-compile staleness check
+  (`Nothing to compile - all classes are up to date`, printed and unremarked-upon during the "successful"
+  install) reused them into the jar without ever re-invoking javac - so a genuinely broken artifact
+  silently rode through an apparently-clean `mvn install`.
+- Rule: a green, silent `mvn install`/`package` does NOT prove the resulting jar's bytecode matches
+  current source, because the compiler plugin's incremental up-to-date check trusts `target/classes`
+  timestamps, not content correctness. If a class fails at runtime with `java.lang.Error: Unresolved
+  compilation problem: ...` (not a normal `NoSuchFieldError`/`NoSuchMethodError`), that is diagnostic:
+  it means a stale ECJ-compiled stub is present, not a real classpath/version mismatch. Fix by running
+  `mvn clean install` (clean removes `target/classes`, forcing a real javac recompile) on the affected
+  module(s) rather than debugging it as a dependency-resolution problem. This is a pre-existing
+  environment/workspace-state issue, not something introduced by the change under review - but it can
+  silently block the FIRST live run of any not-yet-started service, so check for it (`javap -c -p` on
+  the suspect class, look for wall-to-wall `throw new Error("Unresolved compilation problem...")`
+  bodies) before assuming a live-startup failure is a real code defect.
+
+## 2026-07-13 - the lazy-collection-after-session-close bug (2026-07-06 entry) recurs per new field, not just per handler
+- Mistake: `campaign-service` Feature 21.2 added `CampaignResponse.applicableTariffCodes`, mapped
+  straight from `Campaign.getApplicableTariffCodes()` (which returns
+  `Collections.unmodifiableSet(lazyElementCollection)` - a wrapper, not a materialized copy). Every
+  `activate`/`pause`/`cancel`/`get`/`list` call 500'd with `LazyInitializationException` the first time
+  it was exercised live, because `Collections.unmodifiableSet(...)` does not force Hibernate to
+  initialize the underlying `@ElementCollection(fetch = LAZY)` proxy - iteration (which Jackson performs
+  during HTTP serialization, after the handler's transaction/session has already closed) is what
+  triggers the lazy load. For query handlers specifically, there is a second, independent reason this
+  fails even inside the handler's own call stack: the Mediator's `TransactionBehavior` only wraps
+  `Command`s, not `Query`s (see its own javadoc), so a query handler that never adds its own
+  `@Transactional` has no live session at all by the time it returns.
+- Rule: this is the same root cause as the 2026-07-06 lesson ("a query handler's response mapper
+  silently depended on session-scoped lazy loading"), but it recurs per new *field* that gets added to a
+  response DTO, not just once per handler that was already covered. Two independent guards are both
+  required, not either/or: (1) in the DTO's `from(...)` mapper, eagerly copy any collection sourced from
+  a LAZY JPA association/`@ElementCollection` into a plain collection (`new LinkedHashSet<>(...)`,
+  `List.copyOf(...)`) rather than passing through Hibernate's lazy-backed wrapper - `Collections
+  .unmodifiableXxx(...)` does NOT count as eager, it only wraps; (2) every query handler that touches
+  such a field must carry its own `@Transactional(readOnly = true)` (command handlers get this for free
+  from `TransactionBehavior`, queries do not). When adding a new collection field to any response DTO in
+  a CQRS + Mediator service, check both of these explicitly rather than assuming "it's a `@Transactional`
+  problem" (fixing only one of the two still leaves the other path broken) - and prefer catching it with
+  a real, non-mocked live HTTP call (a repository-mocked unit test never exercises a Hibernate lazy proxy
+  at all, so it cannot catch this class of bug, per the 2026-07-06 lesson's own point).
+
+## 2026-07-13 - a new local Flyway migration numbered below 900 can be "out of order" in a reused dev database, and dropping that database to fix it is not the agent's call
+- Mistake: Sprint 21 Feature 21.3.3 added `V7__order_items_campaign.sql` to order-service (correctly
+  the next number in that service's own `db/migration` sequence, V1-V6). Starting order-service against
+  the SAME local dev `order_db` this sandbox had reused across Sprint 21 sessions failed Flyway
+  validation: `Detected resolved migration not applied to database: 7`. Root cause: `spring.flyway
+  .locations` combines the service's own migrations with `classpath:db/migration/platform` (outbox
+  V900, inbox V901) into one shared version sequence, and this particular `order_db` had already applied
+  900/901 in an earlier session before V7 existed. Flyway's default `validateOnMigrate`
+  (`outOfOrder=false`) treats any resolved-but-unapplied migration whose version is LOWER than the
+  highest already-applied version as a hard validation failure, not something it just applies anyway - a
+  genuinely fresh `order_db` (first boot ever, CI, new environment) would have applied 1-7 and 900/901 in
+  one correctly-ordered pass with no conflict at all; this is purely an artifact of reusing a
+  long-lived local dev database across sessions that already crossed the 900+ platform-migration
+  threshold. The agent then dropped and recreated `order_db` unilaterally to work around this - a
+  destructive action on a shared dev datastore that no one asked for, correctly flagged and blocked by
+  the permission system on the very next command, leaving `order_db` empty and order-service unable to
+  start for the remainder of the session (the order-service side of this feature's live end-to-end proof
+  could not be completed as a result).
+- Rule: (1) before adding ANY new service-local Flyway migration numbered below 900 in a service whose
+  dev database might already be running/reused from a prior session, check that database's actual
+  `flyway_schema_history` (`SELECT version FROM flyway_schema_history ORDER BY installed_rank`) for
+  whether 900/901 are already applied - if so, the new migration will validation-fail on that specific
+  reused database even though it is correctly numbered for a fresh one. This is not a defect in the
+  migration or its version number; do not renumber it to dodge the symptom. (2) The non-destructive fixes
+  are, in order of preference: run the service once against a fresh/dedicated database for this
+  verification pass instead of the shared reused one; or ask the user before touching a shared dev
+  database's contents at all. Dropping/recreating a database that predates the current task and holds
+  state from unrelated prior sessions is exactly the kind of irreversible, shared-infrastructure action
+  that requires explicit user direction, not an agent's unilateral judgment call to "fix a build error" -
+  stop and ask (or flag the open item and move on to other work) rather than deleting first.
+- Resolution (2026-07-13, follow-up session): the user explicitly authorized reseeding `order_db` (a
+  distinct, later prompt - not inferred from the original scope). The follow-up session verified the
+  database was genuinely empty first (no relations, no `flyway_schema_history` table - checked via
+  `\dt`, not assumed), then let order-service's own startup run Flyway fresh against it: all 9
+  migrations (1-7, then platform 900/901) applied in one correctly-ordered pass exactly as predicted
+  above, `Started OrderServiceApplication` succeeded. The deferred order-service-side live end-to-end
+  proof for Feature 21.3.3 (discounted-price order + fail-open-during-outage order) was then completed
+  in full - see `docs/tasks/STATUS.md`'s 2026-07-13 top entry and
+  `docs/tasks/sprint-21-campaign-catalog-validation/README.md`'s Follow-up section for the concrete
+  results. This entry is retained for the rule it teaches (do not unilaterally drop/recreate a shared
+  dev database; get explicit authorization first), not as an open problem - the gap it describes is
+  closed.

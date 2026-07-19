@@ -1,0 +1,65 @@
+# campaign-service base config (port 9011, CQRS+Mediator, PostgreSQL, no cache - ADR-027).
+# Per-env overrides in campaign-service-{dev,test,staging,prod}.yml.
+
+server:
+  port: 9011
+
+spring:
+  datasource:
+    url: ${CAMPAIGN_DB_URL:jdbc:postgresql://localhost:5432/campaign_db}
+    username: ${CAMPAIGN_DB_USER:campaign}
+    password: ${CAMPAIGN_DB_PASSWORD:campaign}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    # Consumes order.created.v1/order.cancelled.v1 (order-service), payment.completed.v1
+    # (payment-service), tariff.created.v1/tariff.price-changed.v1 (product-catalog-service)
+    # idempotently via the inbox (Feature 21.4, ADR-005, ADR-009, ADR-027 Section 4).
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: campaign-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
+    # Guards the redemption reservation-expiry reaper across replicas (Feature 21.4, ADR-024,
+    # ADR-027 Section 4 ratification). The Redis in this stack requires auth
+    # (infra/docker/compose.yml --requirepass); starter-lock's spring.data.redis.host/port fallback
+    # does not read a password, so the address is set explicitly with embedded credentials rather
+    # than relying on that fallback.
+    lock:
+      enabled: true
+      redis:
+        address: redis://:${REDIS_PASSWORD:telco}@${REDIS_HOST:localhost}:${REDIS_PORT:6379}
+  campaign:
+    redemption-reaper:
+      interval-ms: ${CAMPAIGN_REDEMPTION_REAPER_INTERVAL_MS:60000}
+      lock-lease-ms: ${CAMPAIGN_REDEMPTION_REAPER_LOCK_LEASE_MS:30000}

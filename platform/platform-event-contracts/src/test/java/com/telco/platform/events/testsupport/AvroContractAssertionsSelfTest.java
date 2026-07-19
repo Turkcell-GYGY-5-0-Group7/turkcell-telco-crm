@@ -126,7 +126,8 @@ class AvroContractAssertionsSelfTest {
                           BigDecimal totalAmount, String idempotencyKey, String occurredAt) {
     }
 
-    record MatchingOrderItem(String tariffId, String tariffName, BigDecimal unitPrice, int quantity) {
+    record MatchingOrderItem(String tariffId, String tariffName, BigDecimal unitPrice, int quantity,
+                              String campaignId) {
     }
 
     record WrongOrderItem(String orderId, String customerId, List<BrokenOrderItem> items,

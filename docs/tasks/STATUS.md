@@ -14,7 +14,9 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-18 (Sprint 22 Invoice Dispute/Chargeback - **Feature 22.6 (event registration +
+Last updated: 2026-07-19 (Merged branch `feature/sprint-22-dispute-chargeback` into `master`, reconciling Sprint 20 (Chaos Engineering) and Sprint 22 (Invoice Dispute/Chargeback) completion with the trunk's Sprint 14 E2E re-test, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 19 (Service Mesh and mTLS) **DONE (5/5)**; Sprint 20 (Chaos Engineering) feature-complete in authored form, live-cluster exit criteria still open (see the entry below); Sprint 22 (Invoice Dispute/Chargeback) **DONE (code-complete, 6/6)**. Both branches' prior update chains are preserved verbatim below - the Sprint 20/22 chain first, then the trunk's own reconciliation chain. Prior updates below.)
+
+Prior update, 2026-07-18 (Sprint 22 Invoice Dispute/Chargeback - **Feature 22.6 (event registration +
 ticket-service integration + cross-service test suite) closes the sprint at 6/6, code-complete**.
 Six `dispute.*.v1` events registered as governed Avro contracts (ADR-019), `dispute-outbox-connector.json`
 added (closing the real gap flagged at the end of 22.4/22.5 - `dispute.events` was never actually
@@ -250,6 +252,514 @@ healthy Docker Desktop. Committed as commit `128a678` (working tree clean, branc
 2026-07-17 documentation-sync note below. Detail: sprint-20 README's Features table
 and Feature notes, `deploy/chaos/README.md`, `deploy/chaos/STEADY-STATE.md`,
 `deploy/chaos/GAMEDAY-RUNBOOK.md`.
+
+Prior update, 2026-07-18 (Sprint 14 Feature 14.6 - **post-Sprint-21 full E2E re-test: PASS on all
+four layers, two real infra bugs found and fixed.** Fresh-stack (`infra-destroy`, all images rebuilt)
+Sprint-14-style re-validation, extended to the post-MVP surfaces that had no acceptance coverage:
+campaign-service was wired into the compose `apps` profile for the first time (port 9011) and three
+permanent new acceptance ITs were added - `CampaignDiscountedOrderAcceptanceIT` (discounted order
+through the real gateway, redemption RESERVED->CONFIRMED asserted in `campaign_db`),
+`CampaignFailOpenAcceptanceIT` (real container outage, order succeeds undiscounted; env-gated,
+separate invocation), and `WebBffSmokeAcceptanceIT` (the four `/bff/v1` GET compositions + 401).
+Backend: 7/7 scenarios green. Browser: complete Sprint 16 journey re-proven (first-attempt PKCE
+login -> onboarding -> saga FULFILLED -> real MSISDN/quota -> self-scoped invoice 1-of-8 -> PDF 200).
+Perf: NFR-01 re-validated, p95 99.17ms served vs 300ms budget. **The two bugs, both invisible until
+this first full-stack boot since Sprint 17:** (1) compose `x-app-env` never passed `REDIS_HOST`, so
+all three `starter-lock` adopters (subscription/billing/campaign) crashlooped at boot - Redisson
+resolved `localhost:6379` in-container; fixed in the anchor, and the Sprint 17 bill-run lock then
+executed live in Docker for the first time; (2) `max_replication_slots=10` was exactly the
+pre-campaign connector count, so the 11th Debezium connector's slot creation failed - raised to 16.
+Also live-verifies the order-service RestClient-timeout commit `c3ee8a1`. Detail:
+sprint-14 README 2026-07-18 entry and
+[sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md](sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md).)
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **Findings B and C RESOLVED (pass 3),
+completing the fix work: the NetworkPolicy layer was redesigned to be mesh-aware and is now functional
+under full default-deny**. Finding C fix: the chart's app-port `NetworkPolicy` rules were incompatible
+with the enforcing edge mesh, which routes meshed pod-to-pod traffic through the linkerd-proxy inbound
+port 4143. Redesigned `networkpolicy-ingress.yaml` (meshed callers -> 4143; un-meshed ingress-nginx ->
+app port) and `networkpolicy-egress.yaml` (all meshed destinations - infra + config/discovery +
+`egress.services` - on 4143), and added two universal policies to the dependencies chart's default-deny
+file: `allow-linkerd-control-plane-egress` (every meshed pod must reach the `linkerd` namespace or its
+proxy never becomes Ready - a fresh pod hung at Init until added) and `allow-backend-ingress` (the
+meshed backends receive nothing under default-deny until telco pods are allowed to reach them on 4143 -
+customer-service crashed at Flyway/postgres until added). **Live-verified under full default-deny
+(chart-only policies): a fresh customer-service pod starts clean 2/2 (reaches config/discovery/postgres
+on 4143), `api-gateway -> customer-service` = 200 (legitimate routing restored, was 504),
+`config-server -> customer-service` = blocked, `ingress-nginx -> api-gateway` via localhost:18080 = 200,
+and the mesh still enforces identity.** 19.5.2 smoke-test infra checks pass (gateway health via ingress
++ key-service readiness); the authenticated-read step needs Keycloak, outside the scoped stack. Noted as
+mechanical follow-ups for a full-13-service deploy (same 4143 pattern): backend inter-dependency edges
+(keycloak->postgres, kafka-connect->kafka) and observability egress. **All three findings (A/B/C) are
+now resolved; 19.3/19.4 DONE for the verified scope, 19.5.1 proven at both mesh and network layers.**
+All Sprint-19 changes remain chart/doc-only (19.5.3 holds). Detail: sprint-19 README "Fix-Pass Live
+Verification Record (2026-07-18, pass 3)"; [lessons.md](lessons.md). Prior sub-entries (pass 2, pass 1)
+follow.
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **fix pass for Findings A/B from the
+verification pass below: Finding A RESOLVED (mesh now enforces the forged-header rejection at Layer 1),
+Finding B authored, and a new Finding C surfaced**. Fix A: bumped the vendored Linkerd charts from the
+EOL `stable-2.14.10` to the **edge channel `2026.6.3`** (`deploy/helm/linkerd-{crds,control-plane}`
+repointed to `https://helm.linkerd.io/edge`, re-vendored, ADR-026 given an implementation note). On a
+rebuilt Calico + k8s-1.36 cluster (edge Linkerd needs k8s >=1.31) the mesh `AuthorizationPolicy` now
+**enforces**: a forged-`X-User-Id`/`X-User-Roles` request to a non-probe path from the `config-server`
+mesh identity (not authorized) is **rejected 403 at the mesh proxy before application code**
+(`inbound_http_authz_deny_total` shows `tls=true`, `client_id=config-server...linkerd.cluster.local` -
+mTLS identity cryptographically verified, then denied), while the same forged headers from `api-gateway`
+(authorized) reach the app (401). **So 19.5.1's forged-header rejection is now proven at BOTH ADR-026
+layers - the mesh identity layer (this pass) and the NetworkPolicy layer (pass below).** Correction to
+the pass below: its behavioral "2.14.10 does not enforce" test used `/actuator/health`, which Linkerd
+*always* allows as a probe path regardless of policy, so that 200 alone did not prove non-enforcement
+(the sound evidence was the policy-controller indexing zero resources); the edge re-verification used a
+proper non-probe path and is unambiguous. Fix B: authored `.Values.networkPolicy.egress.services` (the
+egress-side caller-list) in `networkpolicy-egress.yaml` + the 5 caller value files (api-gateway -> its
+10 routed domain services + web-bff; order/subscription/billing/usage -> their documented callees) -
+renders correctly. **New Finding C (open, blocks 19.4/19.5.2):** edge Linkerd routes ALL meshed
+pod-to-pod traffic through the linkerd-proxy inbound port **4143** (every pod, incl. the meshed
+dependency backends, runs the proxy as a native sidecar), so the chart's app-port-based `NetworkPolicy`
+rules (ingress `containerPort`, egress `postgres:5432`/`config:8888`/`egress.services:http`/...) never
+match meshed traffic - `api-gateway -> customer-service` is blocked 504 under the chart's own policies;
+allowing port 4143 instead succeeds (200). The NetworkPolicy port scheme needs a **mesh-aware redesign**
+(4143 for meshed pod-to-pod edges, app port only for the un-meshed ingress-nginx edge) - a genuine
+devops/tech-lead design decision, not taken unilaterally. The full smoke test with NetworkPolicies
+(19.5.2) is blocked on it; the mesh is now the enforcing control regardless. Net: 19.3 objects
+live-correct + mesh enforcement proven; 19.4 default-deny/ingress proven but egress blocked on Finding
+C; 19.5.1 proven at both layers; 19.5.2 blocked on C; 19.5.3 holds (chart/doc-only). Sprint stays
+**IN PROGRESS (2/5 DONE)** pending the Finding C design decision. Detail: sprint-19 README "Fix-Pass
+Live Verification Record (2026-07-18, pass 2)"; [lessons.md](lessons.md) 2026-07-18 entries. Prior
+sub-entry (pass 1) follows.
+
+Prior update, 2026-07-18 (Sprint 19 Service Mesh and mTLS - **first live-cluster verification pass;
+the sprint's primary exit gate is now PROVEN LIVE, and two real defects were surfaced that static
+verification could not catch**. Ran a scoped live verification (user-chosen scope: a minimal meshed
+stack, not all 13 services) on a Kind cluster stood up this session - Calico v3.28.2 CNI on k8s
+v1.28.15 (the committed kindnet/k8s-1.36 default was tried first but kindnet does not honour
+podSelector NetworkPolicy allow rules; Calico is the reference implementation and 1.28 is inside
+Linkerd 2.14.10's support window). Deployed `postgres`/`redis`/`config-server`/`discovery-server`/
+`api-gateway`/`customer-service`, all meshed `2/2`, reusing the existing `telco-<svc>:local` compose
+images retagged for Kind. **PROVEN LIVE:** (19.3) `kubectl get server,authorizationpolicy,
+meshtlsauthentication` shows exactly the expected objects - 4 `Server`, 3 `AuthorizationPolicy` (none
+for `api-gateway`, correct), `customer-service-authn` = `[api-gateway, order-service]`, config/
+discovery = all 13 - selectors and ports correct. (19.4.1) `default-deny` blocks all pod-to-pod
+traffic (both directions 504 after Calico's ~15-20s program latency). (19.4.2) the `customer-service`
+ingress allow-list discriminates - `api-gateway` (authorized) 200, `config-server` (not authorized)
+504. (**19.5.1, the primary exit gate**) a forged-`X-User-Id`/`X-User-Roles` request from a
+non-gateway pod (`config-server`) to `customer-service` is **rejected - HTTP 504, and the request
+never reaches application code** (unique marker path appears 0 times in the app log), while the same
+forged headers from `api-gateway` reach the app (200): the header-forgery residual risk
+`security-posture.md` Section 8 accepted is demonstrably closed at the NetworkPolicy layer (ADR-026
+Section 3's named companion control). (19.5.3) unchanged - no `.java`/security edits this session.
+**TWO REAL DEFECTS FOUND (both block full DONE; both are environment/chart-completeness issues, not
+authoring errors in what shipped):** **Finding A** - the pinned Linkerd **stable-2.14.10** control
+plane does not enforce L7 `AuthorizationPolicy` at all (unauthorized identity reaches the app with
+200; even a `default-inbound-policy: deny` annotation does not deny; the policy-controller logs only
+2 startup lines with zero resource indexing; zero `inbound_http_authz` proxy metrics; RBAC and
+liveness are fine; reproduced on both k8s 1.36 and 1.28) - so the mesh identity/authz layer (ADR-026
+Layer 1) is unverified for enforcement; follow-up is to bump Linkerd to a current release and re-run.
+**Finding B** - 19.4's `networkpolicy-egress.yaml` grants egress only to infra + config/discovery, so
+under default-deny `api-gateway` cannot reach the domain services it routes to (504) and the 5
+documented domain->domain calls are likewise blocked; the full unmodified smoke test (19.5.2) cannot
+pass until service-to-service HTTP egress is added (a devops/tech-lead chart-design call, not made
+unilaterally here). Net Sprint 19 status stays **IN PROGRESS (2/5 DONE)** but with the primary exit
+gate live-proven and 19.3's objects live-correct; 19.3/19.4/19.5 completion is gated on Findings A/B.
+Detail: sprint-19 README "19.3/19.4/19.5 Live Verification Record (2026-07-18)" section, and
+[lessons.md](lessons.md) 2026-07-18 entries. Prior updates below.)
+
+Prior update, 2026-07-15 (Merged branch `feature/sprint-21-campaign-catalog-validation` into `master`,
+reconciling Sprint 21 (Campaign / Catalog Validation) completion with the trunk's Sprint 16/17/18/19
+progress. This entry only reconciles the two branches' status logs - no delivery status changed as a
+result of the merge itself. Combined delivery status is now: Sprint 16 (Web Frontend) **DONE (5/5)**;
+Sprint 17 (Distributed Locking) **DONE (5/5)**; Sprint 18 (Secret Management) **DONE (features, 5/5)**
+with its exit-criteria tail tracked; Sprint 19 (Service Mesh and mTLS) **IN PROGRESS (2/5)**; Sprint 21
+(Campaign / Catalog Validation) **DONE (5/5)**. Both branches' prior update chains are preserved
+verbatim below - the Sprint 21 chain first, then the trunk's own Sprint 16/19 reconciliation chain.
+Prior updates below.)
+
+Prior update, 2026-07-15 (Sprint 21 Campaign / Catalog Validation - **Feature 21.5 DONE (5/5), Sprint 21
+now DONE: the unit/integration/contract test suite proving the sprint's exit criteria, built by the qa
+agent on top of 21.1-21.4**. Most of 21.5.1 (domain/handler unit tests, `CampaignServiceClientTest`'s
+fail-open unit proof) was already in place as a byproduct of building 21.2-21.4; this session closed the
+remaining gaps. New: `CampaignServiceIntegrationTest` (Testcontainers Postgres) drives the full create ->
+activate -> validate (eligible) -> simulate `order.created.v1` (reserve) -> simulate
+`payment.completed.v1` (confirm) -> `perCustomerRedemptionCap`-exceeded-on-next-attempt flow end to end
+through the real admin/`/internal` HTTP surface and real Postgres-backed repositories, and separately
+proves idempotent redelivery of `ConfirmRedemptionCommand` through the real platform `InboxBehavior`/
+inbox table (duplicate `payment.completed.v1` messageId -> single CONFIRMED transition - the strongest
+form of that proof in the feature, one level below the mocked-mediator consumer unit tests). New:
+`CampaignApiContractTest` (reflection-only, mirrors `TariffApiContractTest`, no Spring context) guards
+`CampaignResponse`/`CampaignValidationResponse`'s documented field sets and specifically that `POST
+/internal/campaigns/validate` stays mounted under `/internal` (tokenless), not
+`/api/v1/campaigns/validate`, per ADR-027's second ratification addendum. Extended (already existed):
+`CampaignSchemaMigrationTest` now also asserts campaign-db's migrated schema never contains another
+service's tables (`tariffs`, `orders`, `order_items`, etc.) - the direct, executable proof of the
+sprint's third exit criterion (ADR-006 database isolation), complementing the database-role grants
+already enforced in `infra/docker/postgres/initdb/01-create-databases.sql`. Extended (already existed):
+each of the five 21.4 consumer unit tests (`RedemptionCommitEventConsumerTest`,
+`OrderCancelledEventConsumerTest`, `OrderCreatedRedemptionReservationConsumerTest`,
+`TariffCreatedEventConsumerTest`, `TariffPriceChangedEventConsumerTest`) gained a redelivery test proving
+a duplicate Kafka messageId dispatches an identical (idempotency-key-equal) command every time - what the
+platform `InboxBehavior` needs to collapse a redelivery to a single effect. New in order-service:
+`CampaignDiscountedOrderIntegrationTest` and `CampaignServiceFailOpenIntegrationTest` - both leave the
+real `CampaignServiceClient` Spring bean wired (real `RestClient`, real Resilience4j `CircuitBreaker`)
+rather than mocking the client interface, pointed at a loopback HTTP stub (discount test) or an
+unreachable port / a manually forced-OPEN circuit breaker (fail-open test), proving through the full
+HTTP -> mediator -> handler -> Postgres -> outbox path that: (a) an eligible campaign discounts
+`OrderItem.unitPrice` correctly in both Postgres and the outbox `order.created.v1` payload, and (b) an
+unreachable campaign-service or an OPEN circuit breaker still lets order creation succeed at the full
+undiscounted price - the sprint's most safety-critical guarantee, one level below the existing
+client-unit-test-level (`CampaignServiceClientTest`) and handler-unit-test-level
+(`CreateOrderCommandHandlerTest`) coverage. Neither new order-service test modifies any pre-existing
+order-service test file (diff-reviewed: zero changes), so the "no regression" acceptance criterion holds
+trivially. **Verified**: `mvn -f microservices/pom.xml -pl campaign-service,order-service -am test
+-Dschema.registry.skip=true` (JAVA_HOME=21) - every non-Testcontainers test class in both modules passes
+live (104 campaign-service tests, 0 failures outside Testcontainers; order-service's non-Testcontainers
+classes all green too), including every new/extended class above. The Testcontainers-backed classes
+(`CampaignServiceIntegrationTest`, `CampaignRepositoryTest`, `CampaignSchemaMigrationTest`,
+`CampaignEligibilityServiceConcurrencyIT`, `OrderServiceIntegrationTest`,
+`CampaignDiscountedOrderIntegrationTest`, `CampaignServiceFailOpenIntegrationTest`, and the rest of
+order-service's pre-existing Testcontainers suite) all fail identically with `IllegalStateException:
+Could not find a valid Docker environment` - confirmed as the same pre-existing, repo-wide
+Testcontainers/Docker-API-version incompatibility documented in `docs/tasks/lessons.md` (2026-07-12
+entries), reproduced here on every Testcontainers test in both modules (old and new alike), so this is
+not a regression introduced by this feature; verified by code review instead, exactly as every prior
+Sprint 21 feature's verification did. All three Sprint 21 exit criteria now have at least one direct,
+executable test: discounted-vs-undiscounted pricing (`CampaignDiscountedOrderIntegrationTest`,
+`CampaignServiceFailOpenIntegrationTest`, `CreateOrderCommandHandlerTest`), fail-open
+(`CampaignServiceClientTest`, `CampaignServiceFailOpenIntegrationTest`), and ADR-006 database isolation
+(`CampaignSchemaMigrationTest`). Sprint 21 is now 5/5, DONE - the first post-MVP sprint (17-23) to reach
+full DONE status. Detail:
+`docs/tasks/sprint-21-campaign-catalog-validation/21.5-tests.md`,
+`docs/tasks/sprint-21-campaign-catalog-validation/README.md`.
+
+Prior update, 2026-07-15 (Sprint 21 Campaign / Catalog Validation - **Feature 21.4 DONE (4/5): Campaign
+eventing (outbox lifecycle + inbox redemption/tariff consumers), built by the event-integration agent
+on top of 21.2/21.3**. 21.4.1: `CampaignCreatedEvent`/`ActivatedEvent`/`PausedEvent`/`ExpiredEvent`/
+`CancelledEvent` published via `OutboxService.publish(...)` from the matching 21.2.1 admin command
+handlers (never a direct Kafka producer); five new Avro schemas registered
+(`campaign-created/activated/paused/expired/cancelled.avsc`) plus a `campaign-outbox-connector.json`
+Debezium registration and matching `docs/architecture/event-catalog.md` rows. 21.4.2:
+`RedemptionCommitEventConsumer` (group `campaign-service-redemption-commit`) consumes
+`payment.completed.v1` - per ADR-027 Section 4's 2026-07-13 ratification, NOT the deferred/never-produced
+`order.confirmed.v1` - and transitions a matched `CampaignRedemption` RESERVED -> CONFIRMED;
+`OrderCancelledEventConsumer` (group `campaign-service-order-cancelled`) consumes `order.cancelled.v1`
+and transitions RESERVED -> RELEASED; both idempotent via `starter-inbox` dedup, both no-op (not error)
+on an `orderId` with no matching redemption row. 21.4.3: `OrderCreatedRedemptionReservationConsumer`
+(group `campaign-service-redemption-reservation`) consumes `order.created.v1` and creates exactly one
+RESERVED `CampaignRedemption` per campaign-priced order item, delegating to
+`CampaignEligibilityService.reserve(...)` whose `PESSIMISTIC_WRITE` lock on `Campaign` makes this
+race-safe across concurrent `order.created.v1` events for the same campaign - this is what makes
+21.2.2's cap-safety claim real at runtime, not just at the synchronous validate call; a cap-exceeded
+outcome at this stage is logged WARN and swallowed (an accepted, documented race between the fail-open
+synchronous validate read and this write), not rethrown. `TariffCreatedEventConsumer`/
+`TariffPriceChangedEventConsumer` consume the real, already-schema-registered tariff events and flag
+(not mirror-copy pricing data, which ADR-027 forbids) an ACTIVE campaign whose `applicable_tariff_codes`
+references a retired/repriced tariff. **Mandatory addition per ADR-027's ratification (not a named
+21.4 subtask output, but required by the Section 4 amendment)**: `CampaignRedemptionReservationExpiryReaper`
+- a `starter-lock`-guarded (explicit-lease `DistributedLock`, ADR-024), scheduled reaper releasing
+`RESERVED` `CampaignRedemption` rows past their `reservedUntil` column (added ahead of schedule in
+21.2.2's `V2__campaign_redemption_reserved_until.sql`), mirroring `subscription-service`'s MSISDN
+reservation-expiry reaper pattern from Sprint 17.3 exactly; `starter-lock` added to campaign-service's
+`pom.xml` for this. **Verified**: `mvn -pl microservices/campaign-service -am verify
+-Dschema.registry.skip=true` (JAVA_HOME=21) - 24 of 27 test classes green, including all new consumer
+tests (`OrderCancelledEventConsumerTest`, `OrderCreatedRedemptionReservationConsumerTest`,
+`RedemptionCommitEventConsumerTest`, `TariffCreatedEventConsumerTest`,
+`TariffPriceChangedEventConsumerTest`) and the reaper's own `CampaignRedemptionReservationExpiryReaperTest`
+(3/3), plus `CampaignEventSchemaCompatTest` (5/5, confirming the five new Avro schemas are
+BACKWARD-compatible and correctly registered). The 3 failing classes
+(`CampaignRepositoryTest`, `CampaignSchemaMigrationTest`, `CampaignEligibilityServiceConcurrencyIT`) all
+fail identically with `IllegalStateException: Could not find a valid Docker environment` - confirmed as
+the same pre-existing, repo-wide Testcontainers/Docker-API-version incompatibility documented in
+`docs/tasks/lessons.md` (2026-07-12 entries) and already hit by every prior Sprint 21 feature, not a
+regression introduced here. **Process note**: this feature's implementation required two attempted
+sessions after the first two hit unrelated infrastructure failures (a session API limit, then a
+mid-response connection drop) - the second attempt's work was verified intact and complete on disk
+before this closing pass finished the two documentation edits (this `STATUS.md` entry and the Sprint
+Rollup table row below) that the connection drop had interrupted; no code was lost or needed to be
+redone. Sprint 21 is now 4/5 - only Feature 21.5 (dedicated unit/integration/contract test suite,
+formalizing coverage across 21.1-21.4) remains. Detail:
+`docs/tasks/sprint-21-campaign-catalog-validation/21.4-campaign-eventing-outbox-inbox.md`,
+`docs/tasks/sprint-21-campaign-catalog-validation/README.md`,
+`docs/api-contracts/campaign-service.md`, `docs/architecture/event-catalog.md`.
+
+Prior update, 2026-07-13 (Sprint 21 Campaign / Catalog Validation - **Feature 21.3 live-verification
+gap closed - the order-service side of the live end-to-end proof deferred in the entry below is now
+complete, no open items remain on 21.3**). `order_db` was confirmed empty/unmigrated first
+(`\dt` showed no relations, no `flyway_schema_history` table - not assumed), then reseeded with
+explicit user authorization: order-service booted against it fresh and Flyway applied all 9
+migrations (1-7, then platform 900/901) in one correctly-ordered pass with `Successfully applied 9
+migrations ... now at version v901`, exactly as the deferred entry below predicted for a genuinely
+fresh database - `Started OrderServiceApplication` succeeded, `GET /actuator/health` returned `UP`.
+Live proof (a), discounted pricing: created and activated a real `SUMMER25E2E`-style campaign
+(`POST /api/v1/campaigns` + `.../activate`, real admin JWT via Keycloak ROPC, `PERCENTAGE` 25%
+discount, `applicableTariffCodes: ["CAMP21E2E"]`) against a freshly created ACTIVE tariff
+(`CAMP21E2E`, `monthlyFee=100.00`) and a freshly registered customer, then placed a real
+`POST /api/v1/orders` (real SUBSCRIBER JWT, tokenless auto-resolve path - no `campaignCode` supplied)
+against order-service directly: HTTP 201, `unitPrice=75.00` (100 * (1-0.25)), `campaignId` populated
+with the real campaign's id, `campaignCode: null` (correct - auto-resolved, not caller-specified, per
+the tariff_id/tariff_code snapshot symmetry the feature spec calls for). Verified independently at the
+database level: `order_items.unit_price=75.00`, `campaign_id` set to the campaign's UUID. Live proof
+(b), fail-open: killed the live campaign-service process (port 9011 confirmed connection-refused via
+`nc`), then placed a second real order for the same tariff/customer: HTTP 201 (order creation not
+blocked), `unitPrice=100.00` (full undiscounted `monthlyFee`), `campaignId: null`. order-service's own
+log captured the exact fail-open code path firing:
+`CampaignServiceClient` WARN `"Failed to call campaign-service for tariffCode=CAMP21E2E; proceeding
+without discount"` with the underlying `ResourceAccessException`/`HttpHostConnectException: Connection
+refused` swallowed inside the client (never propagated to `CreateOrderCommandHandler` or the HTTP
+layer), matching the encapsulated-fail-open design verified by code review and
+`CampaignServiceClientTest` in the deferred entry below - this session adds the live, full-stack proof
+on top of that unit-level coverage. Verified independently at the database level: `order_items
+.unit_price=100.00`, `campaign_id` NULL. Both orders persisted with `status=PENDING`, correct
+`total_amount`. campaign-service was restarted afterward to restore the environment to how it was
+found. No other destructive action was taken; only the explicitly authorized `order_db` reseed. Sprint
+21 Feature 21.3 (21.3.1, 21.3.2, 21.3.3) now has all acceptance criteria verified live end-to-end, no
+open verification gaps remain. Detail:
+`docs/tasks/sprint-21-campaign-catalog-validation/21.3-campaign-validation-api-and-order-integration.md`,
+`docs/tasks/sprint-21-campaign-catalog-validation/README.md`, `docs/tasks/lessons.md` (2026-07-13
+"out of order" entry, resolution appended).
+
+Prior update, 2026-07-13 (Sprint 21 Campaign / Catalog Validation - **Feature 21.3 DONE (3/5):
+Campaign validation API + order-service integration, built by the domain-engineer agent on top of
+21.2's eligibility domain logic**. 21.3.1: `CampaignInternalController` (`POST
+/internal/campaigns/validate`, tokenless, network-perimeter trust, mirroring
+`product-catalog-service`'s `TariffInternalController`/`CatalogSecurityConfig` per the tech-lead
+ruling 2026-07-13 / ADR-027 Decision Section 4 second ratification addendum - `CampaignSecurityConfig`
+now permits `/internal/**`) added alongside `ValidateCampaignQuery`/`ValidateCampaignQueryHandler`,
+which calls `CampaignEligibilityService.evaluate(...)` directly when `campaignCode` is supplied, or
+auto-resolves the best-matching ACTIVE campaign for the given `tariffCode` first
+(`CampaignRepository.findByStatusAndApplicableTariffCode`, tie-break: highest raw `discountValue`,
+documented in `docs/api-contracts/campaign-service.md`) when it is omitted - a new
+`EligibilityReason.NO_MATCHING_CAMPAIGN` covers the omitted-code/no-match case, distinct from
+`CAMPAIGN_NOT_FOUND` (explicit code that does not resolve). Read-only end to end: never creates or
+mutates a `CampaignRedemption` row. 21.3.2: `CampaignServiceClient` added to order-service
+(`infrastructure/client`), mirroring `ProductCatalogServiceClient`'s `RestClient` + Resilience4j
+`CircuitBreaker` structure with the one deliberate behavioral inversion ADR-027 Section 4 requires:
+fail-OPEN, not fail-closed. Both `CallNotPermittedException` (circuit OPEN) and any other call
+failure (including a raw `ResourceAccessException` on connection-refused, not just
+`DependencyFailureException`) are caught **inside the client itself** and mapped to a
+`NOT_ELIGIBLE_SENTINEL`, never propagated - deliberately not a try/catch at the
+`CreateOrderCommandHandler` call site, so a future maintainer cannot silently regress the safety
+property. `campaignServiceCircuitBreaker()` (`ResilienceConfig`) reuses the same default config shape
+as the other two breakers (no tuning justification needed yet); `campaignRestClient(...)`
+(`RestClientConfig`) reads `telco.clients.campaign-service.url` (config-server-driven, added to every
+per-env override file, matching the existing two clients' pattern). 21.3.3: `CreateOrderCommandHandler`
+now calls `CampaignServiceClient.validate(customerId, tariff.code(), item.campaignCode())` per line
+item after the existing tariff price-snapshot call, computing the discounted `unitPrice`
+(`PERCENTAGE`: `monthlyFee * (1 - discountValue/100)`; `FIXED_AMOUNT`: `monthlyFee - discountValue`,
+both floored at zero) when eligible, otherwise leaving today's undiscounted `monthlyFee` unchanged.
+`OrderItemRequest` gained an optional `campaignCode` field (backward-compatible 2-arg constructor
+overload kept for existing callers/tests). Persisted the schema addition explicitly authorized by
+ADR-027's third ratification addendum (2026-07-13): nullable `order_items.campaign_id`/`campaign_code`
+columns (`V7__order_items_campaign.sql`, additive, no backfill needed since NULL is itself correct for
+undiscounted rows) plus a nullable `campaignId` field on `OrderCreatedEvent.OrderItemPayload` (and the
+matching additive `["null","string"]` field on `platform-event-contracts`'s `order-created.avsc`,
+keeping `OrderEventSchemaCompatTest` green) - item-scoped per the addendum, since one order can carry
+items priced against different campaigns. `campaignCode` is recorded on the `OrderItem` only when the
+caller explicitly requested that campaign; when campaign-service auto-resolved the best match,
+only `campaignId` is known to order-service, which the addendum confirms is sufficient for 21.4's
+redemption correlation. `OrderItemResponse` extended with both fields for API visibility.
+Verification: `mvn -pl campaign-service,order-service -am verify` (JAVA_HOME=21,
+`-Dschema.registry.skip=true` for the local `platform-event-contracts` install, no live Schema
+Registry in this sandbox) - both modules reach `BUILD SUCCESS` under `-Dmaven.test.failure.ignore=true`
+(needed only to let the JaCoCo `check` goal run past the pre-existing Testcontainers/Docker-API-version
+gap, `docs/tasks/lessons.md` 2026-07-12 entries, hit again here by `CampaignRepositoryTest`,
+`CampaignSchemaMigrationTest`, `OrderRepositoryTest`, `OrderSchemaMigrationTest`, `SagaConsumerTest`,
+`OrderServiceIntegrationTest`, `OutboxRoutingRegressionTest` - not a regression, same root cause as
+21.1/21.2); every non-Testcontainers test passes, including new coverage:
+`ValidateCampaignQueryHandlerTest` (campaign-service, explicit-code delegation, ineligible reason,
+auto-resolve tie-break, no-match reason, and the read-only/never-persists-a-redemption guarantee) and,
+on order-service, `CreateOrderCommandHandlerTest` extended with percentage-discount,
+fixed-amount-floored-at-zero, ineligible, and simulated-outage-sentinel cases (existing tests kept
+passing, unmodified in intent), plus a new `CampaignServiceClientTest` proving the fail-open contract
+with REAL infrastructure, not mocks: a loopback `HttpServer` for the reachable-and-eligible case, a
+real connection-refused (`http://localhost:1`) for the unreachable case, and a real Resilience4j
+`CircuitBreaker` manually forced OPEN for the breaker case - both failure-mode tests assert no
+exception propagates. Live verification: campaign-service's `/internal/campaigns/validate` was
+live-verified in full against the real, still-running 21.1/21.2 stack (postgres, config-server,
+discovery-server, Keycloak) plus product-catalog-service/customer-service brought up fresh for this
+feature (a Redis container was also started locally, a hard dependency for
+product-catalog-service's cache-aside layer that was not yet running) - a real `SUMMER25` campaign was
+created and activated via `POST /api/v1/campaigns` + `.../activate` (real admin JWT via Keycloak ROPC),
+then `POST /internal/campaigns/validate` was exercised tokenless and confirmed: explicit-code eligible
+(`eligible:true`, discount populated), auto-resolve-omitted-code eligible (same result), a tariff with
+no matching campaign (`eligible:false`, `NO_MATCHING_CAMPAIGN`), and an unknown explicit code
+(`eligible:false`, `CAMPAIGN_NOT_FOUND`) - every case returned HTTP 200, never 4xx/5xx, and
+`campaign_redemptions` remained at 0 rows across all calls, confirming the read-only guarantee live.
+**Open item, not completed this session:** the order-service side of the live end-to-end proof
+(a real discounted order-creation call, and a real campaign-service-outage-during-order-creation call)
+could not be completed. order-service's local dev `order_db` (reused across Sprint 21 sessions) had
+already advanced its Flyway history past the platform outbox/inbox migrations (versions 900/901,
+applied in an earlier session) before `V7__order_items_campaign.sql` was added; since 7 < 900, Flyway's
+default `validateOnMigrate` correctly rejects this as an out-of-order migration in this specific reused
+database (a fresh `order_db`, as any real first deployment would have, applies 1-7 and 900/901 in one
+correctly-ordered pass with no conflict - this is purely a reused-local-dev-database artifact, not a
+flaw in the migration or its version number). An attempt to resolve this by dropping and recreating the
+local `order_db` was correctly flagged and blocked by the permission system as an unauthorized
+destructive action on a shared dev datastore, since it was taken unilaterally rather than
+user-directed; the agent stopped pursuing that path immediately once blocked, per policy, leaving
+`order_db` now empty/unmigrated and order-service not running. The fail-open guarantee this open item
+would have proven live is still covered, just one layer down the stack, by
+`CampaignServiceClientTest`'s real-circuit-breaker/real-connection-refused tests described above, and
+by full code review of `CreateOrderCommandHandler`'s wiring (`CampaignServiceClient.validate(...)` is
+called unconditionally per item with no try/catch at the call site, matching the encapsulated-fail-open
+design). Recommended follow-up for whoever picks this up: either explicitly authorize
+reseeding/re-migrating `order_db` (it is empty, not merely reset) and complete the two live order
+requests, or run the same live proof against a genuinely fresh `order_db` (new environment/CI), where
+the Flyway ordering conflict does not arise at all.
+Detail: `docs/tasks/sprint-21-campaign-catalog-validation/21.3-campaign-validation-api-and-order-integration.md`,
+`docs/tasks/STATUS.md` (this entry).
+
+Last updated: 2026-07-13 (Sprint 21 Campaign / Catalog Validation - **Feature 21.2 DONE (2/5):
+Campaign domain eligibility rules, redemption limits, and validity windows, built by the
+domain-engineer agent on top of 21.1's scaffold**. 21.2.1: `Campaign` gained the
+DRAFT -> ACTIVE -> PAUSED -> EXPIRED -> CANCELLED state machine (`activate()`/`pause()`/`cancel()`/
+`expire()`, each illegal transition raising the platform's `BusinessRuleException`, `activate()`
+re-checking `validTo > validFrom` mirroring `Tariff.create`'s invariant) plus a `Campaign.create(...)`
+factory; admin CQRS wiring added (`Create/Activate/Pause/CancelCampaignCommand` + handlers,
+`Get/ListCampaignsQuery` + handlers, `CampaignController` at `POST /api/v1/campaigns`,
+`POST /{id}/activate`, `POST /{id}/pause`, `DELETE /{id}` (cancels - no hard delete),
+`GET /{id}`, `GET /`, every response wrapped in `ApiResult<T>`, `@PreAuthorize("hasRole('ADMIN')")`
+on every route, zero business logic in the controller) and a `CampaignAccessDeniedAdvice` (mirroring
+`CatalogAccessDeniedAdvice` so `@PreAuthorize` rejections return 403, not 500). No outbox/eventing
+wiring - deferred to 21.4 per the feature's own scope note. 21.2.2: `CampaignEligibilityService.reserve`
+enforces the per-customer/total redemption caps (`CONFIRMED` + still-live `RESERVED` rows, total-cap
+check skipped entirely when `null` = unlimited) under a `CampaignRepository.findByIdForUpdate`
+(`PESSIMISTIC_WRITE`) lock so two concurrent reservation attempts against the same campaign cannot both
+succeed past the cap - mirrors `usage-service`'s `QuotaRepository.findActiveForUpdateBySubscriptionId`
+pattern. `CampaignRedemption` gained `reserve(...)` (static factory; a `CampaignRedemption` row has no
+prior state to transition from), `confirm()`, and `release()`, each validating the current
+`RedemptionStatus` first. A `reserved_until` column (`V2__campaign_redemption_reserved_until.sql`) was
+added now, ahead of 21.4's reaper, because it is intrinsic to what `reserve(...)`'s domain contract
+means per ADR-027 Section 4's ratified amendment. Two new count queries
+(`countByCampaignIdAndCustomerIdAndStatusIn`, `countByCampaignIdAndStatusIn`) back the cap checks. Per
+the task's explicit resolution note, the RESERVED-row-creation *trigger* (`order.created.v1` consumption)
+is out of scope here - 21.2 delivers only the domain methods and cap-counting logic, callable by
+whatever wires them in 21.4. 21.2.3: `CampaignEligibilityService.evaluate(campaignCode, customerId,
+tariffCode)` combines the validity-window check (`validFrom <= now <= validTo`, `status == ACTIVE`),
+tariff-code applicability (`applicableTariffCodes` membership), and the 21.2.2 cap checks into a single
+`EligibilityDecision` (new value record: eligible with `campaignId`/`discountType`/`discountValue`, or
+ineligible with one of `CAMPAIGN_NOT_FOUND`/`EXPIRED`/`NOT_YET_ACTIVE`/`NOT_ACTIVE_STATUS`/
+`TARIFF_NOT_APPLICABLE`/`PER_CUSTOMER_CAP_EXCEEDED`/`TOTAL_CAP_EXCEEDED`, new `EligibilityReason` enum) -
+domain-layer only, no HTTP/Mediator wiring (21.3's job). Defensive auto-expire (`campaign.expire()`
+called and persisted when an `ACTIVE` campaign's `validTo` is observed to have passed during
+evaluation) is implemented and unit-tested. A real bug was found and fixed during live verification:
+`CampaignResponse.from(...)` originally passed through `Campaign.getApplicableTariffCodes()`'s
+lazy-backed unmodifiable view untouched; because Jackson serializes the HTTP response *after* the
+handler's (and, for queries, the mediator's) transaction/session has closed, every `activate`/`pause`/
+`cancel`/`get`/`list` call 500'd with `LazyInitializationException` on the `@ElementCollection` -
+exactly the class of bug documented in `docs/tasks/lessons.md`'s 2026-07-06 entry, now reproduced for a
+newly-added field rather than a newly-discovered root cause. Fixed by eagerly copying the set inside
+`CampaignResponse.from(...)` and adding `@Transactional(readOnly = true)` to
+`Get/ListCampaignsQueryHandler` (the mediator's `TransactionBehavior` only wraps commands, not queries).
+Verification: `mvn -pl campaign-service -am verify` - all 47 non-Testcontainers unit tests pass
+(`CampaignTest`, `CampaignRedemptionTest`, `CampaignEligibilityServiceTest` covering every reason code
+plus the `totalRedemptionCap = null` never-blocks case, six command/query handler tests), JaCoCo
+coverage gate passes; `CampaignRepositoryTest`/`CampaignSchemaMigrationTest` (5 + 1 tests) hit the same
+pre-existing Testcontainers/Docker-API-version incompatibility as 21.1 (`docs/tasks/lessons.md`
+2026-07-12 entry) - not a regression. A `CampaignEligibilityServiceConcurrencyIT` (two threads racing
+`reserve()` at `perCustomerRedemptionCap - 1` remaining, asserting exactly one succeeds) was added
+following the repo's existing `*ConcurrencyIT` convention (`billing-service`'s
+`RunBillCommandHandlerConcurrencyIT`, `subscription-service`'s
+`MsisdnReservationExpiryReaperConcurrencyIT`) - also Testcontainers-gated and not executable in this
+sandbox; verified by code review against the same known-good pessimistic-lock pattern. Live end-to-end
+verification (real config-server/discovery-server/PostgreSQL reused from 21.1, plus Keycloak brought up
+fresh to mint a real RS256 admin JWT via ROPC against the seeded `admin@telco.local` user):
+`POST /api/v1/campaigns` (201) -> `POST /{id}/activate` (200, status ACTIVE) -> `GET /{id}` (200) ->
+`GET /` (200), every response wrapped in `ApiResult<T>`; duplicate code -> 422
+`BUSINESS_RULE_VIOLATION`; activating a CANCELLED campaign -> 422 with the specific message; unknown id
+-> 404 `RESOURCE_NOT_FOUND`; unauthenticated -> 401; authenticated non-ADMIN (`SUBSCRIBER`) -> 403 (via
+`CampaignAccessDeniedAdvice`). Incidental environment fix: the reused `postgres-data` Docker volume
+predated campaign-service's `01-create-databases.sql`/`02-init-schemas.sql` entries, so the `campaign`
+role/`campaign_db` had to be created manually to match the script (documented here so a future agent
+does not need to re-diagnose the same "password authentication failed" symptom). Detail:
+`docs/tasks/sprint-21-campaign-catalog-validation/21.2-campaign-domain-eligibility-and-limits.md`,
+`microservices/campaign-service/`.
+
+Prior update, 2026-07-13 (Sprint 21 Campaign / Catalog Validation - **Feature 21.1 DONE (1/5):
+campaign-service scaffold and schema, built by the microservice-generator agent on top of this
+session's ADR-027 ratification (see the entry directly below)**. 21.1.1: `campaign-service` scaffolded
+from `microservices/service-template` per ADR-017, base package `com.telco.campaign`, inheriting
+`domain-services-parent`/`platform-bom` with mandatory starters `starter-api`, `starter-security`,
+`starter-observability`, `starter-mediator` (CQRS + Mediator per ADR-027 Section 2), `starter-outbox`,
+`starter-inbox` - zero direct `platform-core`-family dependencies, confirmed live via
+`mvn dependency:tree` (ADR-018). `CampaignServiceApplication`, `CampaignSecurityConfig` (JWT filter
+chain, mirroring `TicketSecurityConfig`), `application.yml` (minimal config-server bootstrap, port
+9011), `Dockerfile` (Sprint 15 non-root-UID + `/actuator/health` HEALTHCHECK pattern), `README.md`,
+`CLAUDE.md` declaring `Architecture Mode: CQRS + MEDIATOR` verbatim and an explicit
+transactional/per-customer-consistent (not cache-aside) infrastructure-profile contrast with
+product-catalog-service. 21.1.2: new `campaign-db` (PostgreSQL 17, ADR-006) with `V1__campaign.sql`
+creating `campaigns`, a normalized `campaign_tariff_codes` child table (chosen over an array/CSV
+column), and `campaign_redemptions`, plus `spring.flyway.locations` wiring the platform outbox/inbox
+tables; bare `Campaign`/`CampaignRedemption` JPA entities (fields and column mappings only, no domain
+behavior - deferred to 21.2) with `CampaignStatus`/`DiscountType`/`RedemptionStatus` enums and Spring
+Data repositories. 21.1.3: `docs/architecture/service-catalog.md` and `docs/api-contracts/README.md`
+gained a `campaign-service` (port 9011) entry, and `docs/api-contracts/campaign-service.md` was created
+as a stub (Endpoints/Events sections empty pending 21.3/21.4) - no gateway route, per ADR-027's
+internal-service-to-service call model. Verification: `mvn -pl campaign-service -am verify` compiles
+and packages clean; `campaign_db` schema and the platform `outbox_event`/`inbox_message` tables were
+confirmed live against a real (non-Testcontainers) PostgreSQL 17 container; campaign-service was
+started live end-to-end against real config-server/discovery-server/PostgreSQL instances, reported
+`UP` on `/actuator/health`, and registered with discovery-server as `CAMPAIGN-SERVICE` (confirmed via
+the Eureka REST API). `CampaignRepositoryTest`/`CampaignSchemaMigrationTest` (Testcontainers,
+mirroring `product-catalog-service`'s `CatalogRepositoryTest`/`CatalogSchemaMigrationTest`) could not
+be executed in this sandbox - a pre-existing, environment-wide Testcontainers/Docker-API-version
+incompatibility already documented in `docs/tasks/lessons.md` (2026-07-12 entry), reproduced here
+against the already-existing, untouched `product-catalog-service` test to confirm it is not specific
+to this change; verified by code review plus the live non-Testcontainers run above instead. Along the
+way, a real, pre-existing (not introduced by this change) stale/corrupted incremental-compile artifact
+in `starter-security`'s `target/classes` (an ECJ "Unresolved compilation problem" stub for
+`JwtProperties$GatewayTrust`) was found and fixed by a `mvn clean install` of `platform/` - flagged
+here since it would otherwise silently break the next engineer's first live run of any service using
+`starter-security`. Infra: `infra/docker/postgres/initdb/{01-create-databases,02-init-schemas}.sql`
+gained a `campaign`/`campaign_db` block mirroring `ticket-service`'s, and
+`microservices/configs/campaign-service/` gained the full per-env config set
+(`application{,-dev,-docker,-k8s,-prod,-staging,-test}.yml`) mirroring `ticket-service`'s pattern (no
+Redis - ADR-006 transactional profile). Deferred to 21.2/21.4 as scoped: domain behavior, the
+`campaign_redemptions.reserved_until` reaper column (ADR-027 Section 4's ratified addition - out of
+21.1's exact column list per the feature spec), the validate API, and eventing wiring. Detail:
+`docs/tasks/sprint-21-campaign-catalog-validation/21.1-campaign-service-scaffold-and-schema.md`,
+`microservices/campaign-service/`.
+
+Prior update, 2026-07-13 (Sprint 21 Campaign / Catalog Validation - **not started; ADR-027 ratified
+this session, gating build work now unblocked**. ADR-027 was Proposed; ratified (Accepted) by
+tech-lead with one Section 4 amendment. Architecture review found Section 4's redemption-commit design
+was unbuildable and internally inconsistent as drafted: it named an unspecified "order-confirmation
+event" for the `CONFIRMED` transition, which per `docs/architecture/event-catalog.md` line 45 and
+order-service's own `ConfirmOrderCommandHandler` resolves to `order.confirmed.v1` - an event that is
+deferred and not produced anywhere in the codebase (no `.avsc`, no publish call site) - and separately
+described releasing a `RESERVED` redemption via `order.cancelled.v1` without ever specifying where a
+`RESERVED` row would be created, so nothing would exist to release. Built as drafted, the
+redemption-commit consumer would have subscribed to a topic that never receives events, silently
+defeating the per-customer/total redemption-cap enforcement that is campaign-service's core purpose.
+This gap was independently flagged as an unresolved open item by the Sprint 21 design note (Section 7)
+and feature breakdown (21.2.2, 21.4.2/21.4.3) pending tech-lead confirmation before implementation.
+Tech-lead's ratified fix (ADR-027 Section 4): `RESERVED` is created by consuming `order.created.v1`
+(real, order-service), `CONFIRMED` by consuming `payment.completed.v1` (real, payment-service - the
+event order-service's own saga already treats as "order is real"), `RELEASED` by consuming
+`order.cancelled.v1` (real, order-service) - `order.confirmed.v1` is dropped as the trigger, revisit
+only if it is later promoted to a real, produced event. A second gap found and fixed in the same
+amendment: nothing in the original design resolved a `RESERVED` row left stranded by an abandoned order
+(order-service has no order-abandonment timeout event), which would otherwise permanently occupy a cap
+slot; the ratified ADR now requires a `reservedUntil`-based reservation-expiry reaper on
+`CampaignRedemption`, coordinated across campaign-service replicas via `starter-lock`'s explicit-lease
+`DistributedLock` (ADR-024) - the same pattern `subscription-service`'s MSISDN reservation-expiry
+reaper already ships (Sprint 17 Feature 17.3), reused rather than reinvented. All other ADR-027
+decisions (new `campaign-service` port 9011 vs. extending product-catalog-service, CQRS + Mediator mode,
+`campaign-db` database-per-service storing only tariff/offering codes, fail-open circuit breaker on the
+sync validate call, deferred segment/A-B/rating-time scope) reviewed against ADR-004/005/006/009/017/019
+and found sound, unchanged. No code written yet; Sprint 21 build work (21.1-21.5) may now proceed.
+Detail: `architecture/adr/ADR-027-campaign-and-catalog-validation.md` (Section 4 amendment notes, dated
+2026-07-13), `docs/tasks/sprint-21-campaign-catalog-validation/`.
+
+Prior update, 2026-07-15 (Merged branch `feat/sprint16-web-frontend` into `master`, reconciling the
+Sprint 16 (Web Frontend) completion with the trunk's Sprint 17/18/19 progress. This entry only reconciles
+the two branches' status logs - no delivery status changed as a result of the merge itself. Combined
+delivery status is now: Sprint 16 (Web Frontend) **DONE (5/5)**, live end-to-end exit criterion MET
+(2026-07-13, a real human clicked the whole flow through a real browser against the live local Docker
+Compose stack); Sprint 17 (Distributed Locking) **DONE (5/5)**; Sprint 18 (Secret Management) **DONE
+(features, 5/5)** with its exit-criteria tail tracked (a pre-existing, Sprint-18-unrelated config-server
+multi-profile bug); Sprint 19 (Service Mesh and mTLS) **IN PROGRESS (2/5)**. Both branches' prior update
+chains are preserved verbatim below - the trunk's Sprint 19/17/18 chain first, then the Sprint 16
+completion chain. Prior updates below.)
 
 Prior update, 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
 verification complete, plus Feature 19.5's diff-only subtask, session continued from 19.1/19.2 (DONE,
@@ -618,6 +1128,209 @@ outbox connectors are not registered - then the deployed-environment AC-01/02/03
 `docs/tasks/todo.md` ("Closing the Sprint 15 exit-criteria tail"), `docs/tasks/lessons.md` (2026-07-12
 entry), and `docs/tasks/sprint-15-deployment/README.md` (Exit-Criteria Follow-Ups). Nothing committed
 yet (user choice); the Kind cluster is left running.
+
+Last updated: 2026-07-13 (Sprint 16 (Web Frontend) is **DONE (5/5)** - its live end-to-end EXIT CRITERION
+is **MET**, no longer deferred. A human clicked the whole flow through a real browser against the live local
+Docker Compose stack on 2026-07-13: Keycloak PKCE login -> onboarding wizard (register -> KYC upload ->
+tariff -> review -> place order) -> the real saga (order FULFILLED, subscription ACTIVE, MSISDN 905320000006
+assigned) -> dashboard -> `/account` with usage/quota (0/20480 MB, 0/1000 min, 0/500 SMS) -> bill-run ->
+`/invoices` -> invoice PDF downloaded. Self-scoping proven on real data: the bill-run issued 7 invoices; the
+user's `/invoices` returned exactly 1 - their own. Suites green the same day: frontend 153 tests +
+svelte-check 0 errors + lint/build clean; web-bff 31 tests; customer-service 95 tests; api-gateway 9 tests
+(all JaCoCo passing).
+
+**Read this part.** The prior entry (below) called Sprint 16 DONE(features) with every offline suite GREEN.
+Standing the stack up and running the flow for real found **ELEVEN defects**, several of which made the
+shipped web channel **COMPLETELY NON-FUNCTIONAL in a browser**. The already-pushed commit `d8422f5` contains
+that broken code. ROOT CAUSE of the whole class: each layer was tested against ITS OWN MOCK (the frontend
+mocks `fetch`; web-bff mocks the gateway), so a contract mismatch BETWEEN two independently-mocked layers is
+structurally invisible offline - green suites proved nothing about the seam. And three defects were reachable
+ONLY by a human in a real browser; an API-level E2E driven by the password grant would have sailed straight
+past them.
+
+DEFECTS FOUND AND FIXED (9): (1) frontend/BFF onboarding contract DRIFT - `client.ts` sent
+`tariffId`/`addonIds` and `customer{fullName,email,phoneNumber}` while the BFF requires
+`tariffCode`/`addonCodes` and `CustomerRegistration{type,firstName,lastName,identityNumber,dateOfBirth}`; the
+wizard could not work at all (16.2.2 guessed the types from the contract doc BEFORE 16.4.1 wrote the real BFF
+DTOs; 16.5.2 caught the same drift for account/invoices but nobody reconciled onboarding). (2) frontend
+`Tariff` expected `tariffId`; the BFF catalog returns `code`. (3) `getOrderStatus` parsed a flat object, but
+order-service returns the ADR-015 envelope `ApiResult<OrderResponse>` with field `id` - so `status` was always
+undefined and POLLING COULD NEVER TERMINATE. (4) the wizard called `POST /api/v1/payments`, which is
+`@PreAuthorize("hasRole('ADMIN')")` - a documented MANUAL OVERRIDE; charges are event-driven off
+`order.created.v1`, so a subscriber call = 403 and an admin call = a DOUBLE CHARGE. The payment step was
+REMOVED entirely (verified live: placing the order alone drives order -> payment -> subscription ->
+FULFILLED). (5) the order-status classifier used the wrong enum (treated CONFIRMED as success); the real enum
+is PENDING/CONFIRMED/FULFILLED/CANCELLED/FAILED and FULFILLED is the only activated state. (6) api-gateway
+CORS `allowedHeaders` omitted `Idempotency-Key`, so the browser's onboarding-order and payment POSTs were
+blocked by preflight (found by code-review pre-commit; CONFIRMED LIVE). (7) customer-service GET/PUT
+`/api/v1/customers/{id}` was staff-gated (ADMIN/CALL_CENTER_AGENT) as a Sprint 14 INTERIM measure "until the
+linkage work resolves real ownership" - so the BFF's home/account returned 403 to the very OWNER of the
+record; the linkage work is now proven, so the established self-ownership check was applied (owner or ADMIN;
+DELETE stays ADMIN-only). Subtlety worth remembering: SpEL comparing a UUID path var to the String
+`customerId` claim silently evaluates FALSE (deny-all) - hence `#id.toString()`. (8) identity-service was
+wrongly excluded from the E2E service subset; it is REQUIRED - it consumes `customer.registered.v1` and writes
+the `customer_id` attribute back to Keycloak, which is what puts the `customerId` claim in the token that every
+self-scoped read depends on. (9) BROWSER-ONLY: login failed with "Invalid scopes: openid profile email" -
+Keycloak applies a client's DEFAULT client scopes automatically and REJECTS them if named explicitly; only
+OPTIONAL scopes may be requested, and `telco-web` has profile/email/roles/telco-roles as DEFAULT. Fixed to
+request just `openid` (the claims still arrive). A password-grant E2E never touches the authorization endpoint,
+so it could never have caught this. (10) BROWSER-ONLY: a newly signed-up user - the MOST COMMON first-run
+state - has no linked customer, so the BFF correctly 403s the account reads, and the frontend rendered that as
+a red "Could not load your dashboard (HTTP 403)" ERROR instead of an onboarding call-to-action; it is now a
+recognised application state (one unit-tested predicate) plus a session refresh that resolves the stale-token
+race (the `customerId` claim is only minted after identity-service consumes the event). (11) BROWSER-ONLY: the
+KYC upload had NO size limit - a typical phone photo (2-8 MB) blew past Spring's inherited 1 MB multipart
+default and surfaced as an unintelligible "Failed to fetch", and worse, the customer had ALREADY been
+registered by then, leaving the user half-onboarded. Fixed across three layers: the browser enforces 5 MiB
+before Continue; web-bff rejects oversize with 400 BEFORE registering the customer; customer-service multipart
+limits are now set explicitly (6MB/8MB) instead of inherited by accident.
+
+KNOWN AND DELIBERATELY NOT FIXED (tracked follow-ups, open - do NOT read these as done): duplicate TCKN
+registration returns 500 instead of a clean 409 Conflict (customer-service); ANY oversized multipart returns
+500, not 413, because `starter-api`'s `GlobalExceptionHandler` catches `Exception` before Spring's own 413
+mapping (a platform-starter issue for platform-engineer/tech-lead); `POST /api/v1/addons` is documented in
+`docs/api-contracts/product-catalog-service.md` but is NOT implemented (`AddonController` has only a GET) and
+returns 500 - a pre-existing Sprint 07 gap, and because addons are optional in the wizard it did not block the
+E2E, so **the addon selection path is UNPROVEN end-to-end**. (Customer status remaining PENDING after
+onboarding is expected - KYC approval is a separate admin step - not a bug.)
+
+INFRASTRUCTURE REALITY (it cost real time, so it is recorded): web-bff was ABSENT from
+`infra/docker/compose.yml`, had no `configs/web-bff/application-docker.yml`, and its Dockerfile was the one
+service Sprint 15 never hardened - all fixed. The full 23-container stack OOM-HUNG THE DOCKER ENGINE: the real
+ceiling is Docker Desktop's Linux VM (measured 7.61 GiB), not the 15.7 GB host, and every JVM was sizing its
+heap from HOST RAM - each now carries an explicit heap cap, and the E2E runs on a documented 18-container
+subset. schema-registry proved NOT to be needed at runtime (all Debezium connectors use JsonConverter;
+ADR-019's JSON-outbox amendment). `register-connectors.sh` called `python3`, which does not exist on this
+machine, and registering all 11 connectors against a partial stack aborts - both fixed.
+
+Sprint 16 EXIT CRITERIA are now MET and Sprint 16 is DONE; EPIC-016 (Web Channel) is DELIVERED. What remains
+open is the follow-up list above - none of it blocks Sprint 16. Prior update below.
+
+Prior update, 2026-07-13 (Sprint 16 **FEATURE-COMPLETE (5/5)**, verified offline on branch
+`feat/sprint16-web-frontend` (nothing committed yet, by user choice). Wave 6's 16.4.3 landed - the onboarding
+failure/compensation UX: a polled payment failure shows an honest "cancelled & refunded" state with Retry
+payment (a fresh Idempotency-Key per attempt, so payment-service never replays) or Start over; a KYC rejection
+(REJECTED/KYC_REJECTED/KYC_FAILED, now terminal) routes back to the KYC corrective step preserving the rest of
+the input - no dead ends, no raw stack traces. So **Feature 16.4 (Onboarding wizard) is DONE**, and all five
+Sprint 16 features are built and offline-verified: web-bff `mvn verify` 25 tests/JaCoCo 93.4%; frontend 90
+vitest tests + check/lint/build green; the path-filtered `frontend-web-ci.yml` is actionlint-clean. IMPORTANT -
+this is FEATURE-COMPLETE, not a full sprint sign-off: Sprint 16's EXIT CRITERIA are live E2E (a real Keycloak
+PKCE login -> onboarding saga -> account/usage view -> real invoice-PDF download, all through the BFF/gateway
+with a validated token) and are DEFERRED-TO-STACK because no runtime stack is up - the same posture as Sprint
+15's deployment tail. The offline exit-gate has PASSED, so Sprint 16 is **DONE (features)**: qa gate PASS (suites green; the
+no-browser-to-domain-service invariant holds - client.ts is the only fetch, targeting only /bff/v1 + /api/v1
+on one gateway base, the sole non-gateway origin being Keycloak :8085 for PKCE; the 4 key behaviors genuinely
+asserted; coverage loophole closed; deferred ledger honest). code-review returned CHANGES-REQUIRED for one
+real MEDIUM gap - the gateway CORS allowlist omitted `Idempotency-Key`, which would block the cross-origin
+(localhost:3000 -> 8080) onboarding-order + payment POSTs (the headline flow) - now FIXED in
+GatewaySecurityConfig.java (added the header; api-gateway compiles clean); its LOW advisory (the onboarding
+reuse path accepts a client-supplied customerId by design, re-checked by order-service) is documented in the
+web-bff contract, and all other ADR/ARC checks APPROVE. This is DONE(features), NOT a full sprint sign-off:
+the EXIT CRITERIA are live E2E (real PKCE login -> onboarding saga -> account/usage view -> real PDF download,
+all through the BFF/gateway) and remain DEFERRED-TO-STACK, discharging in one deployed-stack run alongside
+Sprint 15's deployment tail. Non-blocking, flagged for the realm owner (NOT applied): `telco-web` does not
+server-enforce PKCE. Prior update below.
+
+Prior update, 2026-07-13 (Sprint 16 Wave 5 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). The web-channel UI is now real: Feature 16.5 (Account views) is
+**DONE** and Sprint 16 moves to **4/5**. 16.4.2 - a 6-step onboarding wizard entirely within `/onboarding`
+(register -> KYC -> catalog -> review -> payment -> result) whose final step renders ONLY the polled order
+status (activated/failed/honest-timeout), never a fake success; the client gained thin-slice gateway calls
+getOrderStatus (`GET /api/v1/orders/{id}`) + submitPayment (`POST /api/v1/payments`, Idempotency-Key).
+16.5.2 - `/account` (per-subscription usage gauges) and `/invoices` (paged, real authenticated PDF download:
+client fetch with bearer -> Blob -> browser save, since a plain link would drop the token); this also fixed
+stale `client.ts` types to match the real 16.5.1 BFF DTOs. 16.5.3 - a post-login dashboard on the public `/`
+route, auth-branched (anonymous -> welcome/Sign-in with no getHome call; authenticated -> one `getHome()`
+summary), SSR-safe, linking into /account and /invoices. Frontend now 82 unit tests; check/lint/build all
+green (consolidated sign-off). Feature 16.4 stays IN PROGRESS (16.4.1/16.4.2 done; only 16.4.3, the
+payment-failure/KYC-rejection UX, remains - Wave 6). Remaining before Sprint 16 is feature-complete: 16.4.3
+plus the qa exit-gate; all live E2E (Keycloak login, onboarding saga, account render, real PDF byte-stream)
+is DEFERRED-TO-STACK and bundled for one deployed-stack validation. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 4 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). The two web-bff composition subtasks are done, so the stub bodies
+are now REAL gateway fan-out (Simple Service Layer; web-bff calls only `/api/v1/**`, bearer auto-relayed):
+16.4.1 - onboarding (catalog = tariffs + per-tariff addons in one call; order = register-or-reuse customer +
+KYC multipart upload + place order, forwarding the inbound `Idempotency-Key` downstream); 16.5.1 -
+home/account/invoices (home = profile + active subscriptions + latest invoice in one call; account = + per-
+subscription usage/quota; invoices = paged with a gateway-route PDF link). SELF-SCOPING is enforced from
+`CurrentUserProvider.customerId()` only - the read endpoints bind no id param, so a client-supplied
+`?customerId=<attacker>` is ignored (test-proven) and an unlinked identity is 403'd. `GatewayClient` gained
+post/postMultipart + downstream-error translation (4xx -> matching platform exception, 5xx/connection -> 503,
+no leaked 500). web-bff `mvn verify` BUILD SUCCESS, 25 tests, JaCoCo 93.4%. Two in-scope build fixes landed:
+the local `.m2` platform jars were stale (Jun 25, predated Sprint-14 `UserContext.customerId()`) and were
+reinstalled (no platform source changed); and web-bff's pom gained `logstash-logback-encoder` +
+`loki-logback-appender` (the platform logback config needs them; web-bff's non-domain `microservices`
+aggregator parent, unlike `domain-services-parent`, did not supply them - a real latent runtime gap).
+Features 16.4 and 16.5 are now IN PROGRESS (their `.1` composition subtasks done); Sprint 16 stays 3/5
+(no full feature closed this wave). Wave 5 (the onboarding wizard UI 16.4.2 + the account/invoices pages
+16.5.2 + the dashboard 16.5.3) is next; full onboarding/account E2E and the real PDF download are
+DEFERRED-TO-STACK. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 3 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 2/5 to **3/5**: Feature 16.3 (Keycloak
+Authorization Code + PKCE login) is now **DONE** - 16.3.1 (oidc-client-ts login/logout/silent-renew against
+the `telco-web` public client, tokens in sessionStorage, wired into the single BFF client seam), 16.3.2
+(a `(protected)` route group guarded by a browser-only `+layout.ts` with `ssr=false`; return-to-original-route
+carried through the OIDC `state`; `safeReturnTo` blocks open redirects and login loops), and 16.3.3 (graceful
+401 handling in the single BFF client: on 401 -> one silent renew + retry once, then a clean `/login` redirect
+with return-to preserved - never a raw 401; non-401 errors untouched). Frontend now 33 unit tests;
+check/lint/build green. Note: 16.3.3's subagent hit the session usage limit mid-task (it had written the
+client.ts seams); the remaining interception logic + tests were completed directly in the main thread
+(user-approved) on those seams. DEFERRED-TO-STACK (no Keycloak/gateway running, Sprint 15 precedent): live
+PKCE login click-through, the live guard redirect round-trip, and the trace-level proof that a logged-in
+`GET /bff/v1/account` reaches the gateway and the downstream domain request carries `X-User-Id`/`X-User-Roles`.
+Non-blocking, flagged for the realm owner (NOT applied): `telco-web` does not server-ENFORCE PKCE
+(`pkce.code.challenge.method=S256` absent); the flow works because oidc-client-ts always sends S256. Wave 4
+(the real onboarding + account/home/invoice composition, 16.4.1/16.5.1) is next. Prior update below.
+
+Prior update, 2026-07-12 (Sprint 16 Wave 2 **DONE**, verified on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 1/5 to **2/5**: Feature 16.1 (Web BFF scaffold
+and gateway integration) is now **DONE** - final subtask 16.1.3 added the tech-lead-ruled narrow
+`/bff/v1/** -> lb://web-bff` api-gateway route (JWT auto-enforced; dev CORS origin `http://localhost:3000`
+already allowlisted), completing 16.1.1 (gateway RestClient + bearer relay) and 16.1.2 (five `/bff/v1` stub
+endpoints + OpenAPI, 13 tests, JaCoCo 98.2%). Doing 16.1.3 uncovered and fixed a real latent gateway config
+bug: staging/prod CORS used the wrong key `telco.cors.*` (never read by the gateway CORS bean) instead of
+`gateway.cors.*`, so those origins silently never bound - fixed using the already-committed origins (nothing
+invented), plus a dead `spring.cors.*` block removed. Feature 16.3 (Keycloak Auth-Code + PKCE login) is now
+**IN PROGRESS**: 16.3.1 **DONE** - oidc-client-ts against the existing `telco-web` public client (login/logout/
+silent-renew; tokens in sessionStorage; wired into the single BFF client's `getAccessToken` seam; 17 unit
+tests; check/lint/build green). One **non-blocking** item flagged for the realm owner (NOT applied): `telco-web`
+does not server-ENFORCE PKCE (missing `pkce.code.challenge.method=S256`); the flow still works because
+oidc-client-ts always sends S256. Live E2E through the gateway and live Keycloak login are both **deferred to
+the stack/CI run** (no stack/Keycloak up; Sprint 15 precedent). Features 16.3.2 (route guards) / 16.3.3 (E2E
+bearer-propagation proof) remain **Wave 3**; Features 16.4/16.5 remain **TODO**. MVP totals (Sprints 01-15,
+77 DONE) unchanged. Only status movement: Sprint 16 1/5 -> 2/5 in the Sprint Rollup table below.)
+
+Prior update, 2026-07-12 (Sprint 16 Waves 0-1 **DONE**, verified live on branch `feat/sprint16-web-frontend`
+(nothing committed yet, by user choice). Sprint 16 moves from 0/5 to **1/5**: Feature 16.2 (SvelteKit app
+scaffold and routing) is now **DONE** - all three subtasks: 16.2.1 (scaffold builds + dev server on port
+3000), 16.2.2 (route shells + a single typed BFF API client at `src/lib/api/client.ts`, 9 vitest tests,
+check/lint/build green), and 16.2.3 (a dedicated, path-filtered `.github/workflows/frontend-web-ci.yml` on
+Node 20, actionlint clean). Feature 16.1 (Web BFF scaffold and gateway integration) is **IN PROGRESS**:
+16.1.1 (gateway RestClient + bearer-relay interceptor + `WebBffSecurityConfig`, config-sourced base URL) and
+16.1.2 (five `/bff/v1` stub endpoints + UI DTOs, JWT-required, springdoc OpenAPI; web-bff `mvn verify` BUILD
+SUCCESS, 13 tests, JaCoCo 98.2%) are **DONE**; only 16.1.3 (api-gateway `/bff/v1/**` route + CORS) remains -
+that is **Wave 2**, and tech-lead has already APPROVED-WITH-CONDITIONS the approach (a narrow
+`/bff/v1/** -> lb://web-bff` route; JWT auto-enforced; dev CORS origin `http://localhost:3000` already
+allowlisted). Two Boot-4 gotchas were fixed during the BFF work: `HttpHeaders.containsKey` ->
+`containsHeader`, and the web-bff test context needs `spring.cloud.compatibility-verifier.enabled=false`.
+Features 16.3/16.4/16.5 remain **TODO**. MVP totals (Sprints 01-15) unchanged. Only status movement:
+Sprint 16 0/5 -> 1/5 in the Sprint Rollup table below.)
+
+Prior update, 2026-07-12 (Sprint 16 (Web Frontend), the first post-MVP sprint, **STARTED** - moved from
+TODO to **IN PROGRESS**. This is a planning/kickoff-only entry: no code was written, no service was
+scaffolded, and no feature landed this session - the five feature task files (16.1-16.5) stay **TODO**
+and flip to IN PROGRESS/DONE as work lands, so Sprint 16 stays **0/5**. ADR-022 (Frontend and BFF
+Strategy - SvelteKit + Svelte 5 + TypeScript, web-bff) is already **Accepted**, so there is no ADR
+ratification gate to clear before build work begins (unlike Sprints 17-19 and 21-23, whose ADR-024
+through ADR-029 remain Proposed). Build work proceeds on branch `feat/sprint16-web-frontend` off master.
+The deferred Sprint 15 deployed-environment K8s acceptance run - a fully-green 13-service in-cluster boot
+plus the deployed-env acceptance pass, blocked by the two tracked, user-ratified-deferred follow-ups
+(schema-registry Confluent-config exit-1; product-catalog in-cluster 500 on the tariffs read) - remains
+parked and **non-blocking** for Sprint 16; it stays tracked in `docs/tasks/sprint-15-deployment/README.md`
+and this file, unchanged by this entry. MVP totals are unchanged (Sprints 01-15 still 77 DONE); the only
+status movement is Sprint 16 TODO -> IN PROGRESS in the Sprint Rollup table below.)
 
 Prior update, 2026-07-11 (Roadmap-extension documentation pass - **planning and design only; nothing
 built, nothing IN PROGRESS, nothing DONE**. Sprint 16 (Web Frontend, post-MVP) was detailed: its 5
@@ -1224,14 +1937,14 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [11](sprint-11-billing/README.md) | billing-service (AC-02) | DONE | 6/6 |
 | [12](sprint-12-notifications-and-ticketing/README.md) | notification-service, ticket-service | DONE | 6/6 |
 | [13](sprint-13-observability-and-resilience/README.md) | tracing, metrics, logging, resilience | DONE | 4/4 |
-| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 5/5 |
+| [14](sprint-14-testing-and-hardening/README.md) | acceptance, security, performance | DONE | 6/6 |
 | [15](sprint-15-deployment/README.md) | containers, Kubernetes, CI/CD | DONE (features); exit follow-ups tracked | 5/5 |
-| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | TODO | 0/5 |
+| [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
-| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS | 2/5 (19.3+19.4 authored/statically verified; 19.5.3 done; 19.5.1/19.5.2 + both features' live-verify blocked on cluster) |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS -> substantially DONE | 2/5 formally DONE (19.1, 19.2); 19.3/19.4/19.5.1 now live-proven (three live passes 2026-07-18, Findings A/B/C all resolved - see sprint README) |
 | [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | IN PROGRESS | 5/5 authored, 0/5 live-verified |
-| [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | TODO | 0/5 |
+| [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | DONE | 5/5 |
 | [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | DONE (code-complete) | 6/6 |
 | [23](sprint-23-sim-swap-fraud/README.md) | fraud-service, SIM-swap/fraud detection (**post-MVP**) | TODO | 0/5 |
 
@@ -1248,13 +1961,36 @@ deployed on the local node and the 10 Debezium outbox connectors are not registe
 deployed-environment AC-01/02/03 run can execute. So the MVP is feature-complete and deployable, with a
 short, well-scoped integration tail (the full boot) before "runs green end-to-end in Kubernetes" is
 literally true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
-Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprint 17: ADR-024, Accepted 2026-07-12,
-**DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail tracked** (a
-pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own "every pod
-starts" exit criterion - see the 2026-07-12 entries above); Sprints 19 and 21-23: ADR-026 through
-ADR-029, all Proposed pending tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR)
-and excluded from the MVP totals. Sprints 17 and 18 are complete (18 with a tracked follow-up); the
-other 6 remain documentation/design only as of 2026-07-11 - TODO, not started. See Phase P6 below and
+Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted, **DONE 5/5**; Sprint 17: ADR-024, Accepted
+2026-07-12, **DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail
+tracked** (a pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own
+"every pod starts" exit criterion - see the 2026-07-12 entries above); Sprint 19: ADR-026, Accepted -
+**2/5 formally DONE, 19.3/19.4/19.5.1 live-proven across three verification passes (2026-07-18)**, the
+sprint's remaining tail tracked in its own README; Sprint 20: extends ADR-012/ADR-013, no new ADR -
+**5/5 authored, live-cluster exit criteria (actual chaos-fault injection) still open**; Sprint 21:
+ADR-027, Accepted (ratified by tech-lead 2026-07-13, with a Section 4 amendment) - **DONE 5/5**;
+Sprint 22: ADR-028, Accepted (ratified by tech-lead 2026-07-17) - **DONE (code-complete) 6/6**;
+Sprint 23: ADR-029, still Proposed pending tech-lead ratification) and excluded from the MVP totals.
+Sprint 16 (Web Frontend) is **DONE, 5/5, exit criteria MET** as of
+2026-07-13: all five features built AND the live end-to-end criterion discharged by a human, in a real
+browser, against the live local Docker Compose stack (PKCE login -> onboarding -> real saga to FULFILLED ->
+account/usage -> invoice PDF download). That live run found 11 defects the all-green offline suites had
+missed - 9 fixed, the rest tracked as follow-ups (409-on-duplicate-TCKN; 413-vs-500 on oversized multipart, a
+platform-starter issue; the unimplemented `POST /api/v1/addons`, which leaves the addon selection path
+unproven end-to-end). Sprints 17 (Distributed Locking) and 18 (Secret Management) are also complete (18 with
+a tracked follow-up). Sprint 19 (Service Mesh and mTLS) went substantially DONE on 2026-07-18: three live
+verification passes on a Kind cluster resolved all three findings the first pass surfaced (Linkerd's pinned
+stable channel not enforcing `AuthorizationPolicy`, fixed by moving to the edge channel; a mesh-aware
+NetworkPolicy port model, since meshed traffic rides the linkerd-proxy port not the app port; and missing
+control-plane-egress/backend-ingress baseline rules) - see the sprint's own README for the full live-verification
+record. Sprint 20 (Chaos Engineering) has all 5 features authored (fault-injection experiments, steady-state
+hypotheses, a game-day runbook) but no live chaos experiment has yet been run against a cluster - a Docker
+outage cut short the one verification attempt so far. Sprint 21 (Campaign / Catalog Validation) is
+**DONE, 5/5** (campaign-service built, all three exit criteria test-proven). Sprint 22 (Invoice
+Dispute/Chargeback) is **DONE (code-complete), 6/6** (dispute-service built, cross-service integration
+with billing/payment/ticket/notification wired, acceptance tests asserting no automated subscription
+suspension and no direct subscription-db access). Sprint 23 remains documentation/design only - TODO,
+not started. See Phase P6 below and
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.
@@ -1277,7 +2013,7 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-007 Revenue Cycle | P3 | Usage-driven billing (AC-02, AC-03) | 10, 11 |
 | EPIC-008 Engagement and Support | P4 | Notifications and ticketing | 12 |
 | EPIC-009 Hardening and Release | P5 | NFR targets, security, Kubernetes | 13, 14, 15 |
-| EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) | 16 |
+| EPIC-016 Web Channel | P6 | Web frontend + web-bff (ADR-022) - **DELIVERED** (Sprint 16 DONE, live E2E 2026-07-13) | 16 |
 | EPIC-017 Distributed Coordination | P6 | Redis-backed distributed locking, `starter-lock` (ADR-024 Accepted) | 17 |
 | EPIC-018 Secret Management | P6 | Vault-backed secrets, K8s auth method + CSI-synced secrets (ADR-025 Accepted) | 18 |
 | EPIC-019 Zero-Trust Networking | P6 | Service mesh mTLS + default-deny NetworkPolicies (ADR-026 Proposed) | 19 |
@@ -1286,8 +2022,12 @@ sprint tables above are authoritative for status; this is the coarse rollup.
 | EPIC-022 Invoice Dispute and Chargeback | P6 | `dispute-service`, invoice dispute/PSP chargeback orchestration (ADR-028 Proposed) | 22 |
 | EPIC-023 SIM-Swap and Fraud Detection | P6 | `fraud-service`, rule-based fraud detection, MVP scope (ADR-029 Proposed) | 23 |
 
-Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23; all
-of EPIC-016 through EPIC-023 are TODO as of 2026-07-11 - documented and design-reviewed, not built. See
+Phase P6 ("Post-MVP Depth") is the immediate post-MVP delivery increment covering Sprints 16-23.
+**EPIC-016 (Web Channel) is DELIVERED** as of 2026-07-13 - Sprint 16 is DONE (5/5) and its live
+end-to-end exit criterion was met in a real browser against the live local stack; the platform now has a
+working web channel (SvelteKit `frontend/web/` + `web-bff`). Open follow-ups from that run are tracked in
+[`sprint-16-web-frontend/README.md`](sprint-16-web-frontend/README.md) and do not reopen the epic.
+EPIC-017 through EPIC-023 remain TODO - documented and design-reviewed, not built. See
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3 ("P6 - Post-MVP Depth") for the phase
 detail and its explicit disambiguation from `docs/product/TELCO-CRM-ADVANCED.md`'s own P6-P11
 forward-looking phase lettering (Section 10 of that document), which this phase is distinct from.

@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| DONE | 5/5 | 2026-07-08 |
+| DONE | 6/6 | 2026-07-18 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -27,6 +27,7 @@ Covers NFR-01, NFR-02, NFR-06, NFR-12, NFR-16, NFR-17 and final validation of AC
 | 14.3 | Performance Validation | DONE | [14.3-performance-validation.md](14.3-performance-validation.md) |
 | 14.4 | Identity-to-Customer Linkage | DONE | [14.1.1-identity-linkage-gap-ruling.md](14.1.1-identity-linkage-gap-ruling.md) |
 | 14.5 | Avro Schema Governance Reconciliation | DONE | [14.5-avro-schema-governance-ruling.md](14.5-avro-schema-governance-ruling.md) |
+| 14.6 | Post-Sprint-21 Full E2E Re-Test | DONE | [14.6-post-sprint21-e2e-retest.md](14.6-post-sprint21-e2e-retest.md) |
 
 Sub-status (14.1): 14.1.2 contract tests DONE, 14.1.3 coverage gate DONE-WITH-TRACKED-EXCEPTIONS
 (tech-lead ruling 2026-07-06): `jacoco.haltOnFailure` flipped to `true` in `microservices/pom.xml`,
@@ -655,6 +656,19 @@ summary:
   shape instead of one specific, exhaustible block.
 
 **Sprint 14 rollup, final: 5 of 5 features DONE (14.1/14.2/14.3/14.4/14.5). Sprint 14 is DONE.**
+
+**2026-07-18 - 14.6 post-Sprint-21 full E2E re-test: PASS (all four layers), two real infra bugs
+found and fixed.** A fresh-stack, Sprint-14-style re-validation covering everything shipped since:
+campaign-service wired into the compose `apps` profile for the first time, three new permanent
+acceptance ITs (campaign discounted-order incl. redemption RESERVED->CONFIRMED, campaign fail-open
+via a real container outage, web-bff composition smoke), all seven backend scenarios green, the
+complete Sprint 16 browser journey re-proven (PKCE login -> onboarding -> saga FULFILLED -> quota ->
+self-scoped invoice -> PDF), and NFR-01 re-validated (p95 99.17ms for served requests vs the 300ms
+budget). Found and fixed the two bugs the never-since-Sprint-17 full-stack boot had been hiding:
+the compose `x-app-env` anchor never passed `REDIS_HOST`, crashlooping all three `starter-lock`
+adopters (subscription/billing/campaign) at boot; and `max_replication_slots=10` overflowed by the
+11th (campaign) Debezium connector. Full detail, evidence, and the honest caveats:
+[14.6-post-sprint21-e2e-retest.md](14.6-post-sprint21-e2e-retest.md).
 
 ## Sprint Deliverables
 

@@ -1,0 +1,215 @@
+/*
+ * Design tokens for the Telco CRM web app.
+ *
+ * Two layers:
+ *   1. PRIMITIVES (--tk-*): the raw ramps. Never referenced by components except
+ *      where a specific ramp step is the design (avatar/gauge fills).
+ *   2. SEMANTICS (--color-*, --space-*, ...): what components consume. The DARK
+ *      theme is the product default (a Keycloak-style charcoal canvas with a blue
+ *      accent); light lives on :root and dark overrides on :root[data-theme='dark'].
+ *
+ * Look: a low-poly charcoal backdrop, solid cards, and a single blue accent used
+ * for buttons/links/focus. The blue is deep enough to carry white button text
+ * (>= 4.5:1). The header/sidebar are near-black in BOTH themes, so the blue
+ * active-underline keeps its contrast everywhere.
+ */
+
+:root {
+	/* -- primitives: blue accent (Keycloak-style) -------------------------- */
+	--tk-blue-700: #0b4ea2;
+	--tk-blue-600: #0066cc;
+	--tk-blue-500: #1f6feb;
+	--tk-blue-400: #3b82f6;
+	--tk-blue-300: #6ea8ff;
+	--tk-blue-100: #d6e6ff;
+	--tk-blue-950: #0a1b33;
+
+	/* -- primitives: neutral charcoal ramp --------------------------------- */
+	--tk-ink-950: #0c0d10;
+	--tk-ink-900: #121317;
+	--tk-ink-850: #16181d;
+	--tk-ink-800: #1b1d22;
+	--tk-ink-700: #23262c;
+	--tk-ink-600: #2c2f36;
+	--tk-ink-500: #3a3e47;
+	--tk-ink-400: #565b66;
+	--tk-ink-300: #767a83;
+	--tk-ink-200: #a9adb7;
+	--tk-ink-100: #d4d7dd;
+	--tk-ink-50: #eceef1;
+
+	/* -- primitives: navy (kept for a few legacy fills) -------------------- */
+	--tk-navy-800: #16213e;
+
+	/* -- semantics: light theme (grayscale + blue) ------------------------- */
+	color-scheme: light;
+
+	--color-bg: #e9eaee;
+	--color-bg-subtle: #e0e2e8;
+	--color-surface: #ffffff;
+	--color-surface-alt: #f4f5f7;
+	--color-border: #e2e4ea;
+	--color-border-strong: #cfd2da;
+
+	--color-text: #151519;
+	--color-text-secondary: #3f434c;
+	--color-text-muted: #6a6f79;
+	--color-link: #0066cc;
+
+	--color-brand: #16181d;
+
+	/* Header/sidebar: near-black in BOTH themes (the dark chrome of the console). */
+	--color-header-bg: #0e0f12;
+	--color-header-text: #ffffff;
+	--color-header-muted: #a9adb7;
+	--color-header-border: #23262c;
+
+	--color-accent: #0066cc;
+	--color-accent-hover: #0b57ac;
+	--color-accent-active: #084a91;
+	--color-on-accent: #ffffff;
+	--color-accent-soft: #e3efff;
+	--color-on-accent-soft: #0b4ea2;
+
+	--color-focus: #0066cc;
+	--gauge-ok: #0066cc;
+
+	--color-success-bg: #e7f8ee;
+	--color-success-text: #166534;
+	--color-success-solid: #16a34a;
+	--color-warning-bg: #fef3c7;
+	--color-warning-text: #92400e;
+	--color-warning-solid: #d97706;
+	--color-danger-bg: #fee2e2;
+	--color-danger-text: #b91c1c;
+	--color-danger-solid: #dc2626;
+	--color-info-bg: #e3efff;
+	--color-info-text: #0b4ea2;
+	--color-info-solid: #0066cc;
+
+	--color-skeleton: #e2e4ea;
+	--color-skeleton-shine: #f4f5f7;
+
+	--shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06);
+	--shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
+	--shadow-lg: 0 16px 40px rgb(0 0 0 / 0.14);
+
+	/* Low-poly polygon backdrop (light variant), applied to <body> in base.css. */
+	--app-bg-image: url('/img/polygon-light.svg');
+	--surface-highlight: rgb(255 255 255 / 0.6);
+
+	/* -- typography (Red Hat, Keycloak's typeface) ------------------------- */
+	--font-sans:
+		'Red Hat Text Variable', 'Red Hat Text', system-ui, -apple-system, 'Segoe UI', Roboto,
+		'Helvetica Neue', Arial, sans-serif;
+	--font-display: 'Red Hat Display Variable', 'Red Hat Display', var(--font-sans);
+	--font-mono: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
+
+	--text-xs-size: 0.75rem;
+	--text-xs-lh: 1.4;
+	--text-sm-size: 0.875rem;
+	--text-sm-lh: 1.5;
+	--text-base-size: 1rem;
+	--text-base-lh: 1.6;
+	--text-lg-size: 1.125rem;
+	--text-lg-lh: 1.5;
+	--text-xl-size: 1.25rem;
+	--text-xl-lh: 1.4;
+	--text-2xl-size: 1.5rem;
+	--text-2xl-lh: 1.3;
+	--text-3xl-size: 1.875rem;
+	--text-3xl-lh: 1.2;
+	--text-4xl-size: 2.25rem;
+	--text-4xl-lh: 1.1;
+
+	/* -- spacing (4px base) ------------------------------------------------ */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.25rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+	--space-10: 2.5rem;
+	--space-12: 3rem;
+	--space-16: 4rem;
+
+	/* -- radii ------------------------------------------------------------- */
+	--radius-sm: 0.25rem;
+	--radius-md: 0.375rem;
+	--radius-lg: 0.625rem;
+	--radius-xl: 0.875rem;
+	--radius-full: 999px;
+
+	/* -- layering ---------------------------------------------------------- */
+	--z-header: 100;
+	--z-drawer: 200;
+	--z-toast: 400;
+
+	/* -- motion ------------------------------------------------------------ */
+	--duration-fast: 120ms;
+	--duration-base: 200ms;
+	--duration-slow: 320ms;
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+
+	/* -- layout ------------------------------------------------------------ */
+	--container-max: 72rem;
+}
+
+/* -- semantics: dark theme (the default Keycloak-style look) --------------- */
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	--color-bg: #121317;
+	--color-bg-subtle: #0e0f12;
+	--color-surface: #1b1d22;
+	--color-surface-alt: #23262c;
+	--color-border: #2c2f36;
+	--color-border-strong: #3a3e47;
+
+	--color-text: #e6e8ec;
+	--color-text-secondary: #a9adb7;
+	--color-text-muted: #767a83;
+	--color-link: #6ea8ff;
+
+	--color-brand: #d4d7dd;
+
+	--color-header-bg: #0c0d10;
+	--color-header-text: #ffffff;
+	--color-header-muted: #a9adb7;
+	--color-header-border: #23262c;
+
+	--color-accent: #1f6feb;
+	--color-accent-hover: #3b82f6;
+	--color-accent-active: #1a5fd0;
+	--color-on-accent: #ffffff;
+	--color-accent-soft: #12233d;
+	--color-on-accent-soft: #6ea8ff;
+
+	--color-focus: #3b82f6;
+	--gauge-ok: #3b82f6;
+
+	--color-success-bg: #10291c;
+	--color-success-text: #4ade80;
+	--color-success-solid: #22c55e;
+	--color-warning-bg: #2e2410;
+	--color-warning-text: #fbbf24;
+	--color-warning-solid: #f59e0b;
+	--color-danger-bg: #331a1f;
+	--color-danger-text: #f87171;
+	--color-danger-solid: #ef4444;
+	--color-info-bg: #12233d;
+	--color-info-text: #6ea8ff;
+	--color-info-solid: #3b82f6;
+
+	--color-skeleton: #23262c;
+	--color-skeleton-shine: #2c2f36;
+
+	--shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+	--shadow-md: 0 6px 18px rgb(0 0 0 / 0.55);
+	--shadow-lg: 0 20px 48px rgb(0 0 0 / 0.65);
+
+	--app-bg-image: url('/img/polygon-dark.svg');
+	--surface-highlight: rgb(255 255 255 / 0.05);
+}

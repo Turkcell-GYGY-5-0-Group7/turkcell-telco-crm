@@ -39,15 +39,24 @@
 # `X-User-Id`/`X-User-Roles` injection (ADR-011) - the two layers are
 # independent and this NetworkPolicy grant does not change either.
 #
-# Destination Service/port values below (postgres 5432, redis 6379, kafka
-# 9092, schema-registry 8081, minio 9000, mongo 27017, keycloak 8080) mirror
-# deploy/helm/dependencies/values.yaml's defaults and
-# deploy/helm/dependencies/templates/*.yaml's `app.kubernetes.io/name`
-# component selectors (`telco-deps.selectorLabels`) - this chart has no
-# programmatic reference to that chart's values (they are two independent
-# Helm releases, not parent/subchart), so if a dependencies port is ever
-# overridden at install time, this file's hardcoded ports must be
-# kept in sync by hand.
+# Destination pods below are selected by `app.kubernetes.io/name`, mirroring
+# deploy/helm/dependencies/templates/*.yaml's `telco-deps.selectorLabels`.
+# The destination PORT is uniformly 4143 (the linkerd-proxy inbound port) - see
+# the `# PORTS - Finding C fix` note on the `egress:` block below for why the
+# app ports (5432/6379/8080/...) are NOT used for these meshed destinations.
+#
+# Service-to-service egress (`.Values.networkPolicy.egress.services`, Finding B
+# fix 2026-07-18): the egress-side mirror of networkpolicy-ingress.yaml. The
+# infra rules above cover a service reaching its OWN datastores; this block
+# covers a service reaching OTHER telco-service releases (api-gateway -> the 10
+# domain services it routes to per microservices/configs/api-gateway/
+# application.yml; the documented domain -> domain callers per the 19.3 caller
+# audit + the Sprint-21 order -> campaign edge). Live verification 2026-07-18
+# proved this was MISSING: under the 19.4.1 default-deny baseline the caller's
+# own egress was denied to the callee (api-gateway -> customer-service returned
+# 504) even though customer-service's ingress rule admitted api-gateway - a
+# NetworkPolicy needs BOTH the caller's egress and the callee's ingress to
+# allow. (Finding C then established the correct port for both halves is 4143.)
 {{- if .Values.networkPolicy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -62,6 +71,19 @@ spec:
       {{- include "telco-service.selectorLabels" . | nindent 6 }}
   policyTypes:
     - Egress
+  # PORTS - Finding C fix (2026-07-18): every destination below is a MESHED pod
+  # (the domain/infra services carry a linkerd-proxy; the dependencies chart sets
+  # `linkerdInject: true`), so this service's own linkerd-proxy delivers the
+  # traffic to the DESTINATION's linkerd-proxy INBOUND port 4143 - NOT the
+  # destination's application port. Every egress rule therefore targets 4143;
+  # the destination pod's own inbound iptables + AuthorizationPolicy then handle
+  # the app port and identity. The per-dependency `.Values.networkPolicy.egress.*`
+  # flags and the `egress.services` list still control WHICH destination pods
+  # this service may reach (least privilege by destination); only the port is
+  # uniform. DNS (CoreDNS, un-meshed, kube-system) is the sole app-port egress
+  # and lives in deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml.
+  # (Live-verified 2026-07-18: an app-port egress rule silently blocks meshed
+  # traffic; 4143 restores it.)
   egress:
     {{- if .Values.networkPolicy.egress.postgres }}
     - to:
@@ -70,7 +92,7 @@ spec:
               app.kubernetes.io/name: postgres
       ports:
         - protocol: TCP
-          port: 5432
+          port: 4143
     {{- end }}
     {{- if .Values.networkPolicy.egress.redis }}
     - to:
@@ -79,23 +101,19 @@ spec:
               app.kubernetes.io/name: redis
       ports:
         - protocol: TCP
-          port: 6379
+          port: 4143
     {{- end }}
     {{- if .Values.networkPolicy.egress.kafka }}
     - to:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: kafka
-      ports:
-        - protocol: TCP
-          port: 9092
-    - to:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: schema-registry
       ports:
         - protocol: TCP
-          port: 8081
+          port: 4143
     {{- end }}
     {{- if .Values.networkPolicy.egress.minio }}
     - to:
@@ -104,7 +122,7 @@ spec:
               app.kubernetes.io/name: minio
       ports:
         - protocol: TCP
-          port: 9000
+          port: 4143
     {{- end }}
     {{- if .Values.networkPolicy.egress.mongo }}
     - to:
@@ -113,7 +131,7 @@ spec:
               app.kubernetes.io/name: mongo
       ports:
         - protocol: TCP
-          port: 27017
+          port: 4143
     {{- end }}
     {{- if .Values.networkPolicy.egress.keycloak }}
     - to:
@@ -122,7 +140,7 @@ spec:
               app.kubernetes.io/name: keycloak
       ports:
         - protocol: TCP
-          port: 8080
+          port: 4143
     {{- end }}
     # Universal egress to discovery-server: every telco-service release
     # except discovery-server itself either registers with or queries Eureka
@@ -135,7 +153,7 @@ spec:
               app.kubernetes.io/name: discovery-server
       ports:
         - protocol: TCP
-          port: 8761
+          port: 4143
     {{- end }}
     # Universal egress to config-server: every telco-service release except
     # config-server (cannot import from itself, ADR-010) and discovery-server
@@ -149,6 +167,17 @@ spec:
               app.kubernetes.io/name: config-server
       ports:
         - protocol: TCP
-          port: 8888
+          port: 4143
+    {{- end }}
+    # Service-to-service egress (Finding B fix). One rule per callee telco-service
+    # release; port 4143 per the Finding C note above (meshed destination).
+    {{- range .Values.networkPolicy.egress.services }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+      ports:
+        - protocol: TCP
+          port: 4143
     {{- end }}
 {{- end }}

@@ -11,3 +11,5 @@ telco:
       url: http://localhost:9002
     product-catalog-service:
       url: http://localhost:9003
+    campaign-service:
+      url: http://localhost:9011

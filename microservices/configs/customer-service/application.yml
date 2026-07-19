@@ -18,6 +18,26 @@ spring:
   flyway:
     # Service migrations + platform migrations (outbox V900). ADR-016.
     locations: classpath:db/migration,classpath:db/migration/platform
+  servlet:
+    multipart:
+      # KYC document upload (POST /api/v1/customers/{id}/documents, FR-03). DELIBERATE limits -
+      # previously this service inherited Spring's defaults (max-file-size 1MB, max-request-size
+      # 10MB) by accident, so any ID photo over 1MB (i.e. almost every phone photo) failed the
+      # upload AFTER the customer had already been registered, surfacing to the browser as a 503.
+      #
+      # 6MB is sized for what this endpoint actually accepts: a photo or 300 dpi scan of an ID card
+      # or passport page. It is NOT sized for video or multi-page documents. Deliberately bounded:
+      # the upload surface is a DoS vector (each request is buffered and then streamed to MinIO), so
+      # the limit stays modest rather than being raised until the symptom disappears.
+      #
+      # Limit chain, each hop strictly tighter than the one behind it, so the user always meets the
+      # friendliest bound first:
+      #   browser (frontend/web $lib/onboarding/file.ts MAX_KYC_FILE_BYTES) 5 MiB raw
+      #   web-bff (telco.onboarding.kyc.max-document-bytes)                 6 MiB decoded
+      #   customer-service (here)                                           6 MB (= 6 MiB) per file
+      # max-request-size adds headroom for the second part (`type`) and multipart boundaries.
+      max-file-size: 6MB
+      max-request-size: 8MB
 
 security:
   oauth2:

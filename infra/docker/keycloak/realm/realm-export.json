@@ -14,7 +14,7 @@
   "ssoSessionMaxLifespan": 36000,
 
   "revokeRefreshToken": true,
-  "refreshTokenMaxReuse": 0,
+  "refreshTokenMaxReuse": 3,
 
   "eventsEnabled": true,
   "eventsExpiration": 7776000,

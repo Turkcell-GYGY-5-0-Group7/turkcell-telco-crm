@@ -26,6 +26,14 @@ networkPolicy:
     postgres: true
     keycloak: true
     kafka: true
+    # Finding B fix (2026-07-18): order-service's real synchronous callees per
+    # the 19.3 caller audit (CustomerServiceClient -> customer-service;
+    # ProductCatalogServiceClient -> product-catalog-service) plus the Sprint-21
+    # edge (CampaignServiceClient -> campaign-service, /internal validate).
+    services:
+      - customer-service
+      - product-catalog-service
+      - campaign-service
 
 config:
   CONFIG_SERVER_URI: http://config-server:8888

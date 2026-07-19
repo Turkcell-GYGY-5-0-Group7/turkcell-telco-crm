@@ -116,6 +116,16 @@
             <artifactId>kafka-clients</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- ── JDBC: the Sprint 21 campaign scenario asserts the redemption lifecycle
+             (RESERVED -> CONFIRMED) directly against campaign_db, because campaign-service exposes
+             no redemption read API and publishes no redemption outbox event - same "no public
+             surface exists" precedent as the raw Kafka producer above. Read-only (CampaignDb). -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

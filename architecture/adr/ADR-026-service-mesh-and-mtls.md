@@ -253,6 +253,31 @@ ADR for the mesh/mTLS half; OPA policy-as-code remains future work.
 
 ---
 
+## Implementation note (2026-07-18): Linkerd release channel - edge, not stable
+
+The Sprint 19 live-verification pass established a fact this ADR's "adoption mechanics" bullet
+(Section 1) deliberately left to devops: **which Linkerd release to pin.** The vendored charts were
+first pinned to the last open-source *stable* release, `stable-2.14.10` (charts
+`linkerd-control-plane` 1.16.11 / `linkerd-crds` 1.8.0). Live verification found that release's
+control plane **does not enforce Layer-1 `AuthorizationPolicy` at all** on current Kubernetes: the
+`policy` controller indexed zero `Server`/`AuthorizationPolicy` resources, meshed proxies exposed no
+`inbound_http_authz` metrics, an unauthorized mesh identity reached the target application, and even a
+`config.linkerd.io/default-inbound-policy: deny` pod annotation did not deny - reproduced on both k8s
+1.36 and k8s 1.28 (inside 2.14.10's supported window), with RBAC and liveness confirmed healthy. The
+manifests are correct (API-accepted, correct selectors/identities); the defect is in that
+control-plane build.
+
+Open-source Linkerd **stable is end-of-life at 2.14.10** (later stable releases are Buoyant
+Enterprise, not OSS); the maintained OSS line is the **edge** channel. The charts are therefore
+pinned to `edge-2026.6.3` (`https://helm.linkerd.io/edge`), which does enforce the per-`Server`
+authorization Section 1 and Section 3 rely on. This does not change any decision in this ADR -
+Linkerd, self-managed trust anchor (Section 4, key structure unchanged), two trust layers (Section
+2), NetworkPolicy companion control (Section 3) all stand; it records the concrete channel/version the
+implementation runs on and why. Detail and live evidence:
+`docs/tasks/sprint-19-service-mesh-mtls/README.md` (Live Verification Records, 2026-07-18).
+
+---
+
 ## Related ADRs
 
 * ADR-011 Security Foundation (user-identity/JWT model this ADR leaves unchanged; mTLS principle this

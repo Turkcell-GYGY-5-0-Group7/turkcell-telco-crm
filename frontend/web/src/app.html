@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#0c0d10" />
+		<title>Telco CRM</title>
+		<!--
+			Theme, applied BEFORE first paint. SvelteKit hydrates after the first frame,
+			so resolving the theme in a component would paint the wrong theme first and
+			then flash. This mirrors resolveInitialTheme() in $lib/theme/theme-core:
+			a stored choice wins, otherwise the product default DARK. The ThemeStore
+			adopts whatever this leaves on the element.
+		-->
+		<script>
+			(function () {
+				var stored = null;
+				try {
+					stored = localStorage.getItem('telco-theme');
+				} catch (e) {
+					// Storage can be denied; fall through to the dark default.
+				}
+				var theme = stored === 'light' || stored === 'dark' ? stored : 'dark';
+				document.documentElement.setAttribute('data-theme', theme);
+			})();
+		</script>
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

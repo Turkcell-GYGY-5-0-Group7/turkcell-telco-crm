@@ -92,6 +92,14 @@ REVOKE ALL ON DATABASE ticket_db FROM PUBLIC;
 GRANT CONNECT ON DATABASE ticket_db TO ticket;
 GRANT CONNECT ON DATABASE ticket_db TO debezium;
 
+-- campaign-service
+CREATE USER campaign WITH LOGIN PASSWORD 'campaign'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE DATABASE campaign_db OWNER campaign;
+REVOKE ALL ON DATABASE campaign_db FROM PUBLIC;
+GRANT CONNECT ON DATABASE campaign_db TO campaign;
+GRANT CONNECT ON DATABASE campaign_db TO debezium;
+
 -- reference-service (demo; no domain events; debezium not granted)
 CREATE USER reference WITH LOGIN PASSWORD 'reference'
     NOSUPERUSER NOCREATEDB NOCREATEROLE;

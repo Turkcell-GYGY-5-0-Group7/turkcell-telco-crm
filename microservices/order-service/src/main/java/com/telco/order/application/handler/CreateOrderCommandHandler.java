@@ -7,6 +7,8 @@ import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.event.OrderCreatedEvent;
 import com.telco.order.domain.model.Order;
 import com.telco.order.domain.model.SagaState;
+import com.telco.order.infrastructure.client.CampaignServiceClient;
+import com.telco.order.infrastructure.client.CampaignValidationResponse;
 import com.telco.order.infrastructure.client.CustomerServiceClient;
 import com.telco.order.infrastructure.client.ProductCatalogServiceClient;
 import com.telco.order.infrastructure.client.TariffClientResponse;
@@ -17,15 +19,18 @@ import com.telco.platform.outbox.OutboxService;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
- * Creates a new order: validates customer and tariffs via downstream services, persists the order
- * aggregate, initialises the saga state, and emits {@code order.created.v1} via the outbox.
+ * Creates a new order: validates customer and tariffs via downstream services, prices each item
+ * (applying a campaign discount when eligible, Feature 21.3.3), persists the order aggregate,
+ * initialises the saga state, and emits {@code order.created.v1} via the outbox.
  *
  * <p>Idempotency: if the same {@code idempotencyKey} is already present the existing order is
  * returned without any side effects (FR-10).
@@ -38,11 +43,14 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
 
     private static final String OUTBOX_AGGREGATE_TYPE = "order";
     private static final String EVENT_TYPE = "order.created.v1";
+    private static final String DISCOUNT_TYPE_PERCENTAGE = "PERCENTAGE";
+    private static final String DISCOUNT_TYPE_FIXED_AMOUNT = "FIXED_AMOUNT";
 
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
     private final CustomerServiceClient customerServiceClient;
     private final ProductCatalogServiceClient productCatalogServiceClient;
+    private final CampaignServiceClient campaignServiceClient;
     private final OutboxService outboxService;
     private final AuditLogWriter auditLogWriter;
 
@@ -50,14 +58,21 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                                      SagaStateRepository sagaStateRepository,
                                      CustomerServiceClient customerServiceClient,
                                      ProductCatalogServiceClient productCatalogServiceClient,
+                                     CampaignServiceClient campaignServiceClient,
                                      OutboxService outboxService,
                                      AuditLogWriter auditLogWriter) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
         this.customerServiceClient = customerServiceClient;
         this.productCatalogServiceClient = productCatalogServiceClient;
+        this.campaignServiceClient = campaignServiceClient;
         this.outboxService = outboxService;
         this.auditLogWriter = auditLogWriter;
+    }
+
+    /** A tariff price snapshot plus the campaign discount decision applied to it, if any. */
+    private record PricedItem(TariffClientResponse tariff, BigDecimal unitPrice,
+                               UUID campaignId, String campaignCode) {
     }
 
     @Override
@@ -71,17 +86,17 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
         // Validate customer exists (throws ResourceNotFoundException or DependencyFailureException).
         customerServiceClient.getCustomer(command.customerId());
 
-        // Validate each tariff and collect price snapshots.
-        List<TariffClientResponse> tariffs = new ArrayList<>();
+        // Validate each tariff, then ask campaign-service (fail-open) whether a discount applies.
+        List<PricedItem> pricedItems = new ArrayList<>();
         for (OrderItemRequest item : command.items()) {
             TariffClientResponse tariff = productCatalogServiceClient.getTariff(item.tariffId());
-            tariffs.add(tariff);
+            pricedItems.add(priceItem(command.customerId(), item, tariff));
         }
 
-        // Calculate total amount from price snapshots.
+        // Calculate total amount from the (possibly discounted) unit prices.
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (int i = 0; i < command.items().size(); i++) {
-            BigDecimal lineTotal = tariffs.get(i).monthlyFee()
+            BigDecimal lineTotal = pricedItems.get(i).unitPrice()
                     .multiply(BigDecimal.valueOf(command.items().get(i).quantity()));
             totalAmount = totalAmount.add(lineTotal);
         }
@@ -90,14 +105,16 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
         Order order = Order.create(command.customerId(), command.idempotencyKey(), totalAmount, command.userId());
         for (int i = 0; i < command.items().size(); i++) {
             OrderItemRequest itemReq = command.items().get(i);
-            TariffClientResponse tariff = tariffs.get(i);
+            PricedItem priced = pricedItems.get(i);
             order.addItem(
                     itemReq.tariffId(),
-                    tariff.code(),
-                    tariff.version(),
-                    tariff.name(),
-                    tariff.monthlyFee(),
-                    itemReq.quantity()
+                    priced.tariff().code(),
+                    priced.tariff().version(),
+                    priced.tariff().name(),
+                    priced.unitPrice(),
+                    itemReq.quantity(),
+                    priced.campaignId(),
+                    priced.campaignCode()
             );
         }
         orderRepository.save(order);
@@ -113,7 +130,8 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                         item.getTariffId().toString(),
                         item.getTariffName(),
                         item.getUnitPrice(),
-                        item.getQuantity()
+                        item.getQuantity(),
+                        item.getCampaignId() == null ? null : item.getCampaignId().toString()
                 ))
                 .toList();
 
@@ -137,5 +155,50 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                         "totalAmount", order.getTotalAmount().toPlainString()));
 
         return OrderResponse.from(order);
+    }
+
+    /**
+     * Asks campaign-service (via the fail-open {@link CampaignServiceClient}) whether a discount
+     * applies to this line item and computes the resulting {@code unitPrice}. Never throws:
+     * {@code CampaignServiceClient.validate(...)} itself never propagates a failure (ADR-027 Decision
+     * Section 4) - an unreachable campaign-service, an OPEN circuit breaker, or a genuinely
+     * ineligible decision all leave the item priced at the undiscounted {@code monthlyFee}, exactly
+     * as before this feature.
+     */
+    private PricedItem priceItem(UUID customerId, OrderItemRequest item, TariffClientResponse tariff) {
+        CampaignValidationResponse validation =
+                campaignServiceClient.validate(customerId, tariff.code(), item.campaignCode());
+
+        if (!validation.eligible()) {
+            return new PricedItem(tariff, tariff.monthlyFee(), null, null);
+        }
+
+        BigDecimal discountedPrice = applyCampaignDiscount(
+                tariff.monthlyFee(), validation.discountType(), validation.discountValue());
+        // campaignCode is recorded only when the caller explicitly requested it; when
+        // campaign-service auto-resolved the best match, only campaignId is known here (see
+        // OrderItem's class javadoc) - still sufficient for Feature 21.4's redemption correlation.
+        return new PricedItem(tariff, discountedPrice, validation.campaignId(), item.campaignCode());
+    }
+
+    /**
+     * {@code PERCENTAGE}: {@code monthlyFee * (1 - discountValue/100)}; {@code FIXED_AMOUNT}:
+     * {@code monthlyFee - discountValue} - both floored at zero (ADR-027 Decision Section 4, Feature
+     * 21.3.3). An unrecognised discount type defensively falls back to the undiscounted fee rather
+     * than failing order creation.
+     */
+    private static BigDecimal applyCampaignDiscount(BigDecimal monthlyFee, String discountType,
+                                                      BigDecimal discountValue) {
+        BigDecimal discounted;
+        if (DISCOUNT_TYPE_PERCENTAGE.equals(discountType)) {
+            BigDecimal factor = BigDecimal.ONE.subtract(
+                    discountValue.divide(BigDecimal.valueOf(100), 10, RoundingMode.HALF_UP));
+            discounted = monthlyFee.multiply(factor).setScale(2, RoundingMode.HALF_UP);
+        } else if (DISCOUNT_TYPE_FIXED_AMOUNT.equals(discountType)) {
+            discounted = monthlyFee.subtract(discountValue).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            return monthlyFee;
+        }
+        return discounted.max(BigDecimal.ZERO);
     }
 }

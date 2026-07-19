@@ -1,0 +1,55 @@
+spring:
+  config:
+    import: ""
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+  # Tests drive consumers directly; never start the Kafka listener container or attempt a broker
+  # connection.
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: Y2FtcGFpZ24tdGVzdC1zZWNyZXQta2V5LWZvci10ZXN0aW5nLTIwMjY=
+        issuer: telco
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
+    # Off by default: Redisson connects eagerly at startup, unlike starter-kafka's listener
+    # containers, and would fail context refresh for every test in this module that doesn't run a
+    # Redis container. starter-lock's test-jar supplies a real in-JVM DistributedLock substitute
+    # whenever this is false. A test that exercises the reaper's real locking re-enables this
+    # explicitly and points it at a Testcontainers Redis.
+    lock:
+      enabled: false
+  campaign:
+    redemption-reaper:
+      # Off by default: this is a production background job with no bearing on most tests, and its
+      # @Scheduled first tick fires almost immediately at context startup, which would race against
+      # whatever those tests assert about campaign_redemptions state. A test that wants the bean
+      # re-enables it.
+      enabled: false

@@ -225,11 +225,11 @@ class CustomerIntegrationTest {
     }
 
     // --- FR-03 (GET + PUT) ---
-    // GET/PUT/DELETE by id are staff-only (ADMIN, CALL_CENTER_AGENT) until the customerId-to-
-    // Keycloak-subject linkage lands - see
-    // docs/tasks/sprint-14-testing-and-hardening/14.1.1-identity-linkage-gap-ruling.md. A SUBSCRIBER
-    // token cannot yet be verified as the owner of a given customer record, so these are admin-token
-    // calls; see subscriber_cannot_get_customer_by_id_returns_403 for the boundary itself.
+    // GET/PUT by id are staff (ADMIN, CALL_CENTER_AGENT) or the OWNER of the record, resolved from
+    // the linked customerId claim; DELETE stays ADMIN-only. The tokens minted here by
+    // JwtService.issue carry no customerId claim (unlinked identities), so they exercise the staff
+    // paths plus the unlinked-subscriber denial below. The owner paths and the non-owner/null-match
+    // denials are covered by CustomerSelfOwnershipSecurityIntegrationTest.
 
     @Test
     void get_customer_returns_masked_pii() {
@@ -262,7 +262,9 @@ class CustomerIntegrationTest {
     }
 
     @Test
-    void subscriber_cannot_get_customer_by_id_returns_403() {
+    void unlinked_subscriber_cannot_get_customer_by_id_returns_403() {
+        // customerToken carries no customerId claim (unlinked identity): the ownership clause must
+        // not match on null. See CustomerSelfOwnershipSecurityIntegrationTest for the linked cases.
         String id = doRegister("Ada", "Lovelace", VALID_TCKN);
 
         ResponseEntity<String> response = client.get()

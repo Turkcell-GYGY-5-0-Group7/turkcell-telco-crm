@@ -24,6 +24,10 @@ networkPolicy:
     redis: true
     keycloak: true
     kafka: true
+    # Finding B fix (2026-07-18): subscription-service's real synchronous
+    # callee per the 19.3 caller audit (OrderServiceClient -> order-service).
+    services:
+      - order-service
 
 config:
   CONFIG_SERVER_URI: http://config-server:8888
