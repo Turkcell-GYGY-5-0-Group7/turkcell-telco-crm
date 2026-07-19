@@ -3,39 +3,38 @@ package com.telco.catalog.application.dto;
 import com.telco.catalog.domain.model.Addon;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.UUID;
 
-/** Read DTO for an addon bundle. Domain entities are never exposed directly (ADR-015). */
-public record AddonResponse(
+/**
+ * Internal, system-to-system snapshot of an addon (GET /internal/addons/{code}/snapshot).
+ * Consumed by order-service for addon order pricing and allowance snapshotting (feature 24.1,
+ * Sprint 24 design note D1). No PII.
+ */
+public record AddonSnapshotResponse(
         UUID id,
         String code,
         String name,
+        String type,
         BigDecimal price,
         String currency,
-        String type,
         int validityDays,
         Long dataMb,
         Long voiceMinutes,
-        Long smsCount,
-        String status,
-        Instant createdAt
+        Long smsCount
 ) {
 
-    public static AddonResponse from(Addon addon) {
-        return new AddonResponse(
+    public static AddonSnapshotResponse from(Addon addon) {
+        return new AddonSnapshotResponse(
                 addon.getId(),
                 addon.getCode(),
                 addon.getName(),
+                addon.getType().name(),
                 addon.getPrice(),
                 addon.getCurrency(),
-                addon.getType().name(),
                 addon.getValidityDays(),
                 addon.getDataMb(),
                 addon.getVoiceMinutes(),
-                addon.getSmsCount(),
-                addon.getStatus(),
-                addon.getCreatedAt()
+                addon.getSmsCount()
         );
     }
 }

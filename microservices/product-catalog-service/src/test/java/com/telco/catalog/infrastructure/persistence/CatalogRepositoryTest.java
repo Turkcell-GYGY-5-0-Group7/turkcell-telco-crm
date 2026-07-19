@@ -1,5 +1,7 @@
 package com.telco.catalog.infrastructure.persistence;
 
+import com.telco.catalog.domain.model.Addon;
+import com.telco.catalog.domain.model.AddonType;
 import com.telco.catalog.domain.model.Tariff;
 import com.telco.catalog.domain.model.TariffStatus;
 import com.telco.catalog.domain.model.TariffType;
@@ -105,6 +107,44 @@ class CatalogRepositoryTest {
 
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getCode()).isEqualTo("DATA-5GB");
+    }
+
+    @Test
+    void tariff_addAddon_persists_join_rows_through_owning_side() {
+        Tariff tariff = saveTariff("PLAN-OWNING-SIDE", TariffStatus.DRAFT);
+        Addon addon = Addon.create("LINK_DATA_1GB", "Data 1 GB", new BigDecimal("15.00"), "TRY",
+                AddonType.DATA, 30, 1024L, null, null);
+        addonRepository.save(addon);
+
+        tariff.addAddon(addon);
+        tariffRepository.save(tariff);
+        flushAndClear();
+
+        Integer joinRows = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM tariff_addons WHERE tariff_id = ? AND addon_id = ?",
+                Integer.class, tariff.getId(), addon.getId());
+        assertThat(joinRows).isEqualTo(1);
+
+        var linked = addonRepository.findByTariffs_Code(
+                "PLAN-OWNING-SIDE", org.springframework.data.domain.PageRequest.of(0, 10));
+        assertThat(linked.getContent()).hasSize(1);
+        assertThat(linked.getContent().get(0).getCode()).isEqualTo("LINK_DATA_1GB");
+        assertThat(linked.getContent().get(0).getDataMb()).isEqualTo(1024L);
+    }
+
+    @Test
+    void migration_seeded_addons_are_readable_with_allowances() {
+        assertThat(addonRepository.findByCode("DATA_5GB")).hasValueSatisfying(addon -> {
+            assertThat(addon.getType()).isEqualTo(AddonType.DATA);
+            assertThat(addon.getDataMb()).isEqualTo(5120L);
+            assertThat(addon.getVoiceMinutes()).isNull();
+            assertThat(addon.getSmsCount()).isNull();
+            assertThat(addon.getStatus()).isEqualTo("ACTIVE");
+        });
+        assertThat(addonRepository.findByCode("VOICE_300")).hasValueSatisfying(addon ->
+                assertThat(addon.getVoiceMinutes()).isEqualTo(300L));
+        assertThat(addonRepository.findByCode("SMS_500")).hasValueSatisfying(addon ->
+                assertThat(addon.getSmsCount()).isEqualTo(500L));
     }
 
     private Tariff saveTariff(String code, TariffStatus initialStatus) {

@@ -47,6 +47,15 @@ public class Addon {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "data_mb")
+    private Long dataMb;
+
+    @Column(name = "voice_minutes")
+    private Long voiceMinutes;
+
+    @Column(name = "sms_count")
+    private Long smsCount;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -55,6 +64,34 @@ public class Addon {
 
     /** For JPA only. */
     protected Addon() {
+    }
+
+    private Addon(UUID id, String code, String name, BigDecimal price, String currency,
+                  AddonType type, int validityDays, Long dataMb, Long voiceMinutes, Long smsCount) {
+        this.id = Objects.requireNonNull(id, "id");
+        this.code = Objects.requireNonNull(code, "code");
+        this.name = Objects.requireNonNull(name, "name");
+        this.price = Objects.requireNonNull(price, "price");
+        this.currency = Objects.requireNonNull(currency, "currency");
+        this.type = Objects.requireNonNull(type, "type");
+        this.validityDays = validityDays;
+        this.status = "ACTIVE";
+        this.dataMb = dataMb;
+        this.voiceMinutes = voiceMinutes;
+        this.smsCount = smsCount;
+        this.createdAt = Instant.now();
+    }
+
+    /**
+     * Factory that creates a new addon in {@code ACTIVE} status. Allowance fields are nullable:
+     * a DATA addon carries {@code dataMb}, a MINUTES addon {@code voiceMinutes}, an SMS addon
+     * {@code smsCount}, and a VAS addon none. The entity stays immutable after creation.
+     */
+    public static Addon create(String code, String name, BigDecimal price, String currency,
+                               AddonType type, int validityDays,
+                               Long dataMb, Long voiceMinutes, Long smsCount) {
+        return new Addon(UUID.randomUUID(), code, name, price, currency, type, validityDays,
+                dataMb, voiceMinutes, smsCount);
     }
 
     public UUID getId() {
@@ -87,6 +124,18 @@ public class Addon {
 
     public String getStatus() {
         return Objects.requireNonNullElse(status, "ACTIVE");
+    }
+
+    public Long getDataMb() {
+        return dataMb;
+    }
+
+    public Long getVoiceMinutes() {
+        return voiceMinutes;
+    }
+
+    public Long getSmsCount() {
+        return smsCount;
     }
 
     public Instant getCreatedAt() {

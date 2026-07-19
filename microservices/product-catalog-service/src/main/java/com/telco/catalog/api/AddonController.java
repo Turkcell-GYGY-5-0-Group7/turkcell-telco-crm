@@ -1,15 +1,25 @@
 package com.telco.catalog.api;
 
+import com.telco.catalog.application.command.CreateAddonCommand;
 import com.telco.catalog.application.dto.AddonResponse;
+import com.telco.catalog.application.dto.CreateAddonRequest;
 import com.telco.catalog.application.query.ListAddonsQuery;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.common.api.PageResult;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Set;
 
 /**
  * Addon catalog API. Thin edge: HTTP -> query via {@link Mediator} -> {@link ApiResult}
@@ -25,6 +35,25 @@ public class AddonController {
     public AddonController(Mediator mediator, ApiResponseFactory responses) {
         this.mediator = mediator;
         this.responses = responses;
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('ADMIN')")
+    public ApiResult<AddonResponse> createAddon(@Valid @RequestBody CreateAddonRequest request) {
+        CreateAddonCommand command = new CreateAddonCommand(
+                request.code(),
+                request.name(),
+                request.price(),
+                request.currency(),
+                request.type(),
+                request.validityDays(),
+                request.dataMb(),
+                request.voiceMinutes(),
+                request.smsCount(),
+                request.applicableTariffCodes() == null ? Set.of() : request.applicableTariffCodes()
+        );
+        return responses.ok(mediator.send(command));
     }
 
     /**
