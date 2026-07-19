@@ -100,6 +100,14 @@ REVOKE ALL ON DATABASE campaign_db FROM PUBLIC;
 GRANT CONNECT ON DATABASE campaign_db TO campaign;
 GRANT CONNECT ON DATABASE campaign_db TO debezium;
 
+-- fraud-service
+CREATE USER fraud WITH LOGIN PASSWORD 'fraud'
+    NOSUPERUSER NOCREATEDB NOCREATEROLE;
+CREATE DATABASE fraud_db OWNER fraud;
+REVOKE ALL ON DATABASE fraud_db FROM PUBLIC;
+GRANT CONNECT ON DATABASE fraud_db TO fraud;
+GRANT CONNECT ON DATABASE fraud_db TO debezium;
+
 -- reference-service (demo; no domain events; debezium not granted)
 CREATE USER reference WITH LOGIN PASSWORD 'reference'
     NOSUPERUSER NOCREATEDB NOCREATEROLE;

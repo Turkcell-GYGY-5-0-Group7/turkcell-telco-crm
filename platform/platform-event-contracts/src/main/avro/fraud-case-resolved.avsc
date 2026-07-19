@@ -1,0 +1,38 @@
+{
+  "type": "record",
+  "name": "FraudCaseResolvedV1",
+  "namespace": "com.telco.platform.events.fraud",
+  "doc": "Emitted when a fraud case reaches a terminal outcome (fraud.case-resolved.v1). Producer: fraud-service.",
+  "fields": [
+    {
+      "name": "caseId",
+      "type": "string",
+      "doc": "Unique fraud-case identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer the case was opened against (UUID)."
+    },
+    {
+      "name": "status",
+      "type": "string",
+      "doc": "Terminal FraudCaseStatus: CONFIRMED or DISMISSED."
+    },
+    {
+      "name": "resolvedAt",
+      "type": ["null", {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }],
+      "default": null,
+      "doc": "Instant the case was resolved, in epoch milliseconds (UTC); null if not yet recorded."
+    },
+    {
+      "name": "resolvedBy",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Identifier of the agent who resolved the case; null for system-driven resolution."
+    }
+  ]
+}

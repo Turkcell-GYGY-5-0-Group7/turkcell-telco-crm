@@ -1,0 +1,72 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.telco</groupId>
+        <artifactId>domain-services-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../domain-services-parent/pom.xml</relativePath>
+    </parent>
+
+    <artifactId>fraud-service</artifactId>
+    <name>fraud-service</name>
+    <description>Rule-based SIM-swap / fraud detection (port 9013, CQRS + Mediator, ADR-029).
+        Owns MsisdnLifecycleSignal/FraudRule/FraudSignal/FraudCase in fraud-db; read-only relative
+        to subscription-service (consumes its events via the inbox, never touches subscription-db).
+        Rule evaluation (23.2), fraud-case API (23.3), and outbox/inbox eventing (23.2/23.4) land in
+        later Sprint 23 features - this module is scaffold + schema + aggregates only (Feature 23.1).</description>
+
+    <dependencies>
+        <!-- CQRS + Mediator dispatch (ADR-004, ADR-029 Decision Section 2). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-mediator</artifactId>
+        </dependency>
+        <!-- Idempotent consumption of subscription-service events, wired in Feature 23.2
+             (msisdn.allocated.v1 / msisdn.released.v1 / subscription.activated.v1 /
+             subscription.suspended.v1). Brings the inbox_message table (V901) onto the classpath. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-inbox</artifactId>
+        </dependency>
+        <!-- Kafka listener infrastructure (spring-kafka) for the four inbox-backed consumers of
+             subscription-service's msisdn.*/subscription.* events (Feature 23.2). Mirrors the
+             usage-service / billing-service dependency; @KafkaListener is enabled by Spring Boot's
+             KafkaAutoConfiguration once spring-kafka is on the classpath (ADR-005, ADR-009). -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>starter-kafka</artifactId>
+        </dependency>
+        <!-- starter-outbox (publishes fraud.signal-raised.v1 / fraud.case-opened.v1 /
+             fraud.case-resolved.v1 in Feature 23.4, brings the outbox_event table V900) and the
+             mandatory starter-api / starter-security / starter-observability are inherited from
+             domain-services-parent (ADR-018) - never depend on platform-core directly. -->
+
+        <!-- OpenAPI/Swagger UI for the Feature 23.3 fraud-case + rule-config REST API (ARC-08).
+             Version is managed centrally in microservices/pom.xml dependencyManagement - never
+             hardcode it here. -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+
+        <!-- Canonical Avro event contracts and the shared AvroContractAssertions test-jar (ADR-019):
+             FraudEventSchemaCompatTest compares the fraud outbound payload records against the
+             governed schemas in platform-event-contracts, not a local test-resources snapshot. -->
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.telco.platform</groupId>
+            <artifactId>platform-event-contracts</artifactId>
+            <type>test-jar</type>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

@@ -48,7 +48,7 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `payment.failed.v1` | payment-service | order, subscription, notification | Payment failed; may trigger retry. |
 | `payment.refunded.v1` | payment-service | order, notification | Refund issued (compensation). |
 | `msisdn.allocated.v1` | subscription-service | notification | MSISDN allocated to a subscription. |
-| `msisdn.released.v1` | subscription-service | - | MSISDN returned to the pool. |
+| `msisdn.released.v1` | subscription-service | fraud | MSISDN returned to the pool. Carries a nullable `customerId` (added 2026-07-17, ADR-029 Amendment 1) so fraud-service's `MSISDN_CHURN_VELOCITY` rule can key release events on the owning customer. fraud-service consumer wiring lands in Feature 23.2. |
 | `subscription.activated.v1` | subscription-service | order, billing, notification | Subscription activated. |
 | `subscription.suspended.v1` | subscription-service | billing, notification | Subscription suspended (non-payment). |
 | `subscription.terminated.v1` | subscription-service | billing, notification | Subscription terminated. |
@@ -76,6 +76,9 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `dispute.resolved-merchant.v1` | dispute-service | billing, payment, notification | Dispute resolved in the merchant's favor - always a no-financial-change hold release, by contract. |
 | `dispute.withdrawn.v1` | dispute-service | notification | Customer withdrew the dispute. |
 | `dispute.closed.v1` | dispute-service | notification | Dispute reached its terminal `CLOSED` state. |
+| `fraud.signal-raised.v1` | fraud-service | - | Raised on every fraud-rule hit (RAPID_SIM_SWAP / MSISDN_CHURN_VELOCITY / SUSPEND_REACTIVATE_VELOCITY), informational (ADR-029 Section 5). Producer publish sites land in Feature 23.2; no consumer in this phase. |
+| `fraud.case-opened.v1` | fraud-service | ticket, notification | Emitted when related signals escalate into an actionable FraudCase (ADR-029 Section 5). ticket-service auto-opens a linked review ticket and notification-service raises an internal ops/security alert - both consumers are informational/agent-facing only (no automated suspension), wired in Feature 23.4. |
+| `fraud.case-resolved.v1` | fraud-service | - | Emitted when a FraudCase reaches a terminal CONFIRMED/DISMISSED outcome (ADR-029 Section 5). Producer publish site lands in Feature 23.3; no consumer in this phase. |
 
 ---
 
@@ -144,6 +147,7 @@ field only; no field was renamed, removed, or retyped.
 | 2026-07-04 | `payment.completed.v1`, `payment.failed.v1` | `invoiceId` (nullable string) | Carries the invoice being settled so billing-service's `PaymentCompletedBillingConsumer` can mark the invoice paid when a customer pays via `POST /api/v1/payments` with an `invoiceId` (Section 14.2). Null for order-only charges. |
 | 2026-07-04 | `quota.threshold-reached.v1`, `quota.exceeded.v1` | `customerId` (nullable string) | Lets notification-service route the 80%/100% quota SMS to the real customer instead of falling back to the literal `unknown`. Resolved by usage-service from the `Quota` aggregate's locally stored `customer_id` (set at provisioning time from `subscription.activated.v1`). Null only for events emitted before this field existed (rolling-upgrade compatibility). |
 | 2026-07-07 | `customer.registered.v1` | `registeredByUserId` (nullable string) | Carries the Keycloak subject of the caller for genuine self-service registration, so identity-service's new inbox consumer can upsert `users.customer_id` and close the identity-to-customer linkage gap (Section 14.1.1 ruling). Null for agent/dealer-assisted registration - those customers stay unlinked until a future "claim my account" flow. |
+| 2026-07-17 | `msisdn.released.v1` | `customerId` (nullable string) | Lets fraud-service's `MSISDN_CHURN_VELOCITY` rule (ADR-029 Amendment 1) key allocate/release cycles on the owning customer. Populated by subscription-service's `TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()` (already in scope). Null only for events emitted before this field existed; fraud-service falls back to the most recent prior `MSISDN_ALLOCATED` signal for the same MSISDN (ADR-029 Section 4). |
 
 ---
 

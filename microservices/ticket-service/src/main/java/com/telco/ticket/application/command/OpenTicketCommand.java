@@ -4,10 +4,12 @@ import com.telco.platform.cqrs.Command;
 import java.util.UUID;
 
 /**
- * @param externalRef correlates this ticket back to an external originating entity (e.g. a
- *                     dispute id, for {@code category = "DISPUTE"} tickets auto-opened by
- *                     {@code DisputeOpenedTicketConsumer}). {@code null} for tickets opened
- *                     directly via the HTTP API, which have no external correlation.
+ * @param externalRef correlates this ticket back to an external originating entity: a dispute id
+ *                     for {@code category = "DISPUTE"} tickets auto-opened by
+ *                     {@code DisputeOpenedTicketConsumer}, or a fraud case id for
+ *                     {@code category = "FRAUD_REVIEW"} tickets auto-opened by the fraud
+ *                     auto-ticket consumer. {@code null} for tickets opened directly via the HTTP
+ *                     API, which have no external correlation.
  */
 public record OpenTicketCommand(
         UUID customerId,
@@ -17,7 +19,12 @@ public record OpenTicketCommand(
         String externalRef
 ) implements Command<UUID> {
 
-    /** Original 4-arg form, preserved for every existing (non-dispute) caller - externalRef defaults to null. */
+    /**
+     * Agent/API-opened ticket with no cross-context source reference. Preserves the original
+     * four-argument call sites (controller, existing tests); the dispute auto-ticket consumer uses
+     * the five-argument form to carry the originating dispute id, and the fraud auto-ticket consumer
+     * uses it to carry the originating fraud {@code caseId}, both as {@code externalRef}.
+     */
     public OpenTicketCommand(UUID customerId, String category, String priority, String subject) {
         this(customerId, category, priority, subject, null);
     }

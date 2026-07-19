@@ -148,6 +148,24 @@ final Tech Lead Agent approval.
 - Status: skeleton and schema only as of Sprint 21 Feature 21.1 - no domain behavior, API, or
   eventing wiring yet (21.2-21.4).
 
+### fraud-service (port 9013)
+
+- Bounded context: Rule-based SIM-swap / fraud detection reacting to existing subscription-service
+  domain events (ADR-029; Sprint 23, narrower rule-based slice of the streaming/ML fraud vision in
+  TELCO-CRM-ADVANCED.md Section 4.4, which is deferred to a later ADR).
+- Architecture mode: CQRS + Mediator.
+- Infrastructure profile: PostgreSQL (`fraud-db`, primary store, event-emitting service); Redis
+  optional cache for hot per-customer velocity counters, explicitly **not** source of truth.
+- Aggregates: MsisdnLifecycleSignal, FraudRule, FraudSignal, FraudCase.
+- Read-only relative to subscription-service (ADR-029 Section 1): consumes its events via the inbox
+  and never accesses `subscription-db` directly (ADR-006).
+- Key APIs: fraud-case review/rule-config API (`/api/v1/fraud/**`, Feature 23.3 - not wired yet).
+- Events: consume `msisdn.allocated.v1`, `msisdn.released.v1`, `subscription.activated.v1`,
+  `subscription.suspended.v1` (subscription-service, via inbox); publish `fraud.signal-raised.v1`,
+  `fraud.case-opened.v1`, `fraud.case-resolved.v1` (via outbox - Feature 23.4, not wired yet).
+- Status: skeleton and schema only as of Sprint 23 Feature 23.1 - no rule evaluation, API, or
+  eventing wiring yet (23.2-23.4).
+
 ---
 
 ## 3. Architecture Mode Summary
@@ -155,7 +173,7 @@ final Tech Lead Agent approval.
 | Mode (ADR-004) | Services |
 | --- | --- |
 | Simple Service Layer | notification-service |
-| CQRS + Mediator | identity, customer, product-catalog, subscription, usage, ticket, campaign |
+| CQRS + Mediator | identity, customer, product-catalog, subscription, usage, ticket, campaign, fraud |
 | Domain Orchestration | order, billing, payment |
 | N/A (infrastructure) | api-gateway, discovery-server, config-server |
 
@@ -178,6 +196,7 @@ Each service MUST declare its mode in its own `README.md` (ADR-004).
 | notification-service | NotificationTemplate, Notification, Channel |
 | ticket-service | Ticket, TicketComment, SLA |
 | campaign-service | Campaign, CampaignRedemption |
+| fraud-service | MsisdnLifecycleSignal, FraudRule, FraudSignal, FraudCase |
 
 Detailed entity-relationship diagrams: [`docs/erd/`](../erd/).
 
@@ -205,6 +224,7 @@ database. Cache/search are added only where justified.
 | notification-service | **MongoDB** (approved exception) + PostgreSQL outbox | - | - | - |
 | ticket-service | PostgreSQL | - | - | - |
 | campaign-service | PostgreSQL | - (transactional, per-customer-consistent - ADR-027) | - | - |
+| fraud-service | PostgreSQL | Redis (optional velocity counters, not source of truth - ADR-029) | - | - |
 
 Notes:
 

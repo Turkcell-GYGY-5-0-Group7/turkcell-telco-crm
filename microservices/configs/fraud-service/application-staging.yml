@@ -1,0 +1,6 @@
+# fraud-service staging overrides. Credentials injected via Kubernetes Secrets.
+spring:
+  datasource:
+    url: ${FRAUD_DB_URL}
+    username: ${FRAUD_DB_USER}
+    password: ${FRAUD_DB_PASSWORD}

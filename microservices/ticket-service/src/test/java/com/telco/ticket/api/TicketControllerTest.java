@@ -63,7 +63,7 @@ class TicketControllerTest {
                         customerId.toString()));
         TicketResponse ticketResponse = new TicketResponse(
                 ticketId, customerId, "BILLING", "HIGH", "OPEN", "billing-support",
-                "subject", Instant.now().plusSeconds(3600), false, Instant.now(), null, List.of());
+                "subject", null, Instant.now().plusSeconds(3600), false, Instant.now(), null, List.of());
         when(mediator.query(new GetTicketQuery(ticketId, callerSub, false, customerId.toString())))
                 .thenReturn(ticketResponse);
         when(apiResponseFactory.ok(ticketResponse)).thenReturn(ApiResult.ok(ticketResponse, null));
@@ -115,7 +115,7 @@ class TicketControllerTest {
                 .thenReturn(new UserContext(callerSub.toString(), Set.of("SUBSCRIBER"), null, null));
         TicketResponse ticketResponse = new TicketResponse(
                 ticketId, customerId, "BILLING", "HIGH", "OPEN", "billing-support",
-                "subject", Instant.now().plusSeconds(3600), false, Instant.now(), null, List.of());
+                "subject", null, Instant.now().plusSeconds(3600), false, Instant.now(), null, List.of());
         when(mediator.query(new GetTicketQuery(ticketId, callerSub, false, null)))
                 .thenReturn(ticketResponse);
         when(apiResponseFactory.ok(ticketResponse)).thenReturn(ApiResult.ok(ticketResponse, null));

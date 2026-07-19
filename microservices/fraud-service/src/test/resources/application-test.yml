@@ -1,0 +1,50 @@
+# fraud-service test profile (Feature 23.5.2 integration tests). Mirrors campaign-service's
+# application-test.yml: config-server/eureka off, Flyway owns the schema (service + platform
+# outbox V900 / inbox V901 migrations), and the Kafka listener containers never start - the
+# integration tests drive the inbox consumers' work by dispatching the same Mediator command the
+# @KafkaListener would, so no broker connection is attempted. Testcontainers supplies the actual
+# datasource URL at runtime via @DynamicPropertySource.
+spring:
+  config:
+    import: ""
+  cloud:
+    config:
+      enabled: false
+    compatibility-verifier:
+      enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+  flyway:
+    locations:
+      - classpath:db/migration
+      - classpath:db/migration/platform
+  kafka:
+    bootstrap-servers: localhost:9092
+    listener:
+      auto-startup: false
+
+eureka:
+  client:
+    enabled: false
+    register-with-eureka: false
+    fetch-registry: false
+
+telco:
+  platform:
+    security:
+      gateway-trust:
+        enabled: false
+      jwt:
+        secret: ZnJhdWQtdGVzdC1zZWNyZXQta2V5LWZvci10ZXN0aW5nLTIwMjYtMjM=
+        issuer: telco
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true
+    # Off by default: the fraud MVP scaffold declares Redis as an optional, non-source-of-truth
+    # cache only (ADR-029 Section 3) and adds no lock usage, so keep any eager Redis/lock client out
+    # of the test context.
+    lock:
+      enabled: false
