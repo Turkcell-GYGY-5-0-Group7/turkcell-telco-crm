@@ -28,6 +28,8 @@ The platform is built around a custom CQRS + Mediator framework, a transactional
 for reliable eventing, and a governed hybrid application architecture. It is documented through
 Architecture Decision Records, which are the single source of technical truth.
 
+**Full documentation site:** https://turkcell-gygy-5-0-group7.github.io/turkcell-telco-crm/
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -264,6 +266,7 @@ See [postman/README.md](postman/README.md) for the full setup guide.
 
 | Topic | Document |
 | --- | --- |
+| **Published documentation site** | https://turkcell-gygy-5-0-group7.github.io/turkcell-telco-crm/ |
 | Documentation index | [docs/README.md](docs/README.md) |
 | MVP analysis and design brief | [docs/product/TELCO-CRM-MVP.md](docs/product/TELCO-CRM-MVP.md) |
 | Enterprise evolution (post-MVP) | [docs/product/TELCO-CRM-ADVANCED.md](docs/product/TELCO-CRM-ADVANCED.md) |

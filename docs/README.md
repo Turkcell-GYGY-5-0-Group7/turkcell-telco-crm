@@ -1,5 +1,8 @@
 # Telco CRM Platform Documentation
 
+Published documentation site (built from this directory with MkDocs Material):
+https://turkcell-gygy-5-0-group7.github.io/turkcell-telco-crm/
+
 This directory holds the product and architecture documentation for the Telco CRM Platform.
 Architecture Decision Records (the technical authority) live in
 [`/architecture/adr/`](../architecture/adr/). Execution planning and live status live in
