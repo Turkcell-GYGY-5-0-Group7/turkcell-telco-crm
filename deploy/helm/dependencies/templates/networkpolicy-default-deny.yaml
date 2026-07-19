@@ -156,6 +156,21 @@ spec:
           - kafka-connect
           - minio
           - keycloak
+          # Observability backends (full-deploy completeness, 2026-07-19). These
+          # are meshed dependency pods too (`linkerdInject: true`) and receive
+          # traffic from meshed clients on 4143: services push OTLP traces to
+          # otel-collector and logs to loki; otel-collector forwards to tempo and
+          # loki; grafana queries prometheus/loki/tempo; prometheus scrapes
+          # otel-collector. Without an ingress allow they are default-denied and
+          # the observability stack silently receives nothing under full
+          # default-deny. (Prometheus scraping the telco-SERVICE pods is the
+          # inverse edge - metrics ingress on each service - and is the one
+          # remaining follow-up noted in the sprint README, not covered here.)
+          - otel-collector
+          - loki
+          - tempo
+          - prometheus
+          - grafana
   policyTypes:
     - Ingress
   ingress:
@@ -163,6 +178,81 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/part-of: telco-crm
+      ports:
+        - protocol: TCP
+          port: 4143
+---
+# Backend-to-backend egress allow (full-deploy completeness, 2026-07-19). The
+# mirror of `allow-backend-ingress` above, for the EGRESS half of the edges where
+# one dependency backend calls another - which the per-service telco-service
+# egress template does not (and should not) cover, since these are not
+# telco-service releases. Under the default-deny baseline a backend pod's egress
+# is denied except DNS and the linkerd control plane, so every backend->backend
+# call fails until this rule restores it. Concrete edges this covers, each read
+# from the real dependency config rather than assumed:
+#   - keycloak      -> postgres        (KC_DB_URL jdbc:postgresql://postgres,
+#                                        deploy/helm/dependencies/templates/keycloak.yaml)
+#   - kafka-connect -> kafka, postgres (BOOTSTRAP_SERVERS kafka:9092 + Debezium
+#                                        logical-replication source on postgres)
+#   - schema-registry -> kafka         (SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS)
+#   - otel-collector  -> tempo, loki   (exporters otlp/tempo tempo:4317,
+#                                        otlphttp/loki http://loki:3100/otlp)
+#   - grafana         -> prometheus, loki, tempo (datasources.yml)
+#   - prometheus      -> otel-collector (scrape job otel-collector:8889)
+# The source podSelector is bounded to the backend components only (not the whole
+# telco-crm tier), so this does NOT widen the least-privilege egress the
+# telco-service releases have. Destination is the same meshed backend set on 4143
+# (the ingress half is the rule above). This keeps backend<->backend a single
+# coarse infra allow rather than a per-source matrix - acceptable at the infra
+# tier, whereas the service tier keeps per-service least privilege.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "telco-deps.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - postgres
+          - redis
+          - mongo
+          - kafka
+          - schema-registry
+          - kafka-connect
+          - minio
+          - keycloak
+          - otel-collector
+          - loki
+          - tempo
+          - prometheus
+          - grafana
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - postgres
+                  - redis
+                  - mongo
+                  - kafka
+                  - schema-registry
+                  - kafka-connect
+                  - minio
+                  - keycloak
+                  - otel-collector
+                  - loki
+                  - tempo
+                  - prometheus
+                  - grafana
       ports:
         - protocol: TCP
           port: 4143

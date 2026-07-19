@@ -284,6 +284,17 @@ networkPolicy:
     minio: false
     mongo: false
     keycloak: false
+    # Observability egress (Feature 19.4.3 full-deploy completeness, 2026-07-19).
+    # Unlike the per-service infra flags above, this defaults TRUE because it is
+    # universal: every telco-service release runs the platform's Spring Boot base
+    # config and therefore emits OTLP traces to otel-collector
+    # (microservices/configs/application-docker.yml
+    # `management.otlp.tracing.endpoint: http://otel-collector:4318/v1/traces`)
+    # and pushes logs to Loki (`loki.url: http://loki:3100/loki/api/v1/push`).
+    # Both destinations are meshed, so the rule targets 4143 like every other
+    # meshed egress. Set false only for a scoped stack with no observability
+    # backends deployed (the rule then matches nothing harmlessly regardless).
+    observability: true
     # Feature 19.4.3 (Finding B fix, 2026-07-18). Service-to-service HTTP egress:
     # the list of OTHER telco-service releases this service makes synchronous
     # HTTP calls to (api-gateway -> the domain services it routes to; the

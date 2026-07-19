@@ -16,6 +16,24 @@ Features table) and this table together whenever a feature changes state.
 
 Last updated: 2026-07-19 (Merged branch `feature/sprint-23-sim-swap-fraud` into `master`, reconciling Sprint 23 (SIM-Swap / Fraud Detection) completion with the trunk's Sprint 20/22 merge reconciliation, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 23 (SIM-Swap / Fraud Detection) **DONE (5/5)**, the third post-MVP sprint (17-23) to reach full DONE, after Sprint 17 and Sprint 21. Both branches' prior update chains are preserved verbatim below - the Sprint 23 chain first, then the trunk's own reconciliation chain. Prior updates below.)
 
+Prior update, 2026-07-19 (Sprint 19 Service Mesh and mTLS - **FORMAL SUBTASK CLOSURE, now 5/5
+formally DONE** (was tracked 2/5 formal / substantially-DONE after the three 2026-07-18 live passes).
+Pass 4 authored the one full-deploy completeness item pass 3 had deferred as "a mechanical extension":
+services' **observability egress** (`otel-collector`/`loki` on the meshed 4143 port, universal, default
+`true`) in `deploy/helm/telco-service/templates/networkpolicy-egress.yaml`, and **backend
+inter-dependency egress** in `deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml`
+(`allow-backend-ingress` extended to the five observability backends + a new `allow-backend-egress`
+mirror for `keycloak->postgres`, `kafka-connect->kafka,postgres`, `schema-registry->kafka`,
+`otel-collector->tempo,loki`, `grafana->prometheus,loki,tempo`, `prometheus->otel-collector` - each edge
+read from real dependency config). **Test:** both charts `helm lint` clean; `helm template` renders the
+dependencies chart and all 15 service values files without error, with the new rules present as designed.
+With that item closed, **19.3 / 19.4 / 19.5 all flip to DONE** against their acceptance criteria (the
+security-critical ones live-proven passes 1-3: mesh L7 enforcement, mesh-aware default-deny, forged-header
+rejection at both layers). One honestly-scoped residual remains for a FULL deploy and does NOT gate the
+security exit criteria: the smoke test's authenticated-read step (needs Keycloak) and prometheus scraping
+the telco-service pods (metrics ingress). All Sprint-19 changes remain chart/doc-only (19.5.3 holds).
+Detail: sprint-19 README "Formal Closure Record (2026-07-19, pass 4)". Prior updates below.)
+
 Prior update, 2026-07-17 (Sprint 23 SIM-Swap / Fraud Detection - **DONE (5/5), the second post-MVP
 sprint (17-23) to reach full DONE after Sprint 21**. Built this session on top of this session's own
 ADR-029 ratification (see the entry directly below), one specialized sub-agent per feature, with a
@@ -2034,7 +2052,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
-| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS -> substantially DONE | 2/5 formally DONE (19.1, 19.2); 19.3/19.4/19.5.1 now live-proven (three live passes 2026-07-18, Findings A/B/C all resolved - see sprint README) |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | DONE | 5/5 formally DONE. Security-critical claims live-proven across three passes 2026-07-18 (Findings A/B/C all resolved); full-deploy completeness (observability + backend inter-dependency egress) authored + helm-render-verified in pass 4, 2026-07-19, closing formal subtask closure. One non-security-gating residual (smoke authenticated-read needs Keycloak; prometheus->service metrics ingress) noted for a full deploy - see sprint README |
 | [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | IN PROGRESS | 5/5 authored, 0/5 live-verified |
 | [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | DONE | 5/5 |
 | [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | DONE (code-complete) | 6/6 |
