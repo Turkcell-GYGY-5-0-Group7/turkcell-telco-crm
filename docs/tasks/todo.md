@@ -27,7 +27,7 @@ verification; caffeinate-wrapped long commands; `make infra-down` immediately af
       contract doc; unit tests; commit
 
 ## Phase 3 - 24.2 Order model generalization
-- [ ] V8 order/item types; validation matrix; subscription internal read + client; one-line
+- [x] V8 order/item types; validation matrix; subscription internal read + client; one-line
       invariant relaxed (two-TARIFF still fails); avro additive + compat; internal DTO mirrors;
       unit tests; commit
 

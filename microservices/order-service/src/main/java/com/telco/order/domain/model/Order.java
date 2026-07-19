@@ -38,6 +38,10 @@ public class Order {
     @Column(nullable = false, length = 32)
     private OrderStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", nullable = false, length = 20)
+    private OrderType orderType;
+
     @Column(name = "idempotency_key", nullable = false, unique = true, length = 64)
     private String idempotencyKey;
 
@@ -60,11 +64,13 @@ public class Order {
     protected Order() {
     }
 
-    private Order(UUID id, UUID customerId, String idempotencyKey, BigDecimal totalAmount, String userId) {
+    private Order(UUID id, UUID customerId, String idempotencyKey, BigDecimal totalAmount,
+                  String userId, OrderType orderType) {
         this.id = Objects.requireNonNull(id, "id");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         this.userId = Objects.requireNonNull(userId, "userId");
+        this.orderType = Objects.requireNonNull(orderType, "orderType");
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
         Instant now = Instant.now();
@@ -72,14 +78,27 @@ public class Order {
         this.updatedAt = now;
     }
 
-    /** Creates a new order in {@link OrderStatus#PENDING} state. */
+    /**
+     * Backward-compatible overload creating a {@link OrderType#NEW_LINE} order - the only kind that
+     * existed before Sprint 24 Feature 24.2.
+     */
     public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount, String userId) {
-        return new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId);
+        return create(customerId, idempotencyKey, totalAmount, userId, OrderType.NEW_LINE);
     }
 
     /**
-     * Adds an item to this order with no campaign discount. Callers use this to build the item list
-     * before persisting.
+     * Creates a new order in {@link OrderStatus#PENDING} state. {@code orderType} is derived from
+     * the items by the caller ({@code CreateOrderCommandHandler}) and persisted so saga consumers
+     * can branch without re-deriving (Sprint 24 design-note D1/D2).
+     */
+    public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount,
+                               String userId, OrderType orderType) {
+        return new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId, orderType);
+    }
+
+    /**
+     * Adds a tariff item to this order with no campaign discount. Callers use this to build the item
+     * list before persisting.
      */
     public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
                              BigDecimal unitPrice, int quantity) {
@@ -87,13 +106,38 @@ public class Order {
     }
 
     /**
-     * Adds an item to this order, recording which campaign (if any) discounted {@code unitPrice}
-     * (Feature 21.3.3, ADR-027 Decision Section 4).
+     * Adds a tariff item to this order, recording which campaign (if any) discounted
+     * {@code unitPrice} (Feature 21.3.3, ADR-027 Decision Section 4).
      */
     public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
                              BigDecimal unitPrice, int quantity, UUID campaignId, String campaignCode) {
-        OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName,
-                unitPrice, quantity, campaignId, campaignCode);
+        return addTariffItem(tariffId, tariffCode, tariffVersion, tariffName, unitPrice, quantity,
+                campaignId, campaignCode, null);
+    }
+
+    /**
+     * Adds a {@link OrderItemType#TARIFF} item. {@code targetSubscriptionId} is non-null only on a
+     * {@link OrderType#PLAN_CHANGE} order's single item (Sprint 24 design-note D2).
+     */
+    public OrderItem addTariffItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
+                                   BigDecimal unitPrice, int quantity, UUID campaignId,
+                                   String campaignCode, UUID targetSubscriptionId) {
+        OrderItem item = OrderItem.forTariff(this, tariffId, tariffCode, tariffVersion, tariffName,
+                unitPrice, quantity, campaignId, campaignCode, targetSubscriptionId);
+        items.add(item);
+        return item;
+    }
+
+    /**
+     * Adds an {@link OrderItemType#ADDON} item snapshotted from the catalog addon (Sprint 24
+     * design-note D1). {@code targetSubscriptionId} is non-null for standalone {@link OrderType#ADDON}
+     * orders and null for addons bundled into a {@link OrderType#NEW_LINE} order.
+     */
+    public OrderItem addAddonItem(String productCode, String productName, BigDecimal unitPrice,
+                                  int quantity, UUID targetSubscriptionId, Long allowanceDataMb,
+                                  Long allowanceMinutes, Long allowanceSms) {
+        OrderItem item = OrderItem.forAddon(this, productCode, productName, unitPrice, quantity,
+                targetSubscriptionId, allowanceDataMb, allowanceMinutes, allowanceSms);
         items.add(item);
         return item;
     }
@@ -164,6 +208,11 @@ public class Order {
 
     public UUID getCustomerId() {
         return customerId;
+    }
+
+    /** The kind of order (NEW_LINE | ADDON | PLAN_CHANGE), derived from its items at creation. */
+    public OrderType getOrderType() {
+        return orderType;
     }
 
     public OrderStatus getStatus() {

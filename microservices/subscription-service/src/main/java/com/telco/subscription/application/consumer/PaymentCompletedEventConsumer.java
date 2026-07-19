@@ -19,6 +19,7 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -45,8 +46,12 @@ import java.util.UUID;
  *   <li>TERMINAL order lookup rejected ({@link OrderLookupRejectedException}: non-404 4xx, a
  *       contract/auth defect that cannot heal by redelivery) -&gt; dispatch
  *       {@code FailSubscriptionActivationCommand} (reason {@code ORDER_LOOKUP_REJECTED}).</li>
- *   <li>Multi-item order (one-line MVP invariant violated) -&gt; dispatch
- *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).</li>
+ *   <li>Not exactly one TARIFF item (one-tariff-line invariant violated) -&gt; dispatch
+ *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).
+ *       Since Sprint 24 Feature 24.2 (design-note D1) an order may bundle ADDON items alongside its
+ *       single tariff, so the invariant counts TARIFF items only - an item with a null
+ *       {@code itemType} (pre-24.2 order-service) counts as TARIFF. Two or more TARIFF items (or
+ *       none) still fail exactly as before.</li>
  * </ul>
  *
  * <p>Idempotency: dedup is delegated to the mediator. The dispatched commands
@@ -137,15 +142,20 @@ public class PaymentCompletedEventConsumer {
 
         UUID customerId = order.customerId() != null ? order.customerId() : payloadCustomerId;
 
-        if (order.items() == null || order.items().size() != 1) {
-            int count = order.items() == null ? 0 : order.items().size();
-            LOGGER.warn("Order {} has {} items; one-line MVP invariant violated -> activation-failed", orderId, count);
+        // One-tariff-line invariant (relaxed for Sprint 24 Feature 24.2): bundled ADDON items are
+        // allowed alongside the single TARIFF item; zero or 2+ TARIFF items still compensate.
+        List<OrderItemClientResponse> tariffItems = order.items() == null
+                ? List.of()
+                : order.items().stream().filter(OrderItemClientResponse::isTariffItem).toList();
+        if (tariffItems.size() != 1) {
+            LOGGER.warn("Order {} has {} TARIFF items; one-tariff-line invariant violated -> activation-failed",
+                    orderId, tariffItems.size());
             mediator.send(new FailSubscriptionActivationCommand(
                     orderId, customerId, "UNSUPPORTED_MULTI_ITEM_ORDER", messageId));
             return;
         }
 
-        OrderItemClientResponse item = order.items().get(0);
+        OrderItemClientResponse item = tariffItems.get(0);
         mediator.send(new ActivateSubscriptionCommand(orderId, customerId, item.tariffCode(), item.tariffVersion()));
         LOGGER.info("Activated subscription for orderId={} customerId={}", orderId, customerId);
     }

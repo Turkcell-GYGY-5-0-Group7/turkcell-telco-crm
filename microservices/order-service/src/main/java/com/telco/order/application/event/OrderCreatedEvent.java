@@ -25,13 +25,23 @@ public record OrderCreatedEvent(
      * compatible per ADR-019): the campaign, if any, that discounted {@code unitPrice}. This is what
      * lets campaign-service's Feature 21.4 {@code order.created.v1} consumer create the correctly
      * attributed {@code RESERVED} redemption row.
+     *
+     * <p>{@code itemType} (defaulting to {@code "TARIFF"} in the Avro contract), {@code productCode}
+     * and {@code targetSubscriptionId} are the Sprint 24 Feature 24.2 additive fields (design-note
+     * D1/D2). For ADDON items the contract-mandatory non-null {@code tariffId}/{@code tariffName}
+     * fields are generalized to the catalog product snapshot: {@code tariffId} carries the addon's
+     * catalog id and {@code tariffName} the addon name (the field names predate item-type
+     * generalization; keeping them non-null preserves Avro backward compatibility).
      */
     public record OrderItemPayload(
             String tariffId,
             String tariffName,
             BigDecimal unitPrice,
             int quantity,
-            String campaignId
+            String campaignId,
+            String itemType,
+            String productCode,
+            String targetSubscriptionId
     ) {
     }
 }

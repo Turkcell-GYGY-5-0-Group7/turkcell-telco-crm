@@ -45,4 +45,56 @@ class OrderItemTest {
         assertThat(item.getTariffName()).isNull();
         assertThat(item.getUnitPrice()).isNull();
     }
+
+    // --- Sprint 24 Feature 24.2: item-type factories ---
+
+    @Test
+    void create_defaults_to_tariff_item_type_with_no_addon_fields() {
+        Order order = Order.create(UUID.randomUUID(), "key-4", new BigDecimal("10.00"), "user-1");
+
+        OrderItem item = OrderItem.create(order, UUID.randomUUID(), "BASIC_V1", 1, "Basic",
+                new BigDecimal("10.00"), 1);
+
+        assertThat(item.getItemType()).isEqualTo(OrderItemType.TARIFF);
+        assertThat(item.getProductCode()).isNull();
+        assertThat(item.getTargetSubscriptionId()).isNull();
+        assertThat(item.getAllowanceDataMb()).isNull();
+        assertThat(item.getAllowanceMinutes()).isNull();
+        assertThat(item.getAllowanceSms()).isNull();
+    }
+
+    @Test
+    void forTariff_records_target_subscription_for_plan_change_items() {
+        Order order = Order.create(UUID.randomUUID(), "key-5", new BigDecimal("20.00"), "user-1");
+        UUID target = UUID.randomUUID();
+
+        OrderItem item = OrderItem.forTariff(order, UUID.randomUUID(), "PREMIUM_V2", 2, "Premium",
+                new BigDecimal("20.00"), 1, null, null, target);
+
+        assertThat(item.getItemType()).isEqualTo(OrderItemType.TARIFF);
+        assertThat(item.getTargetSubscriptionId()).isEqualTo(target);
+    }
+
+    @Test
+    void forAddon_snapshots_product_and_allowances_and_carries_no_tariff() {
+        Order order = Order.create(UUID.randomUUID(), "key-6", new BigDecimal("15.00"), "user-1");
+        UUID target = UUID.randomUUID();
+
+        OrderItem item = OrderItem.forAddon(order, "ADDON-5GB", "Extra 5GB",
+                new BigDecimal("15.00"), 2, target, 5120L, null, 100L);
+
+        assertThat(item.getItemType()).isEqualTo(OrderItemType.ADDON);
+        assertThat(item.getProductCode()).isEqualTo("ADDON-5GB");
+        assertThat(item.getTariffName()).isEqualTo("Extra 5GB");
+        assertThat(item.getUnitPrice()).isEqualByComparingTo("15.00");
+        assertThat(item.getQuantity()).isEqualTo(2);
+        assertThat(item.getTargetSubscriptionId()).isEqualTo(target);
+        assertThat(item.getAllowanceDataMb()).isEqualTo(5120L);
+        assertThat(item.getAllowanceMinutes()).isNull();
+        assertThat(item.getAllowanceSms()).isEqualTo(100L);
+        assertThat(item.getTariffId()).isNull();
+        assertThat(item.getTariffCode()).isNull();
+        assertThat(item.getTariffVersion()).isNull();
+        assertThat(item.getCampaignId()).isNull();
+    }
 }

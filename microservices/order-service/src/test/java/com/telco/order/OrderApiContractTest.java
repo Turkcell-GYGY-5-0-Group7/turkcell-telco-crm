@@ -17,9 +17,13 @@ import org.junit.jupiter.api.Test;
  *
  * <p>subscription-service binds only a subset of the response:
  * <ul>
- *   <li>{@code OrderClientResponse}: customerId, status, items</li>
- *   <li>{@code OrderItemClientResponse}: tariffCode, tariffVersion</li>
+ *   <li>{@code OrderClientResponse}: customerId, orderType, status, items</li>
+ *   <li>{@code OrderItemClientResponse}: tariffCode, tariffVersion, itemType, productCode,
+ *       targetSubscriptionId</li>
  * </ul>
+ * ({@code orderType}/{@code itemType}/{@code productCode}/{@code targetSubscriptionId} were added in
+ * Sprint 24 Feature 24.2: the activation invariant is now "exactly one TARIFF item", so the consumer
+ * discriminates item types and branches on the order kind.)
  *
  * <p>Dropping or renaming any of these breaks the {@code payment.completed.v1} activation hop and
  * fails this test. Adding fields is allowed (the consumer sets {@code JsonIgnoreProperties}), so this
@@ -27,8 +31,10 @@ import org.junit.jupiter.api.Test;
  */
 class OrderApiContractTest {
 
-    private static final Set<String> ORDER_REQUIRED_FIELDS = Set.of("customerId", "status", "items");
-    private static final Set<String> ITEM_REQUIRED_FIELDS = Set.of("tariffCode", "tariffVersion");
+    private static final Set<String> ORDER_REQUIRED_FIELDS =
+            Set.of("customerId", "orderType", "status", "items");
+    private static final Set<String> ITEM_REQUIRED_FIELDS =
+            Set.of("tariffCode", "tariffVersion", "itemType", "productCode", "targetSubscriptionId");
 
     @Test
     void order_response_exposes_fields_the_subscription_activation_path_consumes() {

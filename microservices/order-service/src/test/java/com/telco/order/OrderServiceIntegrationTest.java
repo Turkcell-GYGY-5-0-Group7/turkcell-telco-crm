@@ -1,5 +1,6 @@
 package com.telco.order;
 
+import com.telco.order.infrastructure.client.AddonSnapshotClientResponse;
 import com.telco.order.infrastructure.client.CampaignServiceClient;
 import com.telco.order.infrastructure.client.CustomerClientResponse;
 import com.telco.order.infrastructure.client.CustomerServiceClient;
@@ -119,6 +120,9 @@ class OrderServiceIntegrationTest {
                 .thenReturn(new CustomerClientResponse(CUSTOMER_ID, "ACTIVE"));
         when(productCatalogServiceClient.getTariff(any()))
                 .thenReturn(new TariffClientResponse(TARIFF_ID, "POSTPAID-001", "Postpaid Basic", new BigDecimal("49.99"), "TRY", 3));
+        when(productCatalogServiceClient.getAddonSnapshot(any()))
+                .thenReturn(new AddonSnapshotClientResponse(UUID.randomUUID(), "ADDON-5GB", "Extra 5GB",
+                        "DATA", new BigDecimal("15.00"), "TRY", 30, 5120L, null, null));
         // No eligible campaign for these fixtures: every order-creation test in this class asserts
         // today's undiscounted pricing (Feature 21.3.3 regression guard).
         when(campaignServiceClient.validate(any(), any(), any()))
@@ -193,15 +197,18 @@ class OrderServiceIntegrationTest {
      */
     @Test
     void get_order_returns_populated_items_without_lazy_initialization_error() {
+        // One TARIFF line plus a bundled ADDON line: still a populated multi-item list (the point
+        // of the lazy-load regression guard), and the only multi-item shape the Sprint 24 Feature
+        // 24.2 validation matrix accepts (a NEW_LINE order has exactly one TARIFF item).
         String orderJson = """
                 {
                   "customerId": "%s",
                   "items": [
                     { "tariffId": "%s", "quantity": 2 },
-                    { "tariffId": "%s", "quantity": 1 }
+                    { "itemType": "ADDON", "productCode": "ADDON-5GB", "quantity": 1 }
                   ]
                 }
-                """.formatted(CUSTOMER_ID, TARIFF_ID, TARIFF_ID);
+                """.formatted(CUSTOMER_ID, TARIFF_ID);
 
         ResponseEntity<Map<String, Object>> created = client.post()
                 .uri("/api/v1/orders")
@@ -227,6 +234,9 @@ class OrderServiceIntegrationTest {
         List<Map<String, Object>> items = (List<Map<String, Object>>) data.get("items");
         assertThat(items).hasSize(2);
         assertThat(items.get(0).get("tariffCode")).isEqualTo("POSTPAID-001");
+        assertThat(items.get(0).get("itemType")).isEqualTo("TARIFF");
+        assertThat(items.get(1).get("itemType")).isEqualTo("ADDON");
+        assertThat(items.get(1).get("productCode")).isEqualTo("ADDON-5GB");
     }
 
     @Test

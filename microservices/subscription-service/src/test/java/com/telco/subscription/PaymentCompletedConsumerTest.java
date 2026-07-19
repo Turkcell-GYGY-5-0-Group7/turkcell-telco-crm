@@ -92,7 +92,7 @@ class PaymentCompletedConsumerTest {
     }
 
     private OrderClientResponse singleItemOrder(UUID customerId) {
-        return new OrderClientResponse(customerId, "CONFIRMED",
+        return new OrderClientResponse(customerId, "NEW_LINE", "CONFIRMED",
                 List.of(new OrderItemClientResponse("TARIFF_BASIC", 1)));
     }
 
@@ -213,10 +213,11 @@ class PaymentCompletedConsumerTest {
     }
 
     @Test
-    void multi_item_order_emits_activation_failed() {
+    void multi_tariff_item_order_emits_activation_failed() {
         UUID orderId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
-        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "CONFIRMED",
+        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "NEW_LINE",
+                "CONFIRMED",
                 List.of(new OrderItemClientResponse("TARIFF_BASIC", 1),
                         new OrderItemClientResponse("TARIFF_PLUS", 1))));
 
@@ -225,5 +226,26 @@ class PaymentCompletedConsumerTest {
         assertThat(count("SELECT count(*) FROM subscriptions")).isEqualTo(0L);
         assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1' "
                 + "AND payload->>'reason' = 'UNSUPPORTED_MULTI_ITEM_ORDER'")).isEqualTo(1L);
+    }
+
+    @Test
+    void one_tariff_item_with_bundled_addon_items_activates_from_the_tariff_snapshot() {
+        // Sprint 24 Feature 24.2 (design-note D1): the invariant counts TARIFF items only, so a
+        // NEW_LINE order bundling ADDON items alongside its single tariff line must activate.
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "NEW_LINE",
+                "CONFIRMED",
+                List.of(new OrderItemClientResponse(null, 0, "ADDON", "ADDON-5GB", null),
+                        new OrderItemClientResponse("TARIFF_BASIC", 1, "TARIFF", null, null))));
+
+        consumer.onPaymentCompleted(paymentCompletedRecord("msg-bundle", orderId, customerId, 0L, "payment.completed.v1"));
+
+        assertThat(count("SELECT count(*) FROM subscriptions WHERE customer_id = ? AND status = 'ACTIVE' "
+                + "AND tariff_code = 'TARIFF_BASIC'", customerId)).isEqualTo(1L);
+        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activated.v1' "
+                + "AND payload->>'orderId' = ?", orderId.toString())).isEqualTo(1L);
+        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1'"))
+                .isEqualTo(0L);
     }
 }

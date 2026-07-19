@@ -43,4 +43,15 @@ public class ResilienceConfig {
     public CircuitBreaker campaignServiceCircuitBreaker() {
         return REGISTRY.circuitBreaker("campaign-service");
     }
+
+    /**
+     * Guards the ADDON/PLAN_CHANGE subscription-validation hop (Sprint 24 Feature 24.2). Same
+     * default config shape as the other breakers; {@code SubscriptionServiceClient} is fail-closed
+     * (an unverifiable target subscription must block those order kinds), so an OPEN breaker
+     * degrades ADDON/PLAN_CHANGE order creation, never NEW_LINE onboarding.
+     */
+    @Bean
+    public CircuitBreaker subscriptionServiceCircuitBreaker() {
+        return REGISTRY.circuitBreaker("subscription-service");
+    }
 }

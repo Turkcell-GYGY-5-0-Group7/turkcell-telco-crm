@@ -64,4 +64,14 @@ public class RestClientConfig {
                 .requestFactory(timeoutRequestFactory())
                 .build();
     }
+
+    @Lazy
+    @Bean
+    public RestClient subscriptionRestClient(
+            @Value("${telco.clients.subscription-service.url}") String baseUrl) {
+        return RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(timeoutRequestFactory())
+                .build();
+    }
 }
