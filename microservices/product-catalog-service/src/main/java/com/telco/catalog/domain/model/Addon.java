@@ -1,5 +1,6 @@
 package com.telco.catalog.domain.model;
 
+import com.telco.platform.common.exception.BusinessRuleException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -55,6 +56,31 @@ public class Addon {
 
     /** For JPA only. */
     protected Addon() {
+    }
+
+    /**
+     * Factory that creates a new ACTIVE addon (FR-05). Tariff links are managed from the
+     * {@link Tariff} side of the many-to-many.
+     */
+    public static Addon create(String code, String name, BigDecimal price, String currency,
+                               AddonType type, int validityDays) {
+        if (price == null || price.signum() < 0) {
+            throw new BusinessRuleException("Addon price must be zero or positive: " + code);
+        }
+        if (validityDays <= 0) {
+            throw new BusinessRuleException("Addon validityDays must be positive: " + code);
+        }
+        Addon addon = new Addon();
+        addon.id = UUID.randomUUID();
+        addon.code = Objects.requireNonNull(code, "code");
+        addon.name = Objects.requireNonNull(name, "name");
+        addon.price = price;
+        addon.currency = Objects.requireNonNull(currency, "currency");
+        addon.type = Objects.requireNonNull(type, "type");
+        addon.validityDays = validityDays;
+        addon.status = "ACTIVE";
+        addon.createdAt = Instant.now();
+        return addon;
     }
 
     public UUID getId() {

@@ -16,6 +16,8 @@ public interface AddonRepository extends JpaRepository<Addon, UUID> {
 
     Optional<Addon> findByCode(String code);
 
+    boolean existsByCode(String code);
+
     /**
      * Returns all addons linked to the tariff identified by {@code tariffCode}, paginated.
      * The query navigates Addon.tariffs -> Tariff.code.

@@ -16,15 +16,23 @@ import java.util.UUID;
  */
 public record OrderItemRequest(
 
-        @NotNull
+        /** Required on NEW_LINE/PLAN_CHANGE items; null on ADDON items (FR-09, handler-validated). */
         UUID tariffId,
 
         @Min(1)
         int quantity,
 
-        String campaignCode
+        String campaignCode,
+
+        /** Catalog addon code; required on ADDON items, null otherwise (FR-09, handler-validated). */
+        String addonCode
 
 ) {
+
+    /** Backward-compatible overload for tariff items with no addon reference. */
+    public OrderItemRequest(UUID tariffId, int quantity, String campaignCode) {
+        this(tariffId, quantity, campaignCode, null);
+    }
 
     /** Backward-compatible overload for callers/tests that do not request a specific campaign. */
     public OrderItemRequest(UUID tariffId, int quantity) {

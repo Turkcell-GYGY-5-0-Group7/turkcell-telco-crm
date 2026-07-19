@@ -47,6 +47,15 @@ public class Order {
     @Column(name = "total_amount", precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
+    /** Order type (FR-09). Existing rows backfill to NEW_LINE via the V8 migration default. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", nullable = false, length = 32)
+    private OrderType orderType = OrderType.NEW_LINE;
+
+    /** Target subscription for PLAN_CHANGE and ADDON orders (FR-09). Null on NEW_LINE. */
+    @Column(name = "subscription_id")
+    private UUID subscriptionId;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -72,9 +81,30 @@ public class Order {
         this.updatedAt = now;
     }
 
-    /** Creates a new order in {@link OrderStatus#PENDING} state. */
+    /** Creates a new NEW_LINE order in {@link OrderStatus#PENDING} state. */
     public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount, String userId) {
         return new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId);
+    }
+
+    /**
+     * Creates an order of the given type (FR-09). PLAN_CHANGE and ADDON orders require the target
+     * {@code subscriptionId} and are created directly CONFIRMED: they carry no upfront payment
+     * (they bill on the next invoice, FR-22), so there is no payment.completed.v1 to confirm them
+     * and the existing CONFIRMED -> FULFILLED transition stays the single fulfilment path.
+     */
+    public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount,
+                               String userId, OrderType orderType, UUID subscriptionId) {
+        Order order = new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId);
+        order.orderType = orderType == null ? OrderType.NEW_LINE : orderType;
+        if (order.orderType != OrderType.NEW_LINE) {
+            if (subscriptionId == null) {
+                throw new BusinessRuleException(
+                        order.orderType + " orders require a target subscriptionId");
+            }
+            order.subscriptionId = subscriptionId;
+            order.status = OrderStatus.CONFIRMED;
+        }
+        return order;
     }
 
     /**
@@ -94,6 +124,13 @@ public class Order {
                              BigDecimal unitPrice, int quantity, UUID campaignId, String campaignCode) {
         OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName,
                 unitPrice, quantity, campaignId, campaignCode);
+        items.add(item);
+        return item;
+    }
+
+    /** Adds an addon line item (FR-09, ADDON orders). */
+    public OrderItem addAddonItem(String addonCode, String addonName, BigDecimal unitPrice, int quantity) {
+        OrderItem item = OrderItem.createAddon(this, addonCode, addonName, unitPrice, quantity);
         items.add(item);
         return item;
     }
@@ -176,6 +213,15 @@ public class Order {
 
     public String getUserId() {
         return userId;
+    }
+
+    public OrderType getOrderType() {
+        return orderType;
+    }
+
+    /** Target subscription for PLAN_CHANGE/ADDON orders, or {@code null} on NEW_LINE (FR-09). */
+    public UUID getSubscriptionId() {
+        return subscriptionId;
     }
 
     public BigDecimal getTotalAmount() {

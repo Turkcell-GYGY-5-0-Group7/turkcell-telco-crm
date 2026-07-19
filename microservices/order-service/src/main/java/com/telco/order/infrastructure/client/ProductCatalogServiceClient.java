@@ -30,6 +30,8 @@ public class ProductCatalogServiceClient {
     private static final Logger log = LoggerFactory.getLogger(ProductCatalogServiceClient.class);
     private static final ParameterizedTypeReference<ApiResult<TariffClientResponse>> RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
+    private static final ParameterizedTypeReference<ApiResult<AddonClientResponse>> ADDON_RESPONSE_TYPE =
+            new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
     private final CircuitBreaker circuitBreaker;
@@ -68,6 +70,36 @@ public class ProductCatalogServiceClient {
         } catch (Exception e) {
             log.error("Failed to call product-catalog-service for tariffId={}", tariffId, e);
             throw new DependencyFailureException("Failed to validate tariff: " + tariffId, e);
+        }
+    }
+
+    /**
+     * Validates an addon exists and returns its price details (FR-09, ADDON orders). Same
+     * error/circuit-breaker contract as {@link #getTariff(UUID)}.
+     */
+    public AddonClientResponse getAddon(String addonCode) {
+        try {
+            return CircuitBreaker.decorateCallable(circuitBreaker, () -> {
+                ApiResult<AddonClientResponse> result = restClient.get()
+                        .uri("/internal/addons/{code}", addonCode)
+                        .retrieve()
+                        .body(ADDON_RESPONSE_TYPE);
+                if (result == null || !result.success()) {
+                    throw new DependencyFailureException(
+                            "Unexpected response from product-catalog-service for addonCode: " + addonCode, null);
+                }
+                return result.data();
+            }).call();
+        } catch (CallNotPermittedException e) {
+            log.warn("product-catalog-service circuit breaker OPEN for addonCode={}", addonCode);
+            throw new DependencyFailureException("product-catalog-service is currently unavailable", e);
+        } catch (HttpClientErrorException.NotFound e) {
+            throw new ResourceNotFoundException("Addon not found: " + addonCode);
+        } catch (DependencyFailureException | ResourceNotFoundException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Failed to call product-catalog-service for addonCode={}", addonCode, e);
+            throw new DependencyFailureException("Failed to validate addon: " + addonCode, e);
         }
     }
 }

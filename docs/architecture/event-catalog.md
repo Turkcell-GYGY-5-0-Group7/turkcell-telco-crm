@@ -41,7 +41,7 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `customer.updated.v1` | customer-service | notification | Customer profile changed. |
 | `tariff.created.v1` | product-catalog-service | notification, campaign | New tariff published. campaign-service consumes defensively (Feature 21.4.3, ADR-027 Section 4) to log when a tariff code referenced by an ACTIVE campaign is (re)created. |
 | `tariff.price-changed.v1` | product-catalog-service | billing, notification, campaign | Tariff price updated (versioned). campaign-service consumes defensively (Feature 21.4.3, ADR-027 Section 4) to flag an ACTIVE campaign whose `applicable_tariff_codes` references the repriced tariff - never to mirror pricing data. |
-| `order.created.v1` | order-service | payment, notification, campaign | Order placed; starts the saga. campaign-service consumes it (Feature 21.4.3) to create a `RESERVED` `CampaignRedemption` row per campaign-priced order item, keyed by `(campaignId, customerId, orderId)`. |
+| `order.created.v1` | order-service | payment, notification, campaign, subscription | Order placed; starts the saga. campaign-service consumes it (Feature 21.4.3) to create a `RESERVED` `CampaignRedemption` row per campaign-priced order item, keyed by `(campaignId, customerId, orderId)`. Carries nullable `orderType`/`subscriptionId` plus item-level `addonCode`/`addonType`/`tariffCode`/`currency` (added 2026-07-20, FR-09): payment charges only NEW_LINE; subscription-service provisions PLAN_CHANGE/ADDON orders directly from this event. |
 | `order.confirmed.v1` | order-service | subscription, notification | Order confirmed for fulfillment. (deferred; not produced in the MVP - subscription activates on `payment.completed.v1`) |
 | `order.cancelled.v1` | order-service | payment, subscription, notification, campaign | Order cancelled; triggers compensation. campaign-service consumes it (Feature 21.4.2) to release a `RESERVED` `CampaignRedemption` back to available. |
 | `payment.completed.v1` | payment-service | order, subscription, billing, notification, campaign | Payment succeeded. campaign-service consumes it (Feature 21.4.2, ADR-027 Section 4 ratification) as the "order is real" trigger, transitioning the matching `CampaignRedemption` RESERVED -> CONFIRMED. |
@@ -53,6 +53,8 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `subscription.suspended.v1` | subscription-service | billing, notification | Subscription suspended (non-payment). |
 | `subscription.terminated.v1` | subscription-service | billing, notification | Subscription terminated. |
 | `subscription.activation-failed.v1` | subscription-service | payment, order, notification | Subscription activation failed; triggers saga compensation. |
+| `subscription.tariff-changed.v1` | subscription-service | billing, order | Tariff changed via a PLAN_CHANGE order (FR-09, added 2026-07-20). billing reprices the next cycle; order fulfils the plan-change order. |
+| `subscription.addon-attached.v1` | subscription-service | billing, order | Addon attached via an ADDON order (FR-09, added 2026-07-20). billing invoices the fee as an ADDON/VAS line on the next bill-run (FR-22); order fulfils the addon order. |
 | `usage.recorded.v1` | usage-service | - | Usage applied to quota. |
 | `quota.threshold-reached.v1` | usage-service | notification | 80% usage threshold reached. |
 | `quota.exceeded.v1` | usage-service | billing, notification | 100% usage reached; overage begins. |

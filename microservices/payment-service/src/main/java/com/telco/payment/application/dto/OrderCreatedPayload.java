@@ -14,6 +14,11 @@ public record OrderCreatedPayload(
         String orderId,
         String customerId,
         BigDecimal totalAmount,
-        String occurredAt
+        String occurredAt,
+        /**
+         * NEW_LINE, PLAN_CHANGE, or ADDON (FR-09); null from pre-FR-09 producers means NEW_LINE.
+         * Only NEW_LINE orders are charged - PLAN_CHANGE/ADDON bill on the next invoice (FR-22).
+         */
+        String orderType
 ) {
 }

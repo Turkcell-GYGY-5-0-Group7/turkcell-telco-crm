@@ -1,6 +1,7 @@
 package com.telco.customer.api;
 
 import com.telco.customer.application.command.AddAddressCommand;
+import com.telco.customer.application.command.DeleteAddressCommand;
 import com.telco.customer.application.command.SetDefaultAddressCommand;
 import com.telco.customer.application.command.UpdateAddressCommand;
 import com.telco.customer.application.dto.AddressRequest;
@@ -12,6 +13,7 @@ import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -56,6 +58,11 @@ public class CustomerAddressController {
                                              @Valid @RequestBody AddressRequest request) {
         return responses.ok(mediator.send(new UpdateAddressCommand(customerId, addressId,
                 request.line1(), request.city(), request.district(), request.postalCode())));
+    }
+
+    @DeleteMapping("/{addressId}")
+    public ApiResult<Unit> delete(@PathVariable UUID customerId, @PathVariable UUID addressId) {
+        return responses.ok(mediator.send(new DeleteAddressCommand(customerId, addressId)));
     }
 
     @PostMapping("/{addressId}/default")

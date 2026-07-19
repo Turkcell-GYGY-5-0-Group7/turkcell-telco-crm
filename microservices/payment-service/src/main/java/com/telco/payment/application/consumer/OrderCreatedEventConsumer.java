@@ -77,6 +77,15 @@ public class OrderCreatedEventConsumer {
                 return;
             }
 
+            // FR-09: only NEW_LINE orders (or null, from pre-FR-09 producers) run the paid saga.
+            // PLAN_CHANGE and ADDON orders carry no upfront payment; their fee lands on the next
+            // monthly invoice (FR-22), so charging here would double-bill.
+            if (payload.orderType() != null && !"NEW_LINE".equals(payload.orderType())) {
+                LOGGER.info("Ignoring order.created.v1 of orderType={} (unpaid order type) messageId={}",
+                        payload.orderType(), messageId);
+                return;
+            }
+
             // paymentRequestId is derived from orderId for stable command-level idempotency; messageId
             // is the inbox key. Inbox dedup happens atomically inside the handler transaction.
             String paymentRequestId = payload.orderId();

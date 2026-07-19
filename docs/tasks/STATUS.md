@@ -14,7 +14,77 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-19 (Merged branch `feature/sprint-23-sim-swap-fraud` into `master`, reconciling Sprint 23 (SIM-Swap / Fraud Detection) completion with the trunk's Sprint 20/22 merge reconciliation, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 23 (SIM-Swap / Fraud Detection) **DONE (5/5)**, the third post-MVP sprint (17-23) to reach full DONE, after Sprint 17 and Sprint 21. Both branches' prior update chains are preserved verbatim below - the Sprint 23 chain first, then the trunk's own reconciliation chain. Prior updates below.)
+Last updated: 2026-07-20 (**FR-09/FR-22 closure - addon and plan-change orders end to end, the last
+open MVP requirement gap.** Design decision (recorded in `docs/tasks/todo.md` and the FR-22 flow):
+NEW_LINE keeps the paid saga unchanged; PLAN_CHANGE and ADDON orders skip the payment leg entirely
+and bill on the next monthly invoice - that is what makes FR-22's addon/VAS invoice lines correct
+rather than a double charge. Delivery: **contracts** - two new governed Avro events
+`subscription.tariff-changed.v1` / `subscription.addon-attached.v1` (avsc + pom subjects +
+event-catalog rows), and BACKWARD-compatible evolution of `order-created.avsc` (nullable
+`orderType`/`subscriptionId` at record level; nullable `addonCode`/`addonType`/`tariffCode`/
+`currency` at item level; `tariffId` widened to a nullable union for addon items).
+**product-catalog** - `GET /internal/addons/{code}` on a new `AddonInternalController` (same trust
+model as `TariffInternalController`) + public `GET /api/v1/addons/{code}`, cached under the addons
+cache the create-addon handler evicts. **order-service** - `OrderType` enum, `subscription_id` on
+orders + `addon_code` on order_items (V8, with a CHECK that every item references exactly one
+product kind), type-branched `CreateOrderCommandHandler` (addon items priced via the new internal
+catalog route; non-NEW_LINE orders require exactly one item and are created directly CONFIRMED so
+the existing CONFIRMED->FULFILLED path stays the single fulfilment transition), and a new
+`SubscriptionProvisionedEventConsumer` (distinct group) fulfilling on either new subscription event.
+**payment-service** - `OrderCreatedEventConsumer` now ignores `orderType != NEW_LINE` (double-bill
+guard). **subscription-service** - `OrderCreatedProvisioningConsumer` on `order.events` provisions
+hop-free from the event snapshot: PLAN_CHANGE -> `Subscription.changeTariff` (ACTIVE-only guard,
+customer-ownership guard) publishing tariff-changed; ADDON -> new `subscription_addons` table (V3,
+unique `(order_id, addon_code)`) publishing addon-attached; both commands are inbox-keyed
+`IdempotentRequest`s. **billing-service** - consumes both events (manual-inbox convention):
+tariff-changed updates `SubscriberBillingRecord.tariffCode` (with the FR-08 price mirror this
+completes plan-change repricing); addon-attached records an `addon_charges` row (V3,
+first-write-wins per order+addon); the bill-run adds one typed `ADDON`/`VAS` line per unbilled
+charge and marks it billed only after the invoice persists; `InvoiceLineType` gained ADDON/VAS; and
+a latent bug was fixed where the invoice-rebuild copy loop silently downgraded every typed line to
+RECURRING (would have erased Sprint 22's ADJUSTMENT lines on any rebuilt invoice too). **Verified:**
+platform contracts reinstalled; all five touched modules compile (src+tests) and their suites run -
+**zero assertion failures**; the only errors are the documented repo-wide Testcontainers/Docker
+bootstrap classes (identical lists to this session's pre-change baselines). The strongest proof:
+subscription-service's `SubscriptionEventSchemaCompatTest` now covers the two new payloads and
+passes 6/6 against the generated canonical Avro classes. **Honest residuals:** no live Kafka round
+trip for the new chain yet; no dedicated unit tests for the new handlers/consumers (qa follow-up);
+usage-service does not yet grant quota for attached addons (a deliberate non-goal of FR-09/FR-22 -
+flagged as a future feature); web frontend does not yet offer the new order types. Nothing
+committed yet (user choice). Prior updates below.)
+
+Prior update, 2026-07-20 (MVP requirement gap-closure pass, driven by the 2026-07-19 full
+FR-01..FR-33 source-level audit. Closed this session, smallest-diff-first: **FR-25** payment method
+modeled (`PaymentMethod` CREDIT_CARD/BANK_TRANSFER/WALLET, `V6` migration, request/command/response
+plumbing; a legacy-shape delegating constructor keeps every saga caller and test untouched);
+**FR-05** addon admin write (`POST /api/v1/addons` ADMIN, `CreateAddonCommand`/Handler,
+`Addon.create` factory, `addons` cache eviction; no new event - the governed catalog contract
+defines tariff events only); **FR-08** billing-service now consumes `tariff.price-changed.v1`
+(`TariffPriceChangedBillingConsumer`, this service's manual-inbox convention, upserts the
+`tariff_prices` mirror that was previously seeded once and never refreshed); **FR-21** monthly
+bill-run cron (1st 02:00 UTC; multi-replica-safe via the existing period-keyed `DistributedLock`
+plus the handler's per-period skip idempotency); **FR-20** monthly usage aggregation cron (1st
+01:30 UTC, before the bill-run; deliberately lock-free because billing's
+`RecordOverageCommandHandler` is first-write-wins per subscription+period); **FR-01** corporate
+registration actually wired (class-level `@ValidIdentityForType` replaces the hardcoded field-level
+`@ValidTckn` - TCKN for INDIVIDUAL, VKN for CORPORATE, violation still reported on
+`identityNumber`); **FR-03** contact info (`email`/`phone`, `V2` migration, update/response
+plumbing), address `DELETE` endpoint (audited hard delete), and document list `GET`; **FR-11/FR-31**
+naming drift ratified as PLATFORM NOTEs in `TELCO-CRM-MVP.md` (delivered `OrderStatus` names and
+SLA-policy-driven ticket categories are canonical) rather than churning working code. Also fixed:
+**ticket-service master did not compile** - duplicate `externalRef` field/getter from the Sprint
+22/23 merges each adding their own external-ref link; deduplicated, 48/48 Docker-free tests green.
+**Deliberately DEFERRED** (cross-service design, not quick-fixable): FR-09/FR-22 - addon and
+plan-change order types end to end (order-type discriminator, subscription/billing consumption,
+Avro contract changes; needs architecture/tech-lead per ADR-004/ADR-019). **Verified:** `mvn test`
+on all five touched modules - every Docker-free test class green; the only failures are the
+pre-existing repo-wide Testcontainers/Docker bootstrap classes (lessons.md 2026-07-12), each
+individually confirmed "Could not find a valid Docker environment", not regressions. Honest
+residuals: the new handlers/crons ship without dedicated unit tests this pass (qa follow-up), and
+none of the new Kafka/cron paths has run against a live stack yet. Nothing committed yet (user
+choice). Prior updates below.)
+
+Prior update, 2026-07-19 (Merged branch `feature/sprint-23-sim-swap-fraud` into `master`, reconciling Sprint 23 (SIM-Swap / Fraud Detection) completion with the trunk's Sprint 20/22 merge reconciliation, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 23 (SIM-Swap / Fraud Detection) **DONE (5/5)**, the third post-MVP sprint (17-23) to reach full DONE, after Sprint 17 and Sprint 21. Both branches' prior update chains are preserved verbatim below - the Sprint 23 chain first, then the trunk's own reconciliation chain. Prior updates below.)
 
 Prior update, 2026-07-19 (Sprint 19 Service Mesh and mTLS - **FORMAL SUBTASK CLOSURE, now 5/5
 formally DONE** (was tracked 2/5 formal / substantially-DONE after the three 2026-07-18 live passes).

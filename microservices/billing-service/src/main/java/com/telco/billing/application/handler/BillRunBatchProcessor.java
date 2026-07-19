@@ -4,10 +4,13 @@ import com.telco.billing.application.command.RunBillCommand;
 import com.telco.billing.domain.BillCycle;
 import com.telco.billing.domain.Invoice;
 import com.telco.billing.domain.InvoiceLine;
+import com.telco.billing.domain.InvoiceLineType;
+import com.telco.billing.infrastructure.entity.AddonCharge;
 import com.telco.billing.infrastructure.entity.OverageRecord;
 import com.telco.billing.infrastructure.entity.SubscriberBillingRecord;
 import com.telco.billing.infrastructure.entity.TariffPrice;
 import com.telco.billing.infrastructure.pdf.InvoicePdfRenderer;
+import com.telco.billing.infrastructure.persistence.AddonChargeRepository;
 import com.telco.billing.infrastructure.persistence.BillCycleRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceLineRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
@@ -56,6 +59,7 @@ public class BillRunBatchProcessor {
 
     private final TariffPriceRepository tariffPriceRepo;
     private final OverageRecordRepository overageRepo;
+    private final AddonChargeRepository addonChargeRepo;
     private final InvoiceRepository invoiceRepo;
     private final InvoiceLineRepository invoiceLineRepo;
     private final BillCycleRepository billCycleRepo;
@@ -68,6 +72,7 @@ public class BillRunBatchProcessor {
     public BillRunBatchProcessor(
             TariffPriceRepository tariffPriceRepo,
             OverageRecordRepository overageRepo,
+            AddonChargeRepository addonChargeRepo,
             InvoiceRepository invoiceRepo,
             InvoiceLineRepository invoiceLineRepo,
             BillCycleRepository billCycleRepo,
@@ -78,6 +83,7 @@ public class BillRunBatchProcessor {
             @Value("${telco.billing.due-days:30}") int dueDays) {
         this.tariffPriceRepo = tariffPriceRepo;
         this.overageRepo = overageRepo;
+        this.addonChargeRepo = addonChargeRepo;
         this.invoiceRepo = invoiceRepo;
         this.invoiceLineRepo = invoiceLineRepo;
         this.billCycleRepo = billCycleRepo;
@@ -112,9 +118,20 @@ public class BillRunBatchProcessor {
             }
 
             try {
-                Invoice invoice = generateInvoice(subscriber, command.periodStart(), command.periodEnd());
+                // Unbilled addon fees attached before period end land on this invoice (FR-22).
+                List<AddonCharge> addonCharges = addonChargeRepo
+                        .findBySubscriptionIdAndBilledFalseAndAttachedAtBefore(
+                                subscriptionId, command.periodEnd());
+
+                Invoice invoice = generateInvoice(subscriber, command.periodStart(), command.periodEnd(),
+                        addonCharges);
                 invoiceRepo.save(invoice);
                 invoiceLineRepo.saveAll(invoice.getLines());
+
+                // Mark charges billed only after the invoice and its lines are persisted, so a
+                // generateInvoice failure leaves them unbilled for the next run.
+                addonCharges.forEach(AddonCharge::markBilled);
+                addonChargeRepo.saveAll(addonCharges);
 
                 byte[] pdfBytes = pdfRenderer.render(invoice);
                 String pdfRef = storageService.store(
@@ -147,7 +164,8 @@ public class BillRunBatchProcessor {
     }
 
     private Invoice generateInvoice(SubscriberBillingRecord subscriber,
-                                    Instant periodStart, Instant periodEnd) {
+                                    Instant periodStart, Instant periodEnd,
+                                    List<AddonCharge> addonCharges) {
         TariffPrice tariffPrice = tariffPriceRepo
                 .findByTariffCode(subscriber.getTariffCode())
                 .orElseThrow(() -> new IllegalStateException(
@@ -188,6 +206,15 @@ public class BillRunBatchProcessor {
             }
         }
 
+        // Addon and VAS fee lines (FR-22): one line per unbilled charge, typed for reporting.
+        for (AddonCharge charge : addonCharges) {
+            InvoiceLineType lineType = "VAS".equals(charge.getAddonType())
+                    ? InvoiceLineType.VAS : InvoiceLineType.ADDON;
+            InvoiceLine.of(invoice, (lineType == InvoiceLineType.VAS ? "VAS: " : "Addon: ")
+                            + charge.getAddonCode(),
+                    BigDecimal.ONE, charge.getPrice(), lineType);
+        }
+
         // Recompute totals from lines.
         BigDecimal computedSubTotal = invoice.getLines().stream()
                 .map(InvoiceLine::getLineTotal)
@@ -199,7 +226,10 @@ public class BillRunBatchProcessor {
                 subscriber.getCustomerId(), subscriber.getSubscriptionId(),
                 periodStart, periodEnd, computedSubTotal, computedTax, currency, dueDate);
         for (InvoiceLine line : invoice.getLines()) {
-            InvoiceLine.of(final_, line.getDescription(), line.getQuantity(), line.getUnitPrice());
+            // Preserve the line type on the rebuilt invoice - the 4-arg overload would silently
+            // downgrade ADDON/VAS (and any future typed) lines to RECURRING.
+            InvoiceLine.of(final_, line.getDescription(), line.getQuantity(), line.getUnitPrice(),
+                    line.getLineType());
         }
         final_.issue();
         return final_;

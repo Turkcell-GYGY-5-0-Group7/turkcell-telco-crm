@@ -20,7 +20,8 @@ public record OrderItemResponse(
         BigDecimal unitPrice,
         int quantity,
         UUID campaignId,
-        String campaignCode
+        String campaignCode,
+        String addonCode
 ) {
 
     public static OrderItemResponse from(OrderItem item) {
@@ -33,7 +34,8 @@ public record OrderItemResponse(
                 item.getUnitPrice(),
                 item.getQuantity(),
                 item.getCampaignId(),
-                item.getCampaignCode()
+                item.getCampaignCode(),
+                item.getAddonCode()
         );
     }
 }

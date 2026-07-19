@@ -94,7 +94,8 @@ public class ChargePaymentCommandHandler
                     command.customerId(),
                     command.amount(),
                     command.paymentRequestId(),
-                    command.invoiceId());
+                    command.invoiceId(),
+                    command.method());
             paymentCreationService.saveNewPayment(payment);
             LOGGER.info("Created new payment id={} for orderId={}", payment.getId(), command.orderId());
         }

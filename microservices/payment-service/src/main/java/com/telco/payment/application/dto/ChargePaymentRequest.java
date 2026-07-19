@@ -1,5 +1,6 @@
 package com.telco.payment.application.dto;
 
+import com.telco.payment.domain.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -29,6 +30,12 @@ public record ChargePaymentRequest(
          * {@code payment.completed.v1}/{@code payment.failed.v1} event carries it so
          * billing-service can mark the invoice paid.
          */
-        UUID invoiceId
+        UUID invoiceId,
+
+        /**
+         * Settlement method (FR-25): CREDIT_CARD, BANK_TRANSFER, or WALLET.
+         * Optional - omitting it defaults to CREDIT_CARD.
+         */
+        PaymentMethod method
 ) {
 }

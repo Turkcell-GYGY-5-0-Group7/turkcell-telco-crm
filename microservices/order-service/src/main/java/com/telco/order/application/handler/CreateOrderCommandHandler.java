@@ -6,7 +6,9 @@ import com.telco.order.application.dto.OrderItemRequest;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.event.OrderCreatedEvent;
 import com.telco.order.domain.model.Order;
+import com.telco.order.domain.model.OrderType;
 import com.telco.order.domain.model.SagaState;
+import com.telco.order.infrastructure.client.AddonClientResponse;
 import com.telco.order.infrastructure.client.CampaignServiceClient;
 import com.telco.order.infrastructure.client.CampaignValidationResponse;
 import com.telco.order.infrastructure.client.CustomerServiceClient;
@@ -14,6 +16,7 @@ import com.telco.order.infrastructure.client.ProductCatalogServiceClient;
 import com.telco.order.infrastructure.client.TariffClientResponse;
 import com.telco.order.infrastructure.persistence.OrderRepository;
 import com.telco.order.infrastructure.persistence.SagaStateRepository;
+import com.telco.platform.common.exception.BusinessRuleException;
 import com.telco.platform.cqrs.CommandHandler;
 import com.telco.platform.outbox.OutboxService;
 import org.springframework.stereotype.Component;
@@ -70,9 +73,16 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
         this.auditLogWriter = auditLogWriter;
     }
 
-    /** A tariff price snapshot plus the campaign discount decision applied to it, if any. */
+    /**
+     * A priced line item: a tariff snapshot plus the campaign decision applied to it, OR an addon
+     * snapshot for ADDON orders (FR-09) - exactly one of {@code tariff}/{@code addon} is non-null.
+     */
     private record PricedItem(TariffClientResponse tariff, BigDecimal unitPrice,
-                               UUID campaignId, String campaignCode) {
+                               UUID campaignId, String campaignCode, AddonClientResponse addon) {
+
+        PricedItem(TariffClientResponse tariff, BigDecimal unitPrice, UUID campaignId, String campaignCode) {
+            this(tariff, unitPrice, campaignId, campaignCode, null);
+        }
     }
 
     @Override
@@ -86,11 +96,34 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
         // Validate customer exists (throws ResourceNotFoundException or DependencyFailureException).
         customerServiceClient.getCustomer(command.customerId());
 
-        // Validate each tariff, then ask campaign-service (fail-open) whether a discount applies.
+        OrderType orderType = command.orderType() == null ? OrderType.NEW_LINE : command.orderType();
+        if (orderType != OrderType.NEW_LINE && command.items().size() != 1) {
+            // Keeps the provisioning consumer unambiguous: one PLAN_CHANGE/ADDON order = one product.
+            throw new BusinessRuleException(orderType + " orders must contain exactly one item");
+        }
+
+        // Price each item by product kind (FR-09). Tariff items go through campaign pricing only on
+        // NEW_LINE orders (campaigns discount new-line tariff purchases); addon items are priced
+        // straight from the catalog addon.
         List<PricedItem> pricedItems = new ArrayList<>();
         for (OrderItemRequest item : command.items()) {
+            if (orderType == OrderType.ADDON) {
+                if (item.addonCode() == null || item.addonCode().isBlank()) {
+                    throw new BusinessRuleException("ADDON order items must carry an addonCode");
+                }
+                AddonClientResponse addon = productCatalogServiceClient.getAddon(item.addonCode());
+                pricedItems.add(new PricedItem(null, addon.price(), null, null, addon));
+                continue;
+            }
+            if (item.tariffId() == null) {
+                throw new BusinessRuleException(orderType + " order items must carry a tariffId");
+            }
             TariffClientResponse tariff = productCatalogServiceClient.getTariff(item.tariffId());
-            pricedItems.add(priceItem(command.customerId(), item, tariff));
+            if (orderType == OrderType.NEW_LINE) {
+                pricedItems.add(priceItem(command.customerId(), item, tariff));
+            } else {
+                pricedItems.add(new PricedItem(tariff, tariff.monthlyFee(), null, null));
+            }
         }
 
         // Calculate total amount from the (possibly discounted) unit prices.
@@ -101,21 +134,29 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
             totalAmount = totalAmount.add(lineTotal);
         }
 
-        // Create and persist the order aggregate.
-        Order order = Order.create(command.customerId(), command.idempotencyKey(), totalAmount, command.userId());
+        // Create and persist the order aggregate. PLAN_CHANGE/ADDON orders are created CONFIRMED:
+        // they carry no upfront payment (payment-service skips them; the fee bills on the next
+        // invoice, FR-22), so subscription provisioning fulfils them directly.
+        Order order = Order.create(command.customerId(), command.idempotencyKey(), totalAmount,
+                command.userId(), orderType, command.subscriptionId());
         for (int i = 0; i < command.items().size(); i++) {
             OrderItemRequest itemReq = command.items().get(i);
             PricedItem priced = pricedItems.get(i);
-            order.addItem(
-                    itemReq.tariffId(),
-                    priced.tariff().code(),
-                    priced.tariff().version(),
-                    priced.tariff().name(),
-                    priced.unitPrice(),
-                    itemReq.quantity(),
-                    priced.campaignId(),
-                    priced.campaignCode()
-            );
+            if (priced.addon() != null) {
+                order.addAddonItem(priced.addon().code(), priced.addon().name(),
+                        priced.unitPrice(), itemReq.quantity());
+            } else {
+                order.addItem(
+                        itemReq.tariffId(),
+                        priced.tariff().code(),
+                        priced.tariff().version(),
+                        priced.tariff().name(),
+                        priced.unitPrice(),
+                        itemReq.quantity(),
+                        priced.campaignId(),
+                        priced.campaignCode()
+                );
+            }
         }
         orderRepository.save(order);
 
@@ -124,16 +165,25 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                 order.getId(), "ORDER_CREATED", "PENDING", null);
         sagaStateRepository.save(sagaState);
 
-        // Build event item payloads from the order items.
-        List<OrderCreatedEvent.OrderItemPayload> eventItems = order.getItems().stream()
-                .map(item -> new OrderCreatedEvent.OrderItemPayload(
-                        item.getTariffId().toString(),
-                        item.getTariffName(),
-                        item.getUnitPrice(),
-                        item.getQuantity(),
-                        item.getCampaignId() == null ? null : item.getCampaignId().toString()
-                ))
-                .toList();
+        // Build event item payloads from the order items. Addon items carry no tariffId; their
+        // addonType comes from the pricing snapshot (same index order as order.getItems()).
+        List<OrderCreatedEvent.OrderItemPayload> eventItems = new ArrayList<>();
+        for (int i = 0; i < order.getItems().size(); i++) {
+            var item = order.getItems().get(i);
+            AddonClientResponse addon = pricedItems.get(i).addon();
+            TariffClientResponse tariff = pricedItems.get(i).tariff();
+            eventItems.add(new OrderCreatedEvent.OrderItemPayload(
+                    item.getTariffId() == null ? null : item.getTariffId().toString(),
+                    item.getTariffName(),
+                    item.getUnitPrice(),
+                    item.getQuantity(),
+                    item.getCampaignId() == null ? null : item.getCampaignId().toString(),
+                    item.getAddonCode(),
+                    addon == null ? null : addon.type(),
+                    item.getTariffCode(),
+                    addon != null ? addon.currency() : (tariff == null ? null : tariff.currency())
+            ));
+        }
 
         // Publish order.created.v1 through the transactional outbox (ADR-009).
         outboxService.publish(
@@ -146,7 +196,9 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                         eventItems,
                         order.getTotalAmount(),
                         order.getIdempotencyKey(),
-                        Instant.now().toString()
+                        Instant.now().toString(),
+                        order.getOrderType().name(),
+                        order.getSubscriptionId() == null ? null : order.getSubscriptionId().toString()
                 )
         );
 
