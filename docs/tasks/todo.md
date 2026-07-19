@@ -18,12 +18,12 @@ verification; caffeinate-wrapped long commands; `make infra-down` immediately af
 - [x] 24.7a Swagger deps + security permits in 7 services; commit
 - [x] 24.5a @ValidIdentityForType (TCKN/VKN by type); commit with 24.5b
 - [x] 24.5b customer email/phone (V2, DTOs, avro additive, event-catalog); commit
-- [ ] 24.6 payment method enum + V5 + Idempotency-Key header; commit
-- [ ] 24.7b QUOTA_EXCEEDED template + update-if-different seeder; commit with 24.7c
-- [ ] 24.7c sort param on main list endpoints; commit
+- [x] 24.6 payment method enum + V5 + Idempotency-Key header; commit
+- [x] 24.7b QUOTA_EXCEEDED template + update-if-different seeder; commit with 24.7c
+- [x] 24.7c sort param on main list endpoints; commit
 
 ## Phase 2 - 24.1 Catalog addon management
-- [ ] V2 allowances + seeds; CreateAddonCommand/handler; POST /api/v1/addons; internal snapshot;
+- [x] V2 allowances + seeds; CreateAddonCommand/handler; POST /api/v1/addons; internal snapshot;
       contract doc; unit tests; commit
 
 ## Phase 3 - 24.2 Order model generalization

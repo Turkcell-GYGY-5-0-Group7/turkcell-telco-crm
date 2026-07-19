@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.SortParam;
 import com.telco.order.application.dto.OrderResponse;
 import com.telco.order.application.query.GetOrdersByCustomerQuery;
 import com.telco.order.infrastructure.persistence.OrderRepository;
@@ -10,6 +11,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
+
 /**
  * Returns orders for a customer. ADMIN callers filter by the requested customerId; SUBSCRIBER callers
  * always receive only their own orders (filtered by their Keycloak userId), preventing IDOR
@@ -18,6 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class GetOrdersByCustomerQueryHandler
         implements QueryHandler<GetOrdersByCustomerQuery, PageResult<OrderResponse>> {
+
+    /** Sortable order properties exposed through the API (PDF Section 12). */
+    private static final Set<String> SORTABLE_PROPERTIES = Set.of("createdAt", "totalAmount", "status");
 
     private final OrderRepository orderRepository;
 
@@ -28,7 +34,8 @@ public class GetOrdersByCustomerQueryHandler
     @Override
     @Transactional(readOnly = true)
     public PageResult<OrderResponse> handle(GetOrdersByCustomerQuery query) {
-        PageRequest pageable = PageRequest.of(query.page(), query.size());
+        PageRequest pageable = PageRequest.of(query.page(), query.size(),
+                SortParam.parse(query.sort(), SORTABLE_PROPERTIES));
         Page<OrderResponse> page;
 
         if (query.callerIsAdmin()) {

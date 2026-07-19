@@ -56,12 +56,12 @@ class InvoiceControllerTest {
                 .thenReturn(new UserContext("keycloak-sub", Set.of("SUBSCRIBER"), null, customerId.toString()));
         PageResult<InvoiceResponse> page = new PageResult<>(List.of(), 0, 20, 0, 0);
         when(mediator.query(new GetInvoicesQuery(
-                        customerId, 0, 20, "keycloak-sub", false, customerId.toString())))
+                        customerId, 0, 20, null, "keycloak-sub", false, customerId.toString())))
                 .thenReturn(page);
         when(responses.ok(page)).thenReturn(ApiResult.ok(page, null));
 
         ApiResult<PageResult<InvoiceResponse>> response =
-                controller.listInvoices(customerId, 0, 20, subscriberAuth);
+                controller.listInvoices(customerId, 0, 20, null, subscriberAuth);
 
         assertThat(response.data()).isEqualTo(page);
     }

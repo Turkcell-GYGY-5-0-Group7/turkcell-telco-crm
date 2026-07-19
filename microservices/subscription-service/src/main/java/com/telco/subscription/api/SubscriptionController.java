@@ -66,10 +66,11 @@ public class SubscriptionController {
             Authentication authentication,
             @RequestParam UUID customerId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
         return responses.ok(mediator.query(
                 new GetSubscriptionsByCustomerQuery(
-                        customerId, page, size, authentication.getName(), isAdmin(authentication),
+                        customerId, page, size, sort, authentication.getName(), isAdmin(authentication),
                         currentUserProvider.currentUser().customerId())));
     }
 

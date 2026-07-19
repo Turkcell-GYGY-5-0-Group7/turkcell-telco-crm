@@ -83,7 +83,7 @@ public class AccountCompositionService {
             }
         }
 
-        // billing lists invoices newest-first (findByCustomerIdOrderByCreatedAtDesc), so page 0 size 1
+        // billing lists invoices newest-first (default sort createdAt,desc), so page 0 size 1
         // is the latest invoice; a customer with no invoices yet yields null (a fresh-account state).
         List<GatewayInvoice> latest = page(gateway.get(
                 "/api/v1/invoices?customerId=" + customerId + "&page=0&size=1", INVOICE_PAGE));

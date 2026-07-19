@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class NotificationService {
@@ -25,6 +26,10 @@ public class NotificationService {
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationService.class);
     private static final String AGGREGATE_TYPE = "notification";
     private static final String FALLBACK_LOCALE = "en";
+
+    /** Sortable notification history properties exposed through the API (PDF Section 12). */
+    private static final Set<String> SORTABLE_PROPERTIES =
+            Set.of("createdAt", "sentAt", "status", "channel");
 
     private final NotificationRepository notificationRepository;
     private final NotificationTemplateRepository templateRepository;
@@ -97,9 +102,9 @@ public class NotificationService {
         return notification;
     }
 
-    public Page<Notification> history(String userId, int page, int size) {
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(
-                userId, PageRequest.of(page, size));
+    public Page<Notification> history(String userId, int page, int size, String sort) {
+        return notificationRepository.findByUserId(
+                userId, PageRequest.of(page, size, SortParam.parse(sort, SORTABLE_PROPERTIES)));
     }
 
     public CommunicationPreference upsertPreference(String userId, String channel, boolean optedIn) {

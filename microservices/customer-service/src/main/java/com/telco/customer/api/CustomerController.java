@@ -128,8 +128,9 @@ public class CustomerController {
     @PreAuthorize("hasAnyRole('ADMIN', 'CALL_CENTER_AGENT')")
     public ApiResult<PageResult<CustomerResponse>> list(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return responses.ok(mediator.query(new ListCustomersQuery(page, size)));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
+        return responses.ok(mediator.query(new ListCustomersQuery(page, size, sort)));
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.telco.billing.application.handler;
 
+import com.telco.billing.application.SortParam;
 import com.telco.billing.application.dto.InvoiceResponse;
 import com.telco.billing.application.query.GetInvoicesQuery;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
@@ -11,8 +12,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Set;
+
 @Component
 public class GetInvoicesQueryHandler implements QueryHandler<GetInvoicesQuery, PageResult<InvoiceResponse>> {
+
+    /** Sortable invoice properties exposed through the API (PDF Section 12). */
+    private static final Set<String> SORTABLE_PROPERTIES =
+            Set.of("createdAt", "issuedAt", "dueDate", "grandTotal", "status");
 
     private final InvoiceRepository invoiceRepo;
 
@@ -29,8 +36,9 @@ public class GetInvoicesQueryHandler implements QueryHandler<GetInvoicesQuery, P
             throw new AccessDeniedException("Cannot list invoices for another customer");
         }
 
-        Page<InvoiceResponse> page = invoiceRepo.findByCustomerIdOrderByCreatedAtDesc(
-                query.customerId(), PageRequest.of(query.page(), query.size()))
+        Page<InvoiceResponse> page = invoiceRepo.findByCustomerId(
+                query.customerId(), PageRequest.of(query.page(), query.size(),
+                        SortParam.parse(query.sort(), SORTABLE_PROPERTIES)))
                 .map(InvoiceResponse::from);
 
         return new PageResult<>(page.getContent(), query.page(), query.size(),

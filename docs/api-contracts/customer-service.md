@@ -66,6 +66,10 @@ plainly (stored plain per design-note D5; log masking only).
   masked in logs/telemetry via the platform `@Sensitive` annotation (ADR-021).
 - KYC state machine PENDING -> ACTIVE / REJECTED; illegal transitions rejected with a business error.
 - Soft-deleted customers are excluded from default reads but the row persists.
+- Customer list pagination: `page` (default 0), `size` (default 20) and optional
+  `sort=field,asc|desc` (direction optional, `desc` assumed; default `createdAt,desc`). Sortable
+  fields: `createdAt`, `firstName`, `lastName`, `status`, `type`. Any other field or a malformed
+  value returns the standard 400 validation error shape.
 - KYC document binaries are stored in MinIO; the `Document` row holds only the object reference
   (bucket, key, content-type, checksum), and downloads are served via time-limited pre-signed URLs
   (ADR-006). The raw bytes are never stored in the database.

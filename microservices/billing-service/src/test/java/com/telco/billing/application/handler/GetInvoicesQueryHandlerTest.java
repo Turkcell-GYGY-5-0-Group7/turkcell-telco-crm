@@ -5,14 +5,18 @@ import com.telco.billing.domain.Invoice;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
 import com.telco.platform.common.api.PageResult;
 import com.telco.platform.common.exception.AccessDeniedException;
+import com.telco.platform.common.exception.ValidationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,6 +28,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,10 +51,10 @@ class GetInvoicesQueryHandlerTest {
         Invoice invoice = Invoice.create(customerId, UUID.randomUUID(), Instant.now(), Instant.now(),
                 BigDecimal.TEN, BigDecimal.ONE, "TRY", LocalDate.now().plusDays(30));
         Page<Invoice> page = new PageImpl<>(List.of(invoice), PageRequest.of(0, 20), 1);
-        when(invoiceRepo.findByCustomerIdOrderByCreatedAtDesc(eq(customerId), any())).thenReturn(page);
+        when(invoiceRepo.findByCustomerId(eq(customerId), any())).thenReturn(page);
 
-        PageResult<?> result = handler.handle(
-                new GetInvoicesQuery(customerId, 0, 20, "keycloak-sub", false, customerId.toString()));
+        PageResult<?> result = handler.handle(new GetInvoicesQuery(
+                customerId, 0, 20, null, "keycloak-sub", false, customerId.toString()));
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.totalElements()).isEqualTo(1);
@@ -57,25 +63,60 @@ class GetInvoicesQueryHandlerTest {
     @Test
     void admin_can_list_invoices_for_any_customer_even_with_no_linked_customer_id() {
         Page<Invoice> page = new PageImpl<>(List.of(), PageRequest.of(0, 20), 0);
-        when(invoiceRepo.findByCustomerIdOrderByCreatedAtDesc(eq(customerId), any())).thenReturn(page);
+        when(invoiceRepo.findByCustomerId(eq(customerId), any())).thenReturn(page);
 
         PageResult<?> result = handler.handle(
-                new GetInvoicesQuery(customerId, 0, 20, "admin-sub", true, null));
+                new GetInvoicesQuery(customerId, 0, 20, null, "admin-sub", true, null));
 
         assertThat(result.content()).isEmpty();
     }
 
     @Test
+    void absent_sort_defaults_to_created_at_desc() {
+        when(invoiceRepo.findByCustomerId(eq(customerId), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        handler.handle(new GetInvoicesQuery(customerId, 0, 20, null, "admin-sub", true, null));
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(invoiceRepo).findByCustomerId(eq(customerId), pageable.capture());
+        assertThat(pageable.getValue().getSort())
+                .isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Test
+    void explicit_sort_is_applied_to_the_repository_call() {
+        when(invoiceRepo.findByCustomerId(eq(customerId), any()))
+                .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        handler.handle(new GetInvoicesQuery(
+                customerId, 0, 20, "dueDate,asc", "admin-sub", true, null));
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(invoiceRepo).findByCustomerId(eq(customerId), pageable.capture());
+        assertThat(pageable.getValue().getSort())
+                .isEqualTo(Sort.by(Sort.Direction.ASC, "dueDate"));
+    }
+
+    @Test
+    void unknown_sort_property_raises_validation_error() {
+        assertThatThrownBy(() -> handler.handle(new GetInvoicesQuery(
+                customerId, 0, 20, "pdfRef,asc", "admin-sub", true, null)))
+                .isInstanceOf(ValidationException.class);
+        verifyNoInteractions(invoiceRepo);
+    }
+
+    @Test
     void throws_access_denied_when_resolved_customer_id_does_not_match() {
-        assertThatThrownBy(() -> handler.handle(
-                new GetInvoicesQuery(customerId, 0, 20, "keycloak-sub", false, UUID.randomUUID().toString())))
+        assertThatThrownBy(() -> handler.handle(new GetInvoicesQuery(
+                customerId, 0, 20, null, "keycloak-sub", false, UUID.randomUUID().toString())))
                 .isInstanceOf(AccessDeniedException.class);
     }
 
     @Test
     void throws_access_denied_when_caller_customer_id_is_null_unlinked_subscriber() {
         assertThatThrownBy(() -> handler.handle(
-                new GetInvoicesQuery(customerId, 0, 20, "keycloak-sub", false, null)))
+                new GetInvoicesQuery(customerId, 0, 20, null, "keycloak-sub", false, null)))
                 .isInstanceOf(AccessDeniedException.class);
     }
 }

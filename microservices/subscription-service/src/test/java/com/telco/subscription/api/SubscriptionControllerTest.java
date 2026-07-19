@@ -55,12 +55,12 @@ class SubscriptionControllerTest {
                 .thenReturn(new UserContext("keycloak-sub", Set.of("SUBSCRIBER"), null, customerId.toString()));
         PageResult<SubscriptionResponse> page = new PageResult<>(List.of(), 0, 20, 0, 0);
         when(mediator.query(new GetSubscriptionsByCustomerQuery(
-                        customerId, 0, 20, "keycloak-sub", false, customerId.toString())))
+                        customerId, 0, 20, null, "keycloak-sub", false, customerId.toString())))
                 .thenReturn(page);
         when(responses.ok(page)).thenReturn(ApiResult.ok(page, null));
 
         ApiResult<PageResult<SubscriptionResponse>> response =
-                controller.getByCustomer(subscriberAuth, customerId, 0, 20);
+                controller.getByCustomer(subscriberAuth, customerId, 0, 20, null);
 
         assertThat(response.data()).isEqualTo(page);
     }
@@ -75,12 +75,12 @@ class SubscriptionControllerTest {
                 .thenReturn(new UserContext("keycloak-sub", Set.of("SUBSCRIBER"), null, null));
         PageResult<SubscriptionResponse> page = new PageResult<>(List.of(), 0, 20, 0, 0);
         when(mediator.query(new GetSubscriptionsByCustomerQuery(
-                        customerId, 0, 20, "keycloak-sub", false, null)))
+                        customerId, 0, 20, null, "keycloak-sub", false, null)))
                 .thenReturn(page);
         when(responses.ok(page)).thenReturn(ApiResult.ok(page, null));
 
         ApiResult<PageResult<SubscriptionResponse>> response =
-                controller.getByCustomer(subscriberAuth, customerId, 0, 20);
+                controller.getByCustomer(subscriberAuth, customerId, 0, 20, null);
 
         assertThat(response.data()).isEqualTo(page);
     }

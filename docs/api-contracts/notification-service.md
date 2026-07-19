@@ -36,6 +36,10 @@ History reads require a valid JWT. Direct send is internal (event-driven in norm
 ## Notes
 
 - Dispatch respects per-user channel preferences; suppressed channels are not sent.
+- History pagination: `page` (default 0), `size` (default 20) and optional `sort=field,asc|desc`
+  (direction optional, `desc` assumed; default `createdAt,desc`). Sortable fields: `createdAt`,
+  `sentAt`, `status`, `channel`. Any other field or a malformed value returns the standard 400
+  validation error shape.
 - Closes the messaging loops for AC-01 (welcome SMS), AC-02 (invoice email), AC-03 (quota SMS).
 - Persistence: notification documents and history live in MongoDB; the lone event
   `notification.dispatched.v1` is written via a co-located PostgreSQL outbox (non-atomic across the

@@ -64,8 +64,9 @@ public class TariffController {
     @GetMapping
     public ApiResult<PageResult<TariffResponse>> listTariffs(
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        return responses.ok(mediator.query(new ListTariffsQuery(page, size)));
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
+        return responses.ok(mediator.query(new ListTariffsQuery(page, size, sort)));
     }
 
     /** Returns a single active tariff by code. Returns 404 if not found or not active. */

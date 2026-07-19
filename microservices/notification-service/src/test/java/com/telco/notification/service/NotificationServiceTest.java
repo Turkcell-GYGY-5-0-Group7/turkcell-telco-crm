@@ -8,13 +8,17 @@ import com.telco.notification.domain.NotificationTemplate;
 import com.telco.notification.infrastructure.persistence.CommunicationPreferenceRepository;
 import com.telco.notification.infrastructure.persistence.NotificationRepository;
 import com.telco.notification.infrastructure.persistence.NotificationTemplateRepository;
+import com.telco.platform.common.exception.ValidationException;
 import com.telco.platform.outbox.OutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import java.util.List;
 import java.util.Map;
@@ -137,13 +141,46 @@ class NotificationServiceTest {
     @Test
     void history_delegates_to_repository_with_correct_page_request() {
         Notification n = Notification.create("user-1", "WELCOME", "SMS", "{}");
-        when(notificationRepository.findByUserIdOrderByCreatedAtDesc(eq("user-1"), any()))
+        when(notificationRepository.findByUserId(eq("user-1"), any()))
                 .thenReturn(new PageImpl<>(List.of(n)));
 
-        var page = service.history("user-1", 0, 10);
+        var page = service.history("user-1", 0, 10, null);
 
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().get(0).getUserId()).isEqualTo("user-1");
+    }
+
+    @Test
+    void history_absent_sort_defaults_to_created_at_desc() {
+        when(notificationRepository.findByUserId(eq("user-1"), any()))
+                .thenReturn(new PageImpl<>(List.<Notification>of()));
+
+        service.history("user-1", 0, 10, null);
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findByUserId(eq("user-1"), pageable.capture());
+        assertThat(pageable.getValue().getSort())
+                .isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt"));
+    }
+
+    @Test
+    void history_explicit_sort_is_applied_to_the_repository_call() {
+        when(notificationRepository.findByUserId(eq("user-1"), any()))
+                .thenReturn(new PageImpl<>(List.<Notification>of()));
+
+        service.history("user-1", 0, 10, "sentAt,asc");
+
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(notificationRepository).findByUserId(eq("user-1"), pageable.capture());
+        assertThat(pageable.getValue().getSort())
+                .isEqualTo(Sort.by(Sort.Direction.ASC, "sentAt"));
+    }
+
+    @Test
+    void history_unknown_sort_property_raises_validation_error() {
+        assertThatThrownBy(() -> service.history("user-1", 0, 10, "payloadJson,asc"))
+                .isInstanceOf(ValidationException.class);
+        verify(notificationRepository, never()).findByUserId(anyString(), any());
     }
 
     @Test

@@ -22,13 +22,13 @@ Design decisions and accepted precedents: [design-note.md](design-note.md).
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 24.1 | Catalog addon management (allowances, seeds, create API, internal snapshot) | TODO | [24.1-catalog-addon-management.md](24.1-catalog-addon-management.md) |
+| 24.1 | Catalog addon management (allowances, seeds, create API, internal snapshot) | DONE | [24.1-catalog-addon-management.md](24.1-catalog-addon-management.md) |
 | 24.2 | Order model generalization (order/item types, validation matrix, invariant relaxation) | TODO | [24.2-order-model-generalization.md](24.2-order-model-generalization.md) |
 | 24.3 | Addon purchase flow (addon.purchased.v1, quota top-up, invoice lines, web-bff forwarding) | TODO | [24.3-addon-purchase-flow.md](24.3-addon-purchase-flow.md) |
 | 24.4 | Plan change flow (subscription.tariff-changed.v1, changeTariff, quota re-provision) | TODO | [24.4-plan-change-flow.md](24.4-plan-change-flow.md) |
 | 24.5 | Customer contact info + type-conditional TCKN/VKN validation | DONE | [24.5-customer-contact-and-conditional-id-validation.md](24.5-customer-contact-and-conditional-id-validation.md) |
 | 24.6 | Payment method + Idempotency-Key header | DONE | [24.6-payment-method-and-idempotency-header.md](24.6-payment-method-and-idempotency-header.md) |
-| 24.7 | API polish: Swagger x7, sort param, quota-exceeded template | TODO | [24.7-api-polish-swagger-sort-notification.md](24.7-api-polish-swagger-sort-notification.md) |
+| 24.7 | API polish: Swagger x7, sort param, quota-exceeded template | DONE | [24.7-api-polish-swagger-sort-notification.md](24.7-api-polish-swagger-sort-notification.md) |
 | 24.8 | Tests and full E2E re-validation | TODO | [24.8-tests-and-e2e-revalidation.md](24.8-tests-and-e2e-revalidation.md) |
 
 Execution order: 24.5/24.6/24.7 (independent quick wins, any order) -> 24.1 -> 24.2 -> 24.3/24.4

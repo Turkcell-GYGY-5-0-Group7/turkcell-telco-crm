@@ -38,5 +38,9 @@ Read and lifecycle endpoints require a valid JWT. Activation is internal (saga-d
 
 - MSISDN allocation is atomic and concurrency-safe; no MSISDN is double-allocated.
 - Lifecycle transitions are enforced as domain invariants; illegal transitions are rejected.
+- Subscription list pagination: `page` (default 0), `size` (default 20) and optional
+  `sort=field,asc|desc` (direction optional, `desc` assumed; default `createdAt,desc`). Sortable
+  fields: `createdAt`, `activatedAt`, `status`. Any other field or a malformed value returns the
+  standard 400 validation error shape.
 
 Reference: [service-catalog](../architecture/service-catalog.md), [event-catalog](../architecture/event-catalog.md), ADR-015.

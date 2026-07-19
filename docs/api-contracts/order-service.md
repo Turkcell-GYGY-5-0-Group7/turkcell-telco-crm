@@ -35,6 +35,10 @@ All endpoints require a valid JWT.
 ## Notes
 
 - `Idempotency-Key` is mandatory on order creation; replays return the original result.
+- Order list pagination: `page` (default 0), `size` (default 20) and optional `sort=field,asc|desc`
+  (direction optional, `desc` assumed; default `createdAt,desc`). Sortable fields: `createdAt`,
+  `totalAmount`, `status`. Any other field or a malformed value returns the standard 400 validation
+  error shape.
 - Order capture validates the customer (ACTIVE/KYC) and snapshots catalog price synchronously.
 - Saga state is persisted; activation failure compensates (refund + order CANCELLED).
 - **Optional campaign discount at order capture (Sprint 21 Feature 21.3.3, ADR-027 Decision Section

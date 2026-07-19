@@ -43,9 +43,10 @@ class InvoiceController {
             @RequestParam UUID customerId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort,
             Authentication authentication) {
         return responses.ok(mediator.query(new GetInvoicesQuery(
-                customerId, page, size, authentication.getName(), isAdmin(authentication),
+                customerId, page, size, sort, authentication.getName(), isAdmin(authentication),
                 currentUserProvider.currentUser().customerId())));
     }
 
