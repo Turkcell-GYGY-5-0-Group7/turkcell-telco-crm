@@ -1,0 +1,176 @@
+site_name: Telco CRM Platform Documentation
+site_description: Documentation hub for the Telco CRM Platform - architecture, services, events, security, and how to build and run it.
+site_url: https://turkcell-gygy-5-0-group7.github.io/turkcell-telco-crm/
+repo_url: https://github.com/turkcell-gygy-5-0-group7/turkcell-telco-crm
+repo_name: turkcell-telco-crm
+edit_uri: edit/master/docs/
+
+docs_dir: docs
+site_dir: site
+
+# architecture/adr/ lives outside docs_dir; docs/adr is a git symlink to ../architecture/adr so
+# every ADR is part of the site without duplicating a single file (mkdocs.yml cannot set
+# docs_dir to the repo root itself - it must be a child directory of the config file's location).
+not_in_nav: |
+  README.md
+  tasks/todo.md
+  tasks/sprint-*/*.md
+  tasks/sprint-*/**/*.md
+  !tasks/sprint-*/README.md
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - navigation.footer
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - def_list
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started: project/getting-started.md
+  - Architecture:
+      - Overview: project/architecture-overview.md
+      - Services: project/services.md
+      - Events & Messaging: project/events-and-messaging.md
+      - Platform & Reuse-Before-Build: project/platform-and-reuse.md
+      - Data Model (ERDs): project/data-model.md
+      - "Reference: Service Catalog": architecture/service-catalog.md
+      - "Reference: Event Catalog": architecture/event-catalog.md
+      - "Reference: Platform Capability Catalog": architecture/platform-capabilities.md
+      - "Reference: Platform Gap-Closing Plan": architecture/platform-gap-closing-plan.md
+  - Security & Identity:
+      - Overview: project/security-and-identity.md
+      - "Reference: Security Posture": architecture/security-posture.md
+      - "Reference: Keycloak & Auth": architecture/keycloak-and-auth.md
+      - "Reference: Authentication E2E Runbook": runbooks/5.3-authentication-e2e.md
+  - Observability: project/observability.md
+  - API:
+      - Standards: project/api-standards.md
+      - Contracts Overview: api-contracts/README.md
+      - API Gateway: api-contracts/api-gateway.md
+      - Identity Service: api-contracts/identity-service.md
+      - Customer Service: api-contracts/customer-service.md
+      - Product Catalog Service: api-contracts/product-catalog-service.md
+      - Order Service: api-contracts/order-service.md
+      - Subscription Service: api-contracts/subscription-service.md
+      - Usage Service: api-contracts/usage-service.md
+      - Billing Service: api-contracts/billing-service.md
+      - Payment Service: api-contracts/payment-service.md
+      - Notification Service: api-contracts/notification-service.md
+      - Ticket Service: api-contracts/ticket-service.md
+      - Campaign Service: api-contracts/campaign-service.md
+      - Dispute Service: api-contracts/dispute-service.md
+      - Fraud Service: api-contracts/fraud-service.md
+      - Web BFF: api-contracts/web-bff.md
+  - Architecture Decision Records:
+      - "ADR-001: Repository Strategy": adr/ADR-001-repository-strategy.md
+      - "ADR-002: Monorepo Strategy": adr/ADR-002-monorepo-strategy.md
+      - "ADR-003: Technology Stack": adr/ADR-003-technology-stack.md
+      - "ADR-004: Architecture Style": adr/ADR-004-architecture-style.md
+      - "ADR-005: Service Communication Strategy": adr/ADR-005-service-communication-strategy.md
+      - "ADR-006: Database Strategy": adr/ADR-006-database-strategy.md
+      - "ADR-007: Platform Library Strategy": adr/ADR-007-platform-library-strategy.md
+      - "ADR-008: CQRS and Mediator Strategy": adr/ADR-008-cqrs-and-mediator-strategy.md
+      - "ADR-009: Event Driven Architecture": adr/ADR-009-event-driven-architecture.md
+      - "ADR-010: Service Discovery and Configuration Strategy": adr/ADR-010-service-discovery-and-configuration-strategy.md
+      - "ADR-011: Security Foundation": adr/ADR-011-security-foundation.md
+      - "ADR-012: Observability Strategy": adr/ADR-012-observability-strategy.md
+      - "ADR-013: Testing Strategy": adr/ADR-013-testing-strategy.md
+      - "ADR-014: CI/CD Strategy": adr/ADR-014-ci-cd-strategy.md
+      - "ADR-015: API Design Standards": adr/ADR-015-api-design-standards.md
+      - "ADR-016: Database Migration Strategy": adr/ADR-016-database-migration-strategy.md
+      - "ADR-017: Service Template Standard": adr/ADR-017-service-template-standard.md
+      - "ADR-018: Platform Starter Dependency Model": adr/ADR-018-platform-starter-dependency-model.md
+      - "ADR-019: Event Contract and Schema Governance": adr/ADR-019-event-contract-and-schema-governance.md
+      - "ADR-020: Platform Maven Architecture": adr/ADR-020-platform-maven-architecture.md
+      - "ADR-021: PII and Data-Masking Strategy": adr/ADR-021-pii-and-data-masking-strategy.md
+      - "ADR-022: Frontend and BFF Strategy": adr/ADR-022-frontend-and-bff-strategy.md
+      - "ADR-024: Distributed Lock Strategy": adr/ADR-024-distributed-lock-strategy.md
+      - "ADR-025: Secrets and Key Management": adr/ADR-025-secrets-and-key-management.md
+      - "ADR-026: Service Mesh and mTLS": adr/ADR-026-service-mesh-and-mtls.md
+      - "ADR-027: Campaign and Catalog Validation": adr/ADR-027-campaign-and-catalog-validation.md
+      - "ADR-028: Dispute and Chargeback": adr/ADR-028-dispute-and-chargeback.md
+      - "ADR-029: Fraud Detection MVP Scope": adr/ADR-029-fraud-detection-mvp-scope.md
+  - Development: project/development-workflow.md
+  - Deployment & Operations: project/deployment-and-operations.md
+  - Product:
+      - Business Requirements: product/BRD.md
+      - Requirements (FR/NFR): product/requirements.md
+      - Roadmap: product/roadmap.md
+      - Personas: product/personas.md
+      - Glossary: product/glossary.md
+      - "MVP Brief (English)": product/TELCO-CRM-MVP.md
+      - "MVP Brief (Turkish)": product/TELCO-CRM-MVP-TR.md
+      - "Advanced / Enterprise Evolution": product/TELCO-CRM-ADVANCED.md
+  - Delivery & Status:
+      - Overview: project/roadmap-and-status.md
+      - Backlog Index: tasks/README.md
+      - Live Status Dashboard: tasks/STATUS.md
+      - Lessons Learned: tasks/lessons.md
+      - Sprints:
+          - "Sprint 01 - Foundation": tasks/sprint-01-foundation/README.md
+          - "Sprint 02 - Platform Core": tasks/sprint-02-platform-core/README.md
+          - "Sprint 03 - Platform Starters and Events": tasks/sprint-03-platform-starters-and-events/README.md
+          - "Sprint 04 - Platform Infrastructure Services": tasks/sprint-04-platform-infrastructure-services/README.md
+          - "Sprint 05 - Security and Identity": tasks/sprint-05-security-and-identity/README.md
+          - "Sprint 06 - Customer Domain": tasks/sprint-06-customer-domain/README.md
+          - "Sprint 07 - Product Catalog Domain": tasks/sprint-07-product-catalog-domain/README.md
+          - "Sprint 08 - Order and Payment": tasks/sprint-08-order-and-payment/README.md
+          - "Sprint 09 - Subscription and Onboarding Saga": tasks/sprint-09-subscription-and-onboarding-saga/README.md
+          - "Sprint 10 - Usage Metering": tasks/sprint-10-usage-metering/README.md
+          - "Sprint 11 - Billing": tasks/sprint-11-billing/README.md
+          - "Sprint 12 - Notifications and Ticketing": tasks/sprint-12-notifications-and-ticketing/README.md
+          - "Sprint 13 - Observability and Resilience": tasks/sprint-13-observability-and-resilience/README.md
+          - "Sprint 14 - Testing and Hardening": tasks/sprint-14-testing-and-hardening/README.md
+          - "Sprint 15 - Deployment": tasks/sprint-15-deployment/README.md
+          - "Sprint 16 - Web Frontend": tasks/sprint-16-web-frontend/README.md
+          - "Sprint 17 - Distributed Locking": tasks/sprint-17-distributed-locking/README.md
+          - "Sprint 18 - Secret Management": tasks/sprint-18-secret-management/README.md
+          - "Sprint 19 - Service Mesh and mTLS": tasks/sprint-19-service-mesh-mtls/README.md
+          - "Sprint 20 - Chaos Engineering": tasks/sprint-20-chaos-engineering/README.md
+          - "Sprint 21 - Campaign / Catalog Validation": tasks/sprint-21-campaign-catalog-validation/README.md
+          - "Sprint 22 - Invoice Dispute / Chargeback": tasks/sprint-22-dispute-chargeback/README.md
+          - "Sprint 23 - SIM-Swap / Fraud Detection": tasks/sprint-23-sim-swap-fraud/README.md
+  - FAQ: project/faq.md
+  - Contributing: project/contributing.md
