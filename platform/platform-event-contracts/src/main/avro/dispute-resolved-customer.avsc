@@ -1,0 +1,40 @@
+{
+  "type": "record",
+  "name": "DisputeResolvedCustomerV1",
+  "namespace": "com.telco.platform.events.dispute",
+  "doc": "Emitted when a dispute is resolved in the customer's favor (dispute.resolved-customer.v1). Producer: dispute-service. ADR-028 Section 5: the ONLY dispute-service event that downstream consumers (billing-service, payment-service) may treat as authorization for a real credit/refund. Carries both invoiceId and paymentId (nullable each) so a consumer can determine which side should act.",
+  "fields": [
+    {
+      "name": "disputeId",
+      "type": "string",
+      "doc": "Unique dispute identifier (UUID)."
+    },
+    {
+      "name": "invoiceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Invoice this dispute contested, when applicable."
+    },
+    {
+      "name": "paymentId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Payment this dispute contested, when applicable."
+    },
+    {
+      "name": "resolutionAmount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 2
+      },
+      "doc": "Amount credited/refunded to the customer, as an exact decimal (precision 19, scale 2)."
+    },
+    {
+      "name": "resolvedAt",
+      "type": "string",
+      "doc": "Instant the dispute was resolved, ISO-8601 (UTC)."
+    }
+  ]
+}

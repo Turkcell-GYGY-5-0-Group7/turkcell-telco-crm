@@ -61,6 +61,10 @@ public class Invoice {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "dispute_status", nullable = false, length = 16)
+    private InvoiceDisputeStatus disputeStatus = InvoiceDisputeStatus.NONE;
+
     @OneToMany(mappedBy = "invoice", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<InvoiceLine> lines = new ArrayList<>();
 
@@ -120,6 +124,42 @@ public class Invoice {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * Places a provisional hold on this invoice (ADR-028 Section 5) - a hold flag only, never a
+     * financial mutation. Idempotent: re-applying a hold that is already set is harmless, so this
+     * is an unconditional flag flip, not a guarded state-machine transition.
+     */
+    public void placeOnDisputeHold() {
+        this.disputeStatus = InvoiceDisputeStatus.ON_HOLD;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Clears a dispute hold with no financial change (ADR-028 Section 5, {@code RESOLVED_MERCHANT}). */
+    public void clearDisputeHold() {
+        this.disputeStatus = InvoiceDisputeStatus.NONE;
+        this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Applies a real credit adjustment for a {@code dispute.resolved-customer.v1} resolution on an
+     * unpaid invoice (ADR-028 Section 5). Check-then-act guard, independent of inbox dedup: no-ops
+     * silently (no line, no total change) unless {@code disputeStatus == ON_HOLD} - this is the
+     * second line of defense against a duplicate adjustment if inbox dedup is ever bypassed (bug,
+     * manual replay, DLQ redrive), per ADR-028 Section 5's ratified amendment. A thrown exception
+     * here would be wrong: the caller is a Kafka consumer, and throwing would retry forever on a
+     * legitimately-already-resolved invoice.
+     */
+    public void applyDisputeAdjustment(BigDecimal amount) {
+        if (this.disputeStatus != InvoiceDisputeStatus.ON_HOLD) {
+            return;
+        }
+        InvoiceLine.of(this, "Dispute Adjustment", BigDecimal.ONE, amount.negate(), InvoiceLineType.ADJUSTMENT);
+        this.subTotal = this.subTotal.subtract(amount);
+        this.grandTotal = this.grandTotal.subtract(amount);
+        this.disputeStatus = InvoiceDisputeStatus.NONE;
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId()             { return id; }
     public UUID getCustomerId()     { return customerId; }
     public UUID getSubscriptionId() { return subscriptionId; }
@@ -135,6 +175,7 @@ public class Invoice {
     public String getPdfRef()       { return pdfRef; }
     public Instant getCreatedAt()   { return createdAt; }
     public Instant getUpdatedAt()   { return updatedAt; }
+    public InvoiceDisputeStatus getDisputeStatus() { return disputeStatus; }
     public List<InvoiceLine> getLines() { return Collections.unmodifiableList(lines); }
 
     void addLine(InvoiceLine line) { this.lines.add(line); }

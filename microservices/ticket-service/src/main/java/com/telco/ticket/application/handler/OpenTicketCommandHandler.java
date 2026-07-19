@@ -48,7 +48,8 @@ public class OpenTicketCommandHandler implements CommandHandler<OpenTicketComman
 
         Instant slaDueAt = Instant.now().plus(minutes, ChronoUnit.MINUTES);
 
-        Ticket ticket = Ticket.open(command.customerId(), cat, pri, command.subject(), team, slaDueAt);
+        Ticket ticket = Ticket.open(command.customerId(), cat, pri, command.subject(), team, slaDueAt,
+                command.externalRef());
         ticket = ticketRepository.save(ticket);
 
         outboxService.publish(AGGREGATE_TYPE, ticket.getId().toString(), "ticket.opened.v1",

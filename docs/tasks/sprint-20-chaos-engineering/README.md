@@ -2,12 +2,16 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/5 | 2026-07-11 |
+| IN PROGRESS | 5/5 authored, 0/5 live-verified | 2026-07-14 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
-> This is a **post-MVP** sprint. The MVP is Sprints 01-15 (backend + Swagger). It is documented now
-> and built later. Feature subtask files will be authored when the sprint is scheduled.
+> This is a **post-MVP** sprint. The MVP is Sprints 01-15 (backend + Swagger). All 5 features are
+> now authored (see the Features table) on branch `feature/sprint-20-chaos-experiment-library`. **Not yet
+> DONE**: every feature's live-cluster acceptance criteria (Chaos Mesh pods actually Running, CRDs
+> actually registered, experiments actually applied and observed against a live Kind cluster) are
+> unverified this session - Docker Desktop was down throughout. See `docs/tasks/STATUS.md`'s latest
+> entry for the full detail and what's deferred to a follow-up session.
 
 ## Objective
 
@@ -38,11 +42,11 @@ References.
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 20.1 | Fault-injection tool selection and cluster install | TODO | [20.1-fault-injection-tool-selection-and-cluster-install.md](20.1-fault-injection-tool-selection-and-cluster-install.md) |
-| 20.2 | Steady-state hypotheses and observability wiring | TODO | [20.2-steady-state-hypotheses-and-observability-wiring.md](20.2-steady-state-hypotheses-and-observability-wiring.md) |
-| 20.3 | Experiment library: pod-kill, latency injection, network partition | TODO | [20.3-experiment-library-pod-kill-latency-injection-network-partition.md](20.3-experiment-library-pod-kill-latency-injection-network-partition.md) |
-| 20.4 | Game-day runbook | TODO | [20.4-game-day-runbook.md](20.4-game-day-runbook.md) |
-| 20.5 | Blast-radius guardrails and namespace scoping | TODO | [20.5-blast-radius-guardrails-and-namespace-scoping.md](20.5-blast-radius-guardrails-and-namespace-scoping.md) |
+| 20.1 | Fault-injection tool selection and cluster install | AUTHORED, live install/CRD verification NOT proven | [20.1-fault-injection-tool-selection-and-cluster-install.md](20.1-fault-injection-tool-selection-and-cluster-install.md) |
+| 20.2 | Steady-state hypotheses and observability wiring | AUTHORED, live dashboard/PromQL check NOT proven | [20.2-steady-state-hypotheses-and-observability-wiring.md](20.2-steady-state-hypotheses-and-observability-wiring.md) |
+| 20.3 | Experiment library: pod-kill, latency injection, network partition | AUTHORED (corrected pairing), live `kubectl apply` runs NOT proven | [20.3-experiment-library-pod-kill-latency-injection-network-partition.md](20.3-experiment-library-pod-kill-latency-injection-network-partition.md) |
+| 20.4 | Game-day runbook | AUTHORED, commands not yet dry-run against a live cluster | [20.4-game-day-runbook.md](20.4-game-day-runbook.md) |
+| 20.5 | Blast-radius guardrails and namespace scoping | AUTHORED (RBAC finding applied: `clusterScoped: false`), `kubectl auth can-i` check NOT proven | [20.5-blast-radius-guardrails-and-namespace-scoping.md](20.5-blast-radius-guardrails-and-namespace-scoping.md) |
 
 ### Feature notes
 
@@ -62,7 +66,7 @@ References.
   scoped to the `telco` namespace on the same Kind cluster proven in Sprint 15 (`deploy/RUNBOOK.md`
   Section 2), gated so experiments never run in a namespace tagged `production`.
 - **20.2 Steady-state hypotheses and observability wiring.** Reuse, do not duplicate, the Sprint 13
-  Grafana dashboards as the sole observability surface for chaos: `platform-overview` (p95/p99
+  Grafana dashboards as the sole observability surface for chaos: `platform-overview` (p95
   latency, error rate, throughput), `kafka-billing-ops` (consumer lag, bill-run duration), and
   `circuit-breakers` (breaker state transitions). Each experiment in 20.3 states a steady-state
   hypothesis in terms of an existing panel/alert threshold (e.g. "p95 latency on `order-service`
@@ -73,11 +77,13 @@ References.
   `deploy/helm/`, `deploy/kind/` layout): (a) pod-kill (`PodChaos`, kill mode) against a domain
   service pod to verify the PDB (`minAvailable: 1`) and HPA (Sprint 15.3) keep the service serving
   and the killed pod is rescheduled; (b) latency injection (`NetworkChaos`, delay) on an outbound
-  call between two services already guarded by Resilience4j (Sprint 13.4, e.g.
-  order-service -> payment-service) to verify the circuit breaker opens/half-opens as designed
-  instead of cascading; (c) network partition (`NetworkChaos`, partition) isolating a service from
-  Kafka to verify the outbox/inbox pattern (ADR-009/019) recovers without message loss once the
-  partition heals.
+  call between two services already guarded by Resilience4j (Sprint 13.4,
+  order-service -> customer-service - corrected during 20.3 authoring from an originally-assumed
+  order-service -> payment-service pairing, which is Kafka-only/asynchronous and has no circuit
+  breaker; see `deploy/chaos/STEADY-STATE.md` and 20.3.2's correction note) to verify the circuit
+  breaker opens/half-opens as designed instead of cascading; (c) network partition (`NetworkChaos`,
+  partition) isolating a service from Kafka to verify the outbox/inbox pattern (ADR-009/019)
+  recovers without message loss once the partition heals.
 - **20.4 Game-day runbook.** A `deploy/chaos/GAMEDAY-RUNBOOK.md`, parallel in spirit to
   `deploy/RUNBOOK.md` (Sprint 15.5): prerequisites, how to run each 20.3 experiment against the Kind
   cluster, where to watch (the three dashboards from 20.2), the steady-state hypothesis and abort

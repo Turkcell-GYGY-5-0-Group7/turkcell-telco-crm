@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "name": "DisputeWithdrawnV1",
+  "namespace": "com.telco.platform.events.dispute",
+  "doc": "Emitted when a customer withdraws a dispute (dispute.withdrawn.v1). Producer: dispute-service.",
+  "fields": [
+    {
+      "name": "disputeId",
+      "type": "string",
+      "doc": "Unique dispute identifier (UUID)."
+    },
+    {
+      "name": "withdrawnAt",
+      "type": "string",
+      "doc": "Instant the dispute was withdrawn, ISO-8601 (UTC)."
+    }
+  ]
+}
