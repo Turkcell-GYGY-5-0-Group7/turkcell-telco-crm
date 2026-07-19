@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.telco.customer.application.AuditLogWriter;
 import com.telco.customer.application.command.UpdateCustomerCommand;
 import com.telco.customer.application.dto.CustomerResponse;
+import com.telco.customer.application.event.CustomerUpdatedV1;
 import com.telco.customer.domain.Customer;
 import com.telco.customer.domain.CustomerType;
 import com.telco.customer.infrastructure.persistence.CustomerRepository;
@@ -21,6 +22,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -43,7 +45,7 @@ class UpdateCustomerCommandHandlerTest {
 
     private Customer aCustomer() {
         return Customer.register(CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146",
-                LocalDate.of(1990, 1, 1));
+                LocalDate.of(1990, 1, 1), null, null);
     }
 
     @Test
@@ -53,7 +55,7 @@ class UpdateCustomerCommandHandlerTest {
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         UpdateCustomerCommand command = new UpdateCustomerCommand(
-                customer.getId(), "Augusta", "Byron", LocalDate.of(1815, 12, 10));
+                customer.getId(), "Augusta", "Byron", LocalDate.of(1815, 12, 10), null, null);
 
         CustomerResponse response = handler.handle(command);
 
@@ -66,12 +68,37 @@ class UpdateCustomerCommandHandlerTest {
     }
 
     @Test
+    void updatesContactInfoAndCarriesItOnResponseAndEvent() {
+        Customer customer = aCustomer();
+        when(customers.findById(customer.getId())).thenReturn(Optional.of(customer));
+        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        UpdateCustomerCommand command = new UpdateCustomerCommand(
+                customer.getId(), "Ada", "Lovelace", LocalDate.of(1990, 1, 1),
+                "ada@example.com", "+905321112233");
+
+        CustomerResponse response = handler.handle(command);
+
+        assertThat(response.email()).isEqualTo("ada@example.com");
+        assertThat(response.phone()).isEqualTo("+905321112233");
+        assertThat(customer.getEmail()).isEqualTo("ada@example.com");
+        assertThat(customer.getPhone()).isEqualTo("+905321112233");
+
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(outbox).publish(eq("customer"), eq(customer.getId().toString()),
+                eq("customer.updated.v1"), payloadCaptor.capture());
+        CustomerUpdatedV1 event = (CustomerUpdatedV1) payloadCaptor.getValue();
+        assertThat(event.email()).isEqualTo("ada@example.com");
+        assertThat(event.phone()).isEqualTo("+905321112233");
+    }
+
+    @Test
     void throwsResourceNotFoundWhenCustomerDoesNotExist() {
         UUID missing = UUID.randomUUID();
         when(customers.findById(missing)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> handler.handle(
-                new UpdateCustomerCommand(missing, "A", "B", LocalDate.of(2000, 1, 1))))
+                new UpdateCustomerCommand(missing, "A", "B", LocalDate.of(2000, 1, 1), null, null)))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 }

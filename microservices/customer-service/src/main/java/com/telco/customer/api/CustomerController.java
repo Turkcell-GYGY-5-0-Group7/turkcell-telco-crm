@@ -54,7 +54,8 @@ public class CustomerController {
     public ApiResult<CustomerResponse> register(@Valid @RequestBody RegisterCustomerRequest request) {
         return responses.ok(mediator.send(new RegisterCustomerCommand(
                 request.type(), request.firstName(), request.lastName(),
-                request.identityNumber(), request.dateOfBirth(), resolveRegisteredByUserId())));
+                request.identityNumber(), request.dateOfBirth(), request.email(), request.phone(),
+                resolveRegisteredByUserId())));
     }
 
     /**
@@ -142,7 +143,8 @@ public class CustomerController {
     public ApiResult<CustomerResponse> update(@PathVariable UUID id,
                                               @Valid @RequestBody UpdateCustomerRequest request) {
         return responses.ok(mediator.send(new UpdateCustomerCommand(
-                id, request.firstName(), request.lastName(), request.dateOfBirth())));
+                id, request.firstName(), request.lastName(), request.dateOfBirth(),
+                request.email(), request.phone())));
     }
 
     /**

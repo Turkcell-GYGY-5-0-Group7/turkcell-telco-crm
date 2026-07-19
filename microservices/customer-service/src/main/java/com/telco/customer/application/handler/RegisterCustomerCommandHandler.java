@@ -39,13 +39,14 @@ public class RegisterCustomerCommandHandler
     @Override
     public CustomerResponse handle(RegisterCustomerCommand command) {
         Customer customer = Customer.register(command.type(), command.firstName(), command.lastName(),
-                command.identityNumber(), command.dateOfBirth());
+                command.identityNumber(), command.dateOfBirth(), command.email(), command.phone());
         customers.save(customer);
 
         String id = customer.getId().toString();
         outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, CustomerRegisteredV1.of(
                 id, customer.getType().name(), customer.getStatus().name(),
-                customer.getCreatedAt().toEpochMilli(), command.registeredByUserId()));
+                customer.getCreatedAt().toEpochMilli(), command.registeredByUserId(),
+                customer.getEmail(), customer.getPhone()));
 
         audit.log("CUSTOMER_REGISTERED", AGGREGATE_TYPE, id, Map.of("type", customer.getType().name()));
 

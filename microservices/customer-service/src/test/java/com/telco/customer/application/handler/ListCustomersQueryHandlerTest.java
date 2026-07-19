@@ -35,9 +35,9 @@ class ListCustomersQueryHandlerTest {
     @Test
     void returnsPagedResultMappedFromCustomers() {
         Customer c1 = Customer.register(CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146",
-                LocalDate.of(1990, 1, 1));
+                LocalDate.of(1990, 1, 1), null, null);
         Customer c2 = Customer.register(CustomerType.INDIVIDUAL, "Grace", "Hopper", "11111111110",
-                LocalDate.of(1985, 5, 5));
+                LocalDate.of(1985, 5, 5), null, null);
         when(customers.findAll(any(Pageable.class)))
                 .thenReturn(new PageImpl<>(List.of(c1, c2)));
 

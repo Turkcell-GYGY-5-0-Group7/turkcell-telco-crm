@@ -16,11 +16,15 @@ public record CustomerRegisteredV1(
         String identityNumber,
         String status,
         long registeredAt,
-        String registeredByUserId
+        String registeredByUserId,
+        String email,
+        String phone
 ) implements Event {
 
     public static CustomerRegisteredV1 of(String customerId, String type, String status,
-                                          long registeredAt, String registeredByUserId) {
-        return new CustomerRegisteredV1(customerId, type, null, status, registeredAt, registeredByUserId);
+                                          long registeredAt, String registeredByUserId,
+                                          String email, String phone) {
+        return new CustomerRegisteredV1(customerId, type, null, status, registeredAt,
+                registeredByUserId, email, phone);
     }
 }

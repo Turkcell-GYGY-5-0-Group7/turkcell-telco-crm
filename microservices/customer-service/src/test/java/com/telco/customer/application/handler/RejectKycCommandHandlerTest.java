@@ -46,7 +46,7 @@ class RejectKycCommandHandlerTest {
 
     private Customer pendingCustomer() {
         return Customer.register(CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146",
-                LocalDate.of(1990, 1, 1));
+                LocalDate.of(1990, 1, 1), null, null);
     }
 
     @Test

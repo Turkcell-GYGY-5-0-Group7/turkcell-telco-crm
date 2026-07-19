@@ -10,6 +10,8 @@ public record CustomerUpdatedV1(
         String customerId,
         String firstName,
         String lastName,
-        long updatedAt
+        long updatedAt,
+        String email,
+        String phone
 ) implements Event {
 }

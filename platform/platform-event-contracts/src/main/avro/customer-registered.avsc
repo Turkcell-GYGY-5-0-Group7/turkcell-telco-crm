@@ -38,6 +38,18 @@
       "type": ["null", "string"],
       "default": null,
       "doc": "Keycloak subject of the caller, set only for genuine self-service registration; null for agent/dealer-assisted registration."
+    },
+    {
+      "name": "email",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional contact email supplied at registration (FR-03). PII: MUST be masked in logs downstream. Nullable additive field (Sprint 24 feature 24.5)."
+    },
+    {
+      "name": "phone",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional contact phone in E.164-like format supplied at registration (FR-03). PII: MUST be masked in logs downstream. Nullable additive field (Sprint 24 feature 24.5)."
     }
   ]
 }

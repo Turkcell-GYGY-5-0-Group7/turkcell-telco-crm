@@ -22,7 +22,7 @@ All endpoints require a valid JWT. KYC approval/rejection requires an operations
 
 | Method | Path | Auth | Idempotency | Summary |
 | --- | --- | --- | --- | --- |
-| POST | `/api/v1/customers` | JWT | optional | Register a customer (PENDING); validates TCKN/VKN. |
+| POST | `/api/v1/customers` | JWT | optional | Register a customer (PENDING); validates TCKN (INDIVIDUAL) or VKN (CORPORATE) by `type`. |
 | GET | `/api/v1/customers/{id}` | JWT | - | Fetch a customer (PII masked). |
 | GET | `/api/v1/customers` | JWT | - | List/search customers (paged). |
 | PUT | `/api/v1/customers/{id}` | JWT | - | Update profile/contact data. |
@@ -30,6 +30,28 @@ All endpoints require a valid JWT. KYC approval/rejection requires an operations
 | POST | `/api/v1/customers/{id}/documents` | JWT | - | Upload a KYC document. |
 | POST | `/api/v1/customers/{id}/kyc/approve` | RBAC ops | - | Approve KYC (-> ACTIVE). |
 | POST | `/api/v1/customers/{id}/kyc/reject` | RBAC ops | - | Reject KYC (-> REJECTED). |
+
+## Request/Response Fields (Sprint 24 feature 24.5)
+
+Register (`POST /api/v1/customers`) request:
+
+| Field | Type | Required | Validation |
+| --- | --- | --- | --- |
+| `type` | enum | yes | `INDIVIDUAL` or `CORPORATE`. |
+| `firstName` | string | yes | not blank. |
+| `lastName` | string | yes | not blank. |
+| `identityNumber` | string | yes | class-level `@ValidIdentityForType`: TCKN checksum for INDIVIDUAL, VKN checksum for CORPORATE; violation reported on `identityNumber`. Masked in logs. |
+| `dateOfBirth` | date | no | must be in the past. |
+| `email` | string | no | RFC email, max 255. Masked in logs (`@Sensitive`). |
+| `phone` | string | no | `^\+?[0-9]{7,15}$`, max 32. Masked in logs (`@Sensitive`). |
+
+Update (`PUT /api/v1/customers/{id}`) request: `firstName`, `lastName`, `dateOfBirth`, `email`,
+`phone` with the same rules (identity number is immutable). The update is a full profile
+replacement: omitting `email`/`phone` clears them.
+
+`CustomerResponse`: `id`, `type`, `firstName`, `lastName`, `identityNumberMasked` (only masked form
+ever returned), `dateOfBirth`, `email`, `phone`, `status`, `createdAt`. Email/phone are returned
+plainly (stored plain per design-note D5; log masking only).
 
 ## Events
 
@@ -40,6 +62,8 @@ All endpoints require a valid JWT. KYC approval/rejection requires an operations
 ## Notes
 
 - Identity number (TCKN/VKN) encrypted with AES-GCM at rest; returned only masked; never logged.
+- Contact info (`email`/`phone`, FR-03) is stored plain (no encryption mandate, design-note D5) but
+  masked in logs/telemetry via the platform `@Sensitive` annotation (ADR-021).
 - KYC state machine PENDING -> ACTIVE / REJECTED; illegal transitions rejected with a business error.
 - Soft-deleted customers are excluded from default reads but the row persists.
 - KYC document binaries are stored in MinIO; the `Document` row holds only the object reference

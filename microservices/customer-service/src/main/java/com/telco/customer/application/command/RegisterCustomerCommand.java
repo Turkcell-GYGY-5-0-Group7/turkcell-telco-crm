@@ -23,6 +23,8 @@ public record RegisterCustomerCommand(
         String lastName,
         @Sensitive(MaskStrategy.PARTIAL) String identityNumber,
         LocalDate dateOfBirth,
+        @Sensitive(MaskStrategy.EMAIL) String email,
+        @Sensitive(MaskStrategy.PARTIAL) String phone,
         String registeredByUserId
 ) implements Command<CustomerResponse> {
 }
