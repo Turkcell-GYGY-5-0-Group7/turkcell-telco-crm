@@ -64,6 +64,9 @@ public class Payment {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "disputed", nullable = false)
+    private boolean disputed = false;
+
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PaymentAttempt> attempts = new ArrayList<>();
 
@@ -163,6 +166,22 @@ public class Payment {
         this.attempts.add(attempt);
     }
 
+    /**
+     * Marks this payment as under dispute (ADR-028 Section 5) - a suppression flag only: it never
+     * calls the PSP and never changes {@link #status}, it only pauses {@code PaymentRetryScheduler}.
+     * Idempotent: re-applying is harmless, so this is an unconditional flag flip.
+     */
+    public void markDisputed() {
+        this.disputed = true;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Clears the dispute flag with no financial change (ADR-028 Section 5, {@code RESOLVED_MERCHANT}). */
+    public void clearDisputed() {
+        this.disputed = false;
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }
@@ -198,6 +217,10 @@ public class Payment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public boolean isDisputed() {
+        return disputed;
     }
 
     /** Unmodifiable view of all charge attempts for this payment. */

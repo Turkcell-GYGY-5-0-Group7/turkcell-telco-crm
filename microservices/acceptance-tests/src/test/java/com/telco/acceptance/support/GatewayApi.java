@@ -149,6 +149,24 @@ public final class GatewayApi {
                 .post("/api/v1/orders");
     }
 
+    /**
+     * Places a single-item order that requests a specific campaign ({@code OrderItemRequest
+     * .campaignCode}, Feature 21.3.3): order-service asks campaign-service to validate that campaign
+     * for the item's tariff and, if eligible, prices the item at the discounted rate; ineligible or
+     * unreachable-campaign-service outcomes leave the item at the undiscounted tariff rate
+     * (fail-open, ADR-027 Decision Section 4).
+     */
+    public static Response createOrderWithCampaign(String token, UUID customerId, UUID tariffId,
+                                                   String campaignCode, String idempotencyKey) {
+        Map<String, Object> body = Map.of(
+                "customerId", customerId,
+                "items", List.of(Map.of("tariffId", tariffId, "quantity", 1, "campaignCode", campaignCode)));
+        return auth(token)
+                .header("Idempotency-Key", idempotencyKey)
+                .body(body)
+                .post("/api/v1/orders");
+    }
+
     /** Ownership: SUBSCRIBER may fetch only an order they created themselves (OrderController). */
     public static Response getOrder(String token, UUID orderId) {
         return auth(token).get("/api/v1/orders/{orderId}", orderId);
@@ -231,6 +249,43 @@ public final class GatewayApi {
     /** Resolved-{@code customerId} ownership check (see {@link #getSubscriptionsByCustomer}). */
     public static Response getInvoices(String token, UUID customerId) {
         return auth(token).queryParam("customerId", customerId).get("/api/v1/invoices");
+    }
+
+    // ── dispute-service ───────────────────────────────────────────────────────────────────
+
+    /**
+     * Opens a dispute against an invoice and/or payment ({@code DisputeController.openDispute},
+     * {@code SUBSCRIBER}/{@code ADMIN}). Either {@code invoiceId} or {@code paymentId} may be
+     * {@code null} depending on the scenario (see {@code OpenDisputeRequest}).
+     */
+    public static Response openDispute(String token, UUID invoiceId, UUID paymentId, UUID customerId,
+                                       String reasonCode, BigDecimal disputedAmount) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("invoiceId", invoiceId);
+        body.put("paymentId", paymentId);
+        body.put("customerId", customerId);
+        body.put("reasonCode", reasonCode);
+        body.put("disputedAmount", disputedAmount);
+        return auth(token).body(body).post("/api/v1/disputes");
+    }
+
+    /**
+     * Resolves a dispute ({@code DisputeController.resolveDispute}, {@code ADMIN}/
+     * {@code CALL_CENTER_AGENT} only - the real realm role, not ticket-service's nonexistent
+     * {@code SUPPORT}). {@code resolutionAmount} is required for a {@code CUSTOMER} outcome, must be
+     * {@code null} for {@code MERCHANT}.
+     */
+    public static Response resolveDispute(String adminToken, UUID disputeId, String outcome,
+                                          BigDecimal resolutionAmount) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("outcome", outcome);
+        body.put("resolutionAmount", resolutionAmount);
+        return auth(adminToken).body(body).post("/api/v1/disputes/{id}/resolve", disputeId);
+    }
+
+    /** Ownership enforced against the caller's resolved {@code customerId} claim ({@code DisputeController.getDispute}). */
+    public static Response getDispute(String token, UUID disputeId) {
+        return auth(token).get("/api/v1/disputes/{id}", disputeId);
     }
 
     // ── notification-service ──────────────────────────────────────────────────────────────

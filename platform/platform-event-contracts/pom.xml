@@ -132,6 +132,17 @@
                         <tariff.price-changed.v1>${project.basedir}/src/main/avro/tariff-price-changed.avsc</tariff.price-changed.v1>
                         <user.created.v1>${project.basedir}/src/main/avro/user-created.avsc</user.created.v1>
                         <user.deleted.v1>${project.basedir}/src/main/avro/user-deleted.avsc</user.deleted.v1>
+                        <campaign.created.v1>${project.basedir}/src/main/avro/campaign-created.avsc</campaign.created.v1>
+                        <campaign.activated.v1>${project.basedir}/src/main/avro/campaign-activated.avsc</campaign.activated.v1>
+                        <campaign.paused.v1>${project.basedir}/src/main/avro/campaign-paused.avsc</campaign.paused.v1>
+                        <campaign.expired.v1>${project.basedir}/src/main/avro/campaign-expired.avsc</campaign.expired.v1>
+                        <campaign.cancelled.v1>${project.basedir}/src/main/avro/campaign-cancelled.avsc</campaign.cancelled.v1>
+                        <dispute.opened.v1>${project.basedir}/src/main/avro/dispute-opened.avsc</dispute.opened.v1>
+                        <dispute.evidence-submitted.v1>${project.basedir}/src/main/avro/dispute-evidence-submitted.avsc</dispute.evidence-submitted.v1>
+                        <dispute.resolved-customer.v1>${project.basedir}/src/main/avro/dispute-resolved-customer.avsc</dispute.resolved-customer.v1>
+                        <dispute.resolved-merchant.v1>${project.basedir}/src/main/avro/dispute-resolved-merchant.avsc</dispute.resolved-merchant.v1>
+                        <dispute.withdrawn.v1>${project.basedir}/src/main/avro/dispute-withdrawn.avsc</dispute.withdrawn.v1>
+                        <dispute.closed.v1>${project.basedir}/src/main/avro/dispute-closed.avsc</dispute.closed.v1>
                         <fraud.signal-raised.v1>${project.basedir}/src/main/avro/fraud-signal-raised.avsc</fraud.signal-raised.v1>
                         <fraud.case-opened.v1>${project.basedir}/src/main/avro/fraud-case-opened.avsc</fraud.case-opened.v1>
                         <fraud.case-resolved.v1>${project.basedir}/src/main/avro/fraud-case-resolved.avsc</fraud.case-resolved.v1>

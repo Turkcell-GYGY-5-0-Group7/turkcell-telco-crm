@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "DisputeEvidenceSubmittedV1",
+  "namespace": "com.telco.platform.events.dispute",
+  "doc": "Emitted when evidence is attached to a dispute under review (dispute.evidence-submitted.v1). Producer: dispute-service.",
+  "fields": [
+    {
+      "name": "disputeId",
+      "type": "string",
+      "doc": "Unique dispute identifier (UUID)."
+    },
+    {
+      "name": "evidenceId",
+      "type": "string",
+      "doc": "Unique identifier of the submitted evidence record (UUID)."
+    },
+    {
+      "name": "submittedBy",
+      "type": "string",
+      "doc": "Identifier of the principal who submitted the evidence."
+    },
+    {
+      "name": "submittedAt",
+      "type": "string",
+      "doc": "Instant the evidence was submitted, ISO-8601 (UTC)."
+    }
+  ]
+}

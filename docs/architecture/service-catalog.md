@@ -241,4 +241,23 @@ Notes:
 
 ---
 
+## 6. Post-MVP Services (in progress)
+
+This catalog's Sections 1-5 are the MVP-scoped service list (11 services, ports 8080-9010). The
+services below are post-MVP additions tracked in `docs/product/roadmap.md` Section 5 and
+`docs/tasks/STATUS.md`; each is listed here only once its port is confirmed and its scaffold exists.
+
+| Service | Port | Bounded context | Architecture mode | Aggregates | Infrastructure profile | ADR | Owning sprint |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| dispute-service | 9012 | Invoice dispute / chargeback workflow | Domain Orchestration | Dispute, DisputeEvidence, DisputeStateHistory | PostgreSQL (`dispute-db`) + MinIO (evidence objects, Feature 22.3) | [ADR-028](../../architecture/adr/ADR-028-dispute-and-chargeback.md) | [Sprint 22](../tasks/sprint-22-dispute-chargeback/README.md) |
+
+dispute-service never writes to `billing-db` or `payment-db` directly (ADR-006); all coordination with
+billing-service and payment-service is via outbox/inbox events (ADR-009/019), and it is audit-mandated
+(ADR-021, NFR-12) given its financial impact.
+
+Ports 9011 (campaign-service, ADR-027) and 9013 (fraud-service, ADR-029) are reserved in the roadmap
+but have no scaffold yet - they are not listed here until built, per this section's own rule above.
+
+---
+
 Document end.

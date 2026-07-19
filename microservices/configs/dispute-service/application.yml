@@ -1,0 +1,50 @@
+# dispute-service base config (port 9012, Domain Orchestration, PostgreSQL).
+# Per-env overrides in dispute-service-{dev,docker,staging,prod}.yml.
+
+server:
+  port: 9012
+
+spring:
+  datasource:
+    url: ${DISPUTE_DB_URL:jdbc:postgresql://localhost:5432/dispute_db}
+    username: ${DISPUTE_DB_USER:dispute}
+    password: ${DISPUTE_DB_PASSWORD:dispute}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minioadmin}
+  bucket:
+    dispute-evidence: dispute-evidence
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    # dispute-service is an event producer only in this sprint (ADR-028 Section 6) - no inbox consumer.
+    inbox:
+      enabled: false

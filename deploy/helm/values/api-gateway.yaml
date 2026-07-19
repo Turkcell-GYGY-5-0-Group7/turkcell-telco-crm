@@ -52,6 +52,25 @@ networkPolicy:
   egress:
     redis: true
     keycloak: true
+    # Finding B fix (2026-07-18): the gateway routes to every domain service
+    # (microservices/configs/api-gateway/application.yml `lb://` routes) plus
+    # web-bff (/bff/v1/**). Under the 19.4.1 default-deny baseline the gateway
+    # needs explicit egress to each, or it cannot reach any backend it routes
+    # to (live-verified: api-gateway -> customer-service returned 504 before
+    # this list existed). campaign-service is intentionally absent - it has no
+    # gateway route (ADR-027 internal-only).
+    services:
+      - identity-service
+      - customer-service
+      - product-catalog-service
+      - order-service
+      - subscription-service
+      - usage-service
+      - billing-service
+      - payment-service
+      - notification-service
+      - ticket-service
+      - web-bff
 
 config:
   CONFIG_SERVER_URI: http://config-server:8888

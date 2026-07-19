@@ -27,6 +27,9 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
             @Param("subscriptionId") UUID subscriptionId,
             @Param("periodStart") Instant periodStart);
 
-    @Query("SELECT i FROM Invoice i WHERE i.status = :status AND i.dueDate < :today")
+    // ON_HOLD invoices are excluded from dunning while a dispute is under review (ADR-028 Section 5) -
+    // the hold suppresses collections without excusing eventual payment once the dispute resolves.
+    @Query("SELECT i FROM Invoice i WHERE i.status = :status AND i.dueDate < :today "
+            + "AND i.disputeStatus <> com.telco.billing.domain.InvoiceDisputeStatus.ON_HOLD")
     List<Invoice> findOverdue(@Param("status") InvoiceStatus status, @Param("today") LocalDate today);
 }

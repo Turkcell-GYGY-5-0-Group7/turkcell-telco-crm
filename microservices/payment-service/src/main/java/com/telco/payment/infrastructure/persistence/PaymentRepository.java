@@ -26,19 +26,22 @@ public interface PaymentRepository extends JpaRepository<Payment, UUID> {
      * @param minAge  now() minus 1 hour - skip brand-new payments
      * @param maxAge  now() minus 168 hours - drop payments past the final window
      */
+    // disputed = false excludes payments under an open dispute from retry/expiry (ADR-028 Section 5) -
+    // the dispute hold suppresses auto-retry/auto-settlement while under review.
     @Query("SELECT p FROM Payment p WHERE p.status = :status " +
-           "AND p.createdAt < :minAge AND p.createdAt > :maxAge")
+           "AND p.createdAt < :minAge AND p.createdAt > :maxAge AND p.disputed = false")
     List<Payment> findByStatusAndCreatedAtBetween(
             @Param("status") PaymentStatus status,
             @Param("minAge") Instant minAge,
             @Param("maxAge") Instant maxAge);
 
     /**
-     * Returns FAILED payments with fewer than {@code maxAttempts} attempts that are still within
-     * the 168-hour retry window. The {@code SIZE(p.attempts)} expression counts the cascade collection.
+     * Returns FAILED, non-disputed payments with fewer than {@code maxAttempts} attempts that are
+     * still within the 168-hour retry window. The {@code SIZE(p.attempts)} expression counts the
+     * cascade collection.
      */
     @Query("SELECT p FROM Payment p WHERE p.status = 'FAILED' " +
-           "AND p.createdAt > :maxAge AND SIZE(p.attempts) < :maxAttempts")
+           "AND p.createdAt > :maxAge AND SIZE(p.attempts) < :maxAttempts AND p.disputed = false")
     List<Payment> findFailedForRetry(
             @Param("maxAge") Instant maxAge,
             @Param("maxAttempts") int maxAttempts);

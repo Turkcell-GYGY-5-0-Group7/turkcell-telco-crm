@@ -1,0 +1,50 @@
+# Pod-kill experiment (Sprint 20, Feature 20.3, subtask 20.3.1).
+#
+# Steady-state hypothesis (verbatim from deploy/chaos/STEADY-STATE.md, 20.2.1):
+#   "Killing one order-service pod does not reduce served traffic or raise p95
+#   latency past its NFR-07 budget - the PDB (minAvailable: 1) keeps at least
+#   one pod serving and the HPA/Deployment reschedules the killed pod without
+#   a user-visible gap."
+#
+# Watch (per STEADY-STATE.md 20.2.1):
+#   Dashboard: platform-overview
+#   Panel:     "HTTP p95 Latency by Service (s)" (scope to job="order-service")
+#   Alert:     ApiHighP95Latency
+#              (histogram_quantile(0.95, sum by(le, job)
+#                (rate(http_server_requests_seconds_bucket[5m]))) > 0.3, for 2m)
+#   Abort threshold: abort immediately if ApiHighP95Latency fires for
+#     order-service, or the panel shows p95 > 0.3s sustained past 2 minutes,
+#     or order-service request throughput drops to zero (no pod serving).
+#
+# Manual abort (per README Feature 20.5 guardrail - no Schedule, kubectl apply/delete only):
+#   kubectl delete -f deploy/chaos/experiments/pod-kill-order-service.yaml
+#
+# Pod-label selector verified against the real chart template (not guessed):
+# deploy/helm/telco-service/templates/_helpers.tpl "telco-service.selectorLabels"
+# renders app.kubernetes.io/name: <serviceName> as the sole stable selector
+# label (deployment.yaml's spec.selector.matchLabels and the pod template both
+# use it), so app.kubernetes.io/name: order-service is the correct pod
+# selector for this chart, not app: order-service.
+#
+# Verification status: NOT verified this session. Docker Desktop is down;
+# this manifest has not been kubectl-applied to any cluster. A follow-up pass
+# once Docker recovers must confirm: replacement pod scheduled, PDB
+# (minAvailable: 1) never violated, and the panel/alert behavior above.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: pod-kill-order-service
+  namespace: telco
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - telco
+    labelSelectors:
+      app.kubernetes.io/name: order-service
+  # Bounded duration (README Feature 20.5: every experiment carries a bounded
+  # duration). pod-kill is a one-shot fault - Chaos Mesh issues the kill once
+  # and the experiment self-completes; duration bounds how long the
+  # experiment object stays "running" before Chaos Mesh marks it finished.
+  duration: "60s"

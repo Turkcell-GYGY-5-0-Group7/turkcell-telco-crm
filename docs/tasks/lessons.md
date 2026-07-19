@@ -13,6 +13,105 @@ Format:
 
 ---
 
+## 2026-07-18 - `mvn verify` without `clean` silently inflates JaCoCo coverage claims
+- Mistake: reported "JaCoCo 70% gate met" for billing-service/payment-service (Sprint 22, Features
+  22.4/22.5) after running `mvn verify -Dtest='!DockerGatedTest,...'` without `clean` first. The
+  incremental run merged in `jacoco.exec` data left over in `target/` from a prior full/Docker-available
+  test run, inflating the reported line coverage. A genuine `mvn clean verify` with the identical
+  exclusions showed the two services actually sit at 61.3%/54.1% - well under gate - because their
+  Docker-gated integration/perf tests carry real coverage weight that no unit test replaces. Caught only
+  because a later phase re-ran the same exclusion set and got a different-looking result, prompting a
+  clean rebuild to check.
+- Rule: any coverage-gate claim ("JaCoCo gate met/not met") must be based on a build that started with
+  `mvn clean` (or a fresh `target/`) - never trust `jacoco.exec` from an incremental `verify`, especially
+  when excluding Docker-gated tests via `-Dtest='!X,!Y'` in a no-Docker session. Test **pass/fail**
+  counts from an incremental run are still accurate (surefire doesn't have this staleness problem) -
+  only the coverage percentage is at risk. When a service's real coverage genuinely depends on its
+  Docker-gated tests to clear the gate, say so explicitly rather than reporting "gate met" from a
+  Docker-free run.
+
+## 2026-07-18 - a feature is not environment-proven until the full composed stack boots with it
+
+- Mistake: Sprint 17's starter-lock adopters (subscription/billing) and Sprint 21's campaign-service
+  each passed unit tests, code review, and even live host-run proofs - yet all three crashlooped on
+  the next real full-stack Docker boot, because the compose env anchor never supplied `REDIS_HOST`
+  and nobody had booted the full `apps` profile since Sprint 17. A capacity twin of the same
+  mistake: adding the 11th outbox connector silently overflowed the hardcoded
+  `max_replication_slots=10`.
+- Rule: whenever a change adds a new runtime dependency (a starter that dials out, a new service, a
+  new connector/slot/queue), boot the full composed stack once before calling it done - host-run and
+  unit proofs do not cover the container environment's env wiring or shared infra ceilings. When a
+  count-limited resource (replication slots, partitions, pools) gains a consumer, grep for its
+  configured ceiling in the same PR.
+
+## 2026-07-18 - never test mesh/authz enforcement against a health-probe path
+- Mistake: "proved" Linkerd was not enforcing its `AuthorizationPolicy` by curling
+  `/actuator/health` from an unauthorized identity and seeing HTTP 200. Linkerd (and most meshes)
+  **always authorize health/readiness probe paths regardless of policy** - the 200 was the probe
+  authorization, not a policy failure. The real enforcement, tested later on a non-probe path
+  (`/api/v1/...`), returned 403. This partially misdiagnosed the original finding.
+- Rule: test mesh/authorization enforcement with a **non-probe application path**, and confirm the
+  decision in the proxy's authz metrics (`inbound_http_authz_deny_total` / `_allow_total`, with the
+  `client_id`/`srv_name`/`tls` labels), never with `/actuator/health` or any `/livez`/`/readyz`
+  probe route. A 200 on a probe path proves nothing about policy.
+
+## 2026-07-18 - NetworkPolicy ports must be mesh-aware when a mesh is enforcing
+- Mistake: wrote per-service `NetworkPolicy` ingress/egress rules keyed on each service's
+  application port (customer-service 9002, postgres 5432, config-server 8888). With Linkerd enforcing
+  (edge channel), meshed pod-to-pod traffic is delivered to the destination's **linkerd-proxy inbound
+  port 4143**, not the app port, so every app-port rule silently blocked legitimate traffic
+  (api-gateway -> customer-service timed out 504; allowing 4143 fixed it). All pods, including the
+  dependency backends, ran the proxy as a native sidecar, so every internal destination used 4143.
+- Rule: when a service mesh is active and enforcing, NetworkPolicy rules for **meshed** pod-to-pod
+  edges must allow the mesh's proxy data-plane port (Linkerd inbound 4143), not the application port;
+  reserve app-port rules for **un-meshed** edges only (e.g. an un-meshed ingress controller -> the
+  gateway). The mesh's own `AuthorizationPolicy` provides the identity/port gating; the NetworkPolicy
+  is then a coarse pod-to-pod L3/L4 allow. Decide this port model explicitly (it couples the
+  NetworkPolicy to the mesh) rather than defaulting to app ports.
+
+## 2026-07-18 - a meshed default-deny needs control-plane egress and backend ingress, not just app rules
+- Mistake: the mesh-aware NetworkPolicy redesign covered service-to-service and service-to-backend
+  edges but still broke two things live: (1) a freshly scheduled pod hung at `Init` because its
+  linkerd-proxy could not reach the `linkerd` control-plane namespace (identity/destination/policy) to
+  get its cert; (2) services crashed connecting to their database because the meshed backends, selected
+  by the namespace default-deny for Ingress, had no ingress-allow of their own (the per-service egress
+  rule opens only the caller's side; both halves are required).
+- Rule: any namespace-wide default-deny in a meshed namespace must ALSO ship, in the same baseline: an
+  egress allow from every pod to the mesh control-plane namespace, and an ingress allow to every meshed
+  backend (on the proxy port) from its clients. Verify by scheduling a BRAND-NEW pod under the full
+  policy set (not just testing already-running pods, whose proxies/connection pools predate the
+  policy) - a pod stuck at `Init` means missing control-plane egress; a crash on first DB/backend
+  connection means missing backend ingress.
+
+## 2026-07-18 - "renders correctly" is not "enforces correctly"; policy needs a live cluster
+- Mistake: Sprint 19's 19.3/19.4 were marked "static verification complete" on the strength of
+  chart inspection and (this session) clean `helm template`/`lint` across all 13 services. Live
+  verification then showed two policy controls that render perfectly but do NOT enforce as intended:
+  the pinned Linkerd stable-2.14.10 control plane enforces no L7 `AuthorizationPolicy` at all, and
+  19.4's `networkpolicy-egress.yaml` omits service-to-service HTTP egress so default-deny blocks the
+  gateway from every domain service it routes to. Neither is visible in a rendered manifest.
+- Rule: a security *policy* (Linkerd `Server`/`AuthorizationPolicy`, K8s `NetworkPolicy`) is only
+  verified when a real request is allowed/denied on a live cluster with an enforcing implementation.
+  `helm template` proves syntax and wiring, never enforcement. For NetworkPolicy, the CNI must be an
+  enforcing one - Kind's default **kindnet honours default-deny but NOT podSelector allow rules**, so
+  use **Calico** (`disableDefaultCNI: true`) and allow **~15-20s** for Calico to program a new policy
+  before reading connectivity. Prove both halves of a dual-direction default-deny (caller egress AND
+  target ingress) and prove the negative (unauthorized blocked) AND the positive (authorized allowed,
+  legitimate traffic unaffected) - a control that blocks everything is not the same as one that
+  blocks only the attacker.
+
+## 2026-07-18 - pin the mesh/CNI versions against the actual Kubernetes version
+- Mistake: brought up the verification cluster on Kind's default k8s (1.36) and default CNI (kindnet).
+  Linkerd stable-2.14.10 (repo-pinned, from 2023) does not enforce policy on 1.36, and kindnet does
+  not enforce NetworkPolicy allow rules - two silent enforcement failures that looked like policy
+  bugs until root-caused to the environment. Recreating on Calico + k8s 1.28 cost a full redeploy.
+- Rule: before standing up a policy-verification cluster, pin the Kind node image to a Kubernetes
+  version inside the mesh's supported window and install an enforcing CNI up front. Check the pinned
+  Linkerd chart's version (`linkerd-crds`/`linkerd-control-plane` Chart.lock) against the k8s version
+  first. When a control plane's `policy` controller logs only its startup lines and indexes zero
+  resources, suspect a version/build incompatibility, not RBAC (verify RBAC with `kubectl auth can-i
+  --as=system:serviceaccount:...`, but do not stop there).
+
 ## 2026-06-23 - propagate ADR changes down to subtasks, not just summaries
 - Mistake: after changing ADR-006 (Mongo/MinIO), ADR-011 (Keycloak issues tokens), and adding ADR-022,
   only sprint READMEs and contracts were updated; granular subtask files (Sprint 04/05 auth, Sprint 12

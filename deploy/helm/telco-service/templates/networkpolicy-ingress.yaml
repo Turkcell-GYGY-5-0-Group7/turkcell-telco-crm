@@ -46,8 +46,14 @@ spec:
   policyTypes:
     - Ingress
   ingress:
+    {{- if .Values.networkPolicy.externalIngress }}
+    # Un-meshed external ingress (Kind ingress-nginx controller). Its source is
+    # NOT meshed - it has no linkerd-proxy to shift the connection onto the mesh
+    # data path - so it connects to this pod's APP container port; the pod's own
+    # inbound iptables then redirects locally to its proxy. This is the one edge
+    # that legitimately stays on the app port (only api-gateway sets
+    # externalIngress: true).
     - from:
-        {{- if .Values.networkPolicy.externalIngress }}
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
@@ -55,21 +61,29 @@ spec:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
               app.kubernetes.io/component: controller
-        {{- end }}
-        {{- if .Values.networkPolicy.useAuthorizedClientsForIngress }}
-        {{- range .Values.meshPolicy.authorizedClients }}
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: {{ . }}
-        {{- end }}
-        {{- else }}
-        {{- range .Values.networkPolicy.ingressFrom }}
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: {{ . }}
-        {{- end }}
-        {{- end }}
       ports:
         - protocol: TCP
           port: {{ .Values.containerPort }}
+    {{- end }}
+    {{- $meshedClients := ternary .Values.meshPolicy.authorizedClients .Values.networkPolicy.ingressFrom .Values.networkPolicy.useAuthorizedClientsForIngress }}
+    {{- if $meshedClients }}
+    # Meshed in-cluster callers (Finding C fix, 2026-07-18). IMPORTANT: with the
+    # Linkerd mesh enforcing (ADR-026, edge control plane), meshed pod-to-pod
+    # traffic is delivered to this pod's linkerd-proxy INBOUND port 4143, NOT the
+    # app container port - so the allow rule targets 4143. An app-port rule here
+    # silently blocks all meshed traffic (live-verified: api-gateway ->
+    # customer-service times out 504 on a 9002 rule, succeeds on a 4143 rule).
+    # The per-identity gating is done by the mesh AuthorizationPolicy (19.3) on
+    # top of this coarse pod-to-pod L3/L4 allow; the source list is the same
+    # `authorizedClients` roster so the two controls cannot drift.
+    - from:
+        {{- range $meshedClients }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ . }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 4143
+    {{- end }}
 {{- end }}
