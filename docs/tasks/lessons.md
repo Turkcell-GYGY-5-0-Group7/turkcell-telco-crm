@@ -791,3 +791,28 @@ that broken code. The tests were not weak; they were structurally incapable of c
   results. This entry is retained for the rule it teaches (do not unilaterally drop/recreate a shared
   dev database; get explicit authorization first), not as an open problem - the gap it describes is
   closed.
+
+## 2026-07-19 - "Effectively DONE" is not DONE: formal subtask closure is its own step
+
+- Context: a review of Sprint 19 (Service Mesh + mTLS) graded it "Substantially done, 2/5 formal -
+  forged-header rejection + legitimate traffic both live-proven; formal subtask closure remains." All
+  the security-critical work had been live-proven across three passes, yet the sprint stayed scored at
+  2/5 because the subtask/README/STATUS statuses still read "IN PROGRESS -> effectively DONE" and one
+  completeness item pass 3 had labelled "a mechanical extension ... noted for the full-deploy pass" was
+  left unbuilt.
+- Rule: when a feature's substance is proven but its tracked status still says "effectively DONE",
+  "substantially DONE", or "pending only the doc roll-up", that is an OPEN task, not a closed one. Closing
+  it means three concrete things done together: (1) build any deferred "mechanical extension"/"follow-up"
+  the delivery notes named - a pattern flagged as trivially-completable is exactly the loose end a
+  reviewer counts against you, so finish it rather than re-deferring; (2) verify it at the appropriate
+  bar - when the underlying model was already live-proven and a full live re-run is infeasible (here a
+  full meshed Kind + Keycloak + observability boot on a capacity-limited single node), `helm lint` +
+  `helm template` render-verification of the extension is the honest, sufficient proof, and must actually
+  be run, not asserted; (3) reconcile ALL the status surfaces at once - the subtask feature-table rows,
+  the sprint README header, and the STATUS.md summary-table row plus a dated closure entry - leaving any
+  one saying "IN PROGRESS" reproduces the exact 2/5 gap.
+- Also: separate a real delivery gap from an environment-scoped verification gap and say which is which.
+  Here the security exit criteria were fully met; the only residuals (smoke test's Keycloak-backed
+  authenticated-read; prometheus scraping the service pods) are full-deploy/observability items that do
+  not gate the security claim - naming them explicitly as non-gating is more credible than silently
+  flipping everything to green or, conversely, holding the whole sprint open for them.

@@ -169,6 +169,30 @@ spec:
         - protocol: TCP
           port: 4143
     {{- end }}
+    # Observability egress (Feature 19.4.3 full-deploy completeness, 2026-07-19).
+    # Universal for every telco-service release (see values.yaml's
+    # `egress.observability` comment): OTLP traces -> otel-collector and log push
+    # -> loki. Both are meshed dependency backends (the dependencies chart sets
+    # `linkerdInject: true`), so - exactly like every other meshed destination in
+    # this file - the caller's linkerd-proxy delivers to the backend's proxy
+    # INBOUND port 4143, not otel-collector:4318 / loki:3100. The matching
+    # backend-side ingress allow (otel-collector/loki on 4143) lives in
+    # deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml's
+    # `allow-backend-ingress` rule (extended to the observability backends in the
+    # same completeness pass). Prometheus SCRAPES services (metrics ingress on
+    # each service, not egress) and is a separate follow-up - see that file.
+    {{- if .Values.networkPolicy.egress.observability }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: otel-collector
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: loki
+      ports:
+        - protocol: TCP
+          port: 4143
+    {{- end }}
     # Service-to-service egress (Finding B fix). One rule per callee telco-service
     # release; port 4143 per the Finding C note above (meshed destination).
     {{- range .Values.networkPolicy.egress.services }}
