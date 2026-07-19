@@ -3,6 +3,7 @@ package com.telco.payment.application.consumer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.telco.payment.application.command.ChargePaymentCommand;
 import com.telco.payment.application.dto.OrderCreatedPayload;
+import com.telco.payment.domain.PaymentMethod;
 import com.telco.platform.inbox.InboxBehavior;
 import com.telco.platform.mediator.Mediator;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -81,12 +82,14 @@ public class OrderCreatedEventConsumer {
             // is the inbox key. Inbox dedup happens atomically inside the handler transaction.
             String paymentRequestId = payload.orderId();
 
-            // order.created.v1 is an order-only saga step; it never targets an invoice.
+            // order.created.v1 is an order-only saga step; it never targets an invoice. The saga
+            // auto-charge always uses CREDIT_CARD - the event carries no method choice (FR-25).
             ChargePaymentCommand command = new ChargePaymentCommand(
                     UUID.fromString(payload.orderId()),
                     UUID.fromString(payload.customerId()),
                     payload.totalAmount(),
                     null,
+                    PaymentMethod.CREDIT_CARD,
                     paymentRequestId,
                     messageId);
 

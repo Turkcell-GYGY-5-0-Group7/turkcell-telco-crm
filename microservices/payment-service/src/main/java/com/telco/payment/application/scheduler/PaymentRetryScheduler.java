@@ -153,6 +153,7 @@ public class PaymentRetryScheduler {
                     payment.getCustomerId(),
                     payment.getAmount(),
                     payment.getInvoiceId(),
+                    payment.getMethod(),
                     payment.getPaymentRequestId(),
                     retryMessageId));
         } catch (Exception e) {

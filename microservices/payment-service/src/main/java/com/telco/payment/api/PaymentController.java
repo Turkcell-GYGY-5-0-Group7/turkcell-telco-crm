@@ -8,6 +8,7 @@ import com.telco.payment.application.dto.RefundPaymentRequest;
 import com.telco.payment.application.query.GetPaymentByOrderQuery;
 import com.telco.payment.application.query.GetPaymentQuery;
 import com.telco.platform.common.api.ApiResult;
+import com.telco.platform.common.exception.ValidationException;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
@@ -17,10 +18,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -46,7 +49,21 @@ public class PaymentController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResult<PaymentResponse> charge(@Valid @RequestBody ChargePaymentRequest request) {
+    public ApiResult<PaymentResponse> charge(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody ChargePaymentRequest request) {
+        // Header plumbing, not business logic (ADR-008): the standard Idempotency-Key header (PDF
+        // Section 12) WINS over the legacy body paymentRequestId; the body field stays for
+        // back-compat. The command still carries a single paymentRequestId. At least one source is
+        // required - reject here so the miss maps to a 400 via the platform handler.
+        String paymentRequestId = idempotencyKey != null && !idempotencyKey.isBlank()
+                ? idempotencyKey
+                : request.paymentRequestId();
+        if (paymentRequestId == null || paymentRequestId.isBlank()) {
+            throw new ValidationException("Idempotency key is required", Map.of(
+                    "Idempotency-Key",
+                    "supply the Idempotency-Key header or the paymentRequestId body field"));
+        }
         // Admin/non-saga path: no Kafka message, so supply a FRESH unique inbox key per request. The
         // atomic inbox guard is then a harmless per-request no-op and never short-circuits a repeat
         // call - the handler's paymentRequestId lookup remains the source of charge idempotency, so a
@@ -57,7 +74,8 @@ public class PaymentController {
                 request.customerId(),
                 request.amount(),
                 request.invoiceId(),
-                request.paymentRequestId(),
+                request.method(),
+                paymentRequestId,
                 messageId);
         return responses.ok(mediator.send(command));
     }

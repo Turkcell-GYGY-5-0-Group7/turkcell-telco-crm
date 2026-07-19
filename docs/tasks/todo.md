@@ -12,12 +12,12 @@ verification; caffeinate-wrapped long commands; `make infra-down` immediately af
 ## Phase 0 - Scaffolding
 - [x] master synced (merge #34 verified), branch created
 - [x] sprint-24 docs (README, design-note, 8 feature files), STATUS.md row, this file
-- [ ] scaffolding committed
+- [x] scaffolding committed
 
 ## Phase 1 - Quick wins (independent)
-- [ ] 24.7a Swagger deps + security permits in 7 services; commit
-- [ ] 24.5a @ValidIdentityForType (TCKN/VKN by type); commit with 24.5b
-- [ ] 24.5b customer email/phone (V2, DTOs, avro additive, event-catalog); commit
+- [x] 24.7a Swagger deps + security permits in 7 services; commit
+- [x] 24.5a @ValidIdentityForType (TCKN/VKN by type); commit with 24.5b
+- [x] 24.5b customer email/phone (V2, DTOs, avro additive, event-catalog); commit
 - [ ] 24.6 payment method enum + V5 + Idempotency-Key header; commit
 - [ ] 24.7b QUOTA_EXCEEDED template + update-if-different seeder; commit with 24.7c
 - [ ] 24.7c sort param on main list endpoints; commit

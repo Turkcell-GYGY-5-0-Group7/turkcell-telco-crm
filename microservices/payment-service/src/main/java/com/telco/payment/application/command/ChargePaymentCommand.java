@@ -1,6 +1,7 @@
 package com.telco.payment.application.command;
 
 import com.telco.payment.application.dto.PaymentResponse;
+import com.telco.payment.domain.PaymentMethod;
 import com.telco.platform.cqrs.Command;
 import com.telco.platform.inbox.IdempotentRequest;
 import jakarta.validation.constraints.DecimalMin;
@@ -51,6 +52,13 @@ public record ChargePaymentCommand(
          * {@code PaymentCompletedBillingConsumer} can mark the invoice paid.
          */
         UUID invoiceId,
+
+        /**
+         * How the customer pays (FR-25). Nullable: the handler defaults a {@code null} method to
+         * {@link PaymentMethod#CREDIT_CARD}. Label only in the MVP - the mock PSP ignores it
+         * (Sprint 24 design-note D6).
+         */
+        PaymentMethod method,
 
         /**
          * Idempotency key, typically derived from {@code orderId}. A stable key ensures that

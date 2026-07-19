@@ -49,6 +49,14 @@ public class Payment {
     private String paymentRequestId;
 
     /**
+     * How the customer pays (FR-25). Label only in the MVP: the mock PSP ignores the method and
+     * wallet balance modeling is out of scope (Sprint 24 design-note D6).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private PaymentMethod method;
+
+    /**
      * Invoice this payment settles, when the charge originates from an invoice payment rather
      * than the order saga. Nullable: most payments in the MVP are order-driven (FR-25, FR-26);
      * this is set only when the caller supplies an {@code invoiceId} on the charge request, which
@@ -72,13 +80,14 @@ public class Payment {
     }
 
     private Payment(UUID id, UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
-                     UUID invoiceId) {
+                     UUID invoiceId, PaymentMethod method) {
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.amount = Objects.requireNonNull(amount, "amount");
         this.paymentRequestId = Objects.requireNonNull(paymentRequestId, "paymentRequestId");
         this.invoiceId = invoiceId;
+        this.method = method;
         this.status = PaymentStatus.PENDING;
         this.createdAt = Instant.now();
     }
@@ -92,7 +101,7 @@ public class Payment {
      * @param paymentRequestId idempotency key derived from the upstream command
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId) {
-        return create(orderId, customerId, amount, paymentRequestId, null);
+        return create(orderId, customerId, amount, paymentRequestId, null, null);
     }
 
     /**
@@ -107,10 +116,28 @@ public class Payment {
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
                                   UUID invoiceId) {
+        return create(orderId, customerId, amount, paymentRequestId, invoiceId, null);
+    }
+
+    /**
+     * Factory: creates a new payment in {@link PaymentStatus#PENDING} state with an explicit
+     * payment method (FR-25).
+     *
+     * @param orderId          the order this payment covers
+     * @param customerId       the paying customer
+     * @param amount           the amount to charge (must be positive)
+     * @param paymentRequestId idempotency key derived from the upstream command
+     * @param invoiceId        the invoice this payment settles, or {@code null} for an order-only charge
+     * @param method           how the customer pays; {@code null} defaults to
+     *                         {@link PaymentMethod#CREDIT_CARD}
+     */
+    public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
+                                  UUID invoiceId, PaymentMethod method) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessRuleException("Payment amount must be positive");
         }
-        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId);
+        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId,
+                method != null ? method : PaymentMethod.CREDIT_CARD);
     }
 
     /** Transitions to {@link PaymentStatus#COMPLETED}. */
@@ -185,6 +212,11 @@ public class Payment {
 
     public String getPaymentRequestId() {
         return paymentRequestId;
+    }
+
+    /** How the customer pays (FR-25). Never {@code null}: defaults to CREDIT_CARD at creation. */
+    public PaymentMethod getMethod() {
+        return method;
     }
 
     /** Invoice this payment settles, or {@code null} for an order-only (non-invoice) charge. */
