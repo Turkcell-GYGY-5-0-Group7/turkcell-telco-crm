@@ -229,6 +229,25 @@ class PaymentCompletedConsumerTest {
     }
 
     @Test
+    void standalone_addon_order_is_ignored_entirely_no_activation_no_compensation() {
+        // Sprint 24 Feature 24.3 (design-note D1): a standalone ADDON order has no activation leg -
+        // order-service confirms and fulfills it itself. Without the orderType branch this
+        // zero-TARIFF shape would emit UNSUPPORTED_MULTI_ITEM_ORDER and wrongly compensate.
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "ADDON",
+                "CONFIRMED",
+                List.of(new OrderItemClientResponse(null, 0, "ADDON", "ADDON-5GB",
+                        UUID.randomUUID().toString()))));
+
+        consumer.onPaymentCompleted(paymentCompletedRecord("msg-addon", orderId, customerId, 0L, "payment.completed.v1"));
+
+        assertThat(count("SELECT count(*) FROM subscriptions")).isEqualTo(0L);
+        assertThat(count("SELECT count(*) FROM outbox_event")).isEqualTo(0L);
+        assertThat(count("SELECT count(*) FROM inbox_message")).isEqualTo(0L);
+    }
+
+    @Test
     void one_tariff_item_with_bundled_addon_items_activates_from_the_tariff_snapshot() {
         // Sprint 24 Feature 24.2 (design-note D1): the invariant counts TARIFF items only, so a
         // NEW_LINE order bundling ADDON items alongside its single tariff line must activate.

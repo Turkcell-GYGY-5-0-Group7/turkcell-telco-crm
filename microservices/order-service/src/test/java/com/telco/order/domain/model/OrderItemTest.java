@@ -80,11 +80,13 @@ class OrderItemTest {
         Order order = Order.create(UUID.randomUUID(), "key-6", new BigDecimal("15.00"), "user-1");
         UUID target = UUID.randomUUID();
 
-        OrderItem item = OrderItem.forAddon(order, "ADDON-5GB", "Extra 5GB",
+        OrderItem item = OrderItem.forAddon(order, "ADDON-5GB", "Extra 5GB", "DATA", "TRY",
                 new BigDecimal("15.00"), 2, target, 5120L, null, 100L);
 
         assertThat(item.getItemType()).isEqualTo(OrderItemType.ADDON);
         assertThat(item.getProductCode()).isEqualTo("ADDON-5GB");
+        assertThat(item.getAddonType()).isEqualTo("DATA");
+        assertThat(item.getCurrency()).isEqualTo("TRY");
         assertThat(item.getTariffName()).isEqualTo("Extra 5GB");
         assertThat(item.getUnitPrice()).isEqualByComparingTo("15.00");
         assertThat(item.getQuantity()).isEqualTo(2);

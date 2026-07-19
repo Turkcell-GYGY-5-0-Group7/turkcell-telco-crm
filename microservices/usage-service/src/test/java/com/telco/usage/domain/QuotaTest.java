@@ -192,4 +192,67 @@ class QuotaTest {
 
         assertThat(q.getUpdatedAt()).isNotNull();
     }
+
+    // --- addAllowance (Sprint 24 Feature 24.3, design-note D4) ---
+
+    @Test
+    void add_allowance_raises_totals_and_remaining() {
+        Quota q = Quota.create(SUB_ID, CUST_ID, START, END, 300, 200, 1024);
+        q.decrement(UsageType.DATA, 1000);
+
+        q.addAllowance(0, 0, 5120);
+
+        assertThat(q.getMbTotal()).isEqualTo(6144);
+        assertThat(q.getMbRemaining()).isEqualTo(5144);
+        assertThat(q.getMinutesTotal()).isEqualTo(300);
+        assertThat(q.getSmsTotal()).isEqualTo(200);
+    }
+
+    @Test
+    void add_allowance_rearms_threshold_and_exceeded_flags_when_back_above_limits() {
+        Quota q = Quota.create(SUB_ID, CUST_ID, START, END, 300, 200, 1024);
+        q.decrement(UsageType.DATA, 1024);
+        assertThat(q.isThresholdNotified()).isTrue();
+        assertThat(q.isExceededNotified()).isTrue();
+
+        q.addAllowance(0, 0, 5120);
+
+        assertThat(q.isThresholdNotified()).isFalse();
+        assertThat(q.isExceededNotified()).isFalse();
+    }
+
+    @Test
+    void add_allowance_keeps_flags_when_another_bucket_is_still_low() {
+        Quota q = Quota.create(SUB_ID, CUST_ID, START, END, 300, 200, 1024);
+        q.decrement(UsageType.DATA, 1024);
+        q.decrement(UsageType.VOICE, 290);
+
+        // Data is topped up but voice is still under its 20% line: flags stay armed so the
+        // subscriber is not re-notified for the still-low bucket.
+        q.addAllowance(0, 0, 5120);
+
+        assertThat(q.isThresholdNotified()).isTrue();
+    }
+
+    @Test
+    void add_allowance_treats_zero_total_buckets_as_neutral() {
+        // An SMS-only quota shape: minutes/mb buckets unused (total 0) must not block re-arming.
+        Quota q = Quota.create(SUB_ID, CUST_ID, START, END, 0, 100, 0);
+        q.decrement(UsageType.SMS, 100);
+        assertThat(q.isExceededNotified()).isTrue();
+
+        q.addAllowance(0, 100, 0);
+
+        assertThat(q.isThresholdNotified()).isFalse();
+        assertThat(q.isExceededNotified()).isFalse();
+    }
+
+    @Test
+    void add_allowance_sets_updated_at() {
+        Quota q = Quota.create(SUB_ID, CUST_ID, START, END, 100, 50, 200);
+
+        q.addAllowance(10, 0, 0);
+
+        assertThat(q.getUpdatedAt()).isNotNull();
+    }
 }

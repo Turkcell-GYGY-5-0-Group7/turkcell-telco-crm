@@ -4,10 +4,12 @@ import com.telco.billing.application.command.RunBillCommand;
 import com.telco.billing.domain.BillCycle;
 import com.telco.billing.domain.Invoice;
 import com.telco.billing.domain.InvoiceLine;
+import com.telco.billing.infrastructure.entity.AddonChargeRecord;
 import com.telco.billing.infrastructure.entity.OverageRecord;
 import com.telco.billing.infrastructure.entity.SubscriberBillingRecord;
 import com.telco.billing.infrastructure.entity.TariffPrice;
 import com.telco.billing.infrastructure.pdf.InvoicePdfRenderer;
+import com.telco.billing.infrastructure.persistence.AddonChargeRecordRepository;
 import com.telco.billing.infrastructure.persistence.BillCycleRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceLineRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
@@ -56,6 +58,7 @@ public class BillRunBatchProcessor {
 
     private final TariffPriceRepository tariffPriceRepo;
     private final OverageRecordRepository overageRepo;
+    private final AddonChargeRecordRepository addonChargeRepo;
     private final InvoiceRepository invoiceRepo;
     private final InvoiceLineRepository invoiceLineRepo;
     private final BillCycleRepository billCycleRepo;
@@ -68,6 +71,7 @@ public class BillRunBatchProcessor {
     public BillRunBatchProcessor(
             TariffPriceRepository tariffPriceRepo,
             OverageRecordRepository overageRepo,
+            AddonChargeRecordRepository addonChargeRepo,
             InvoiceRepository invoiceRepo,
             InvoiceLineRepository invoiceLineRepo,
             BillCycleRepository billCycleRepo,
@@ -78,6 +82,7 @@ public class BillRunBatchProcessor {
             @Value("${telco.billing.due-days:30}") int dueDays) {
         this.tariffPriceRepo = tariffPriceRepo;
         this.overageRepo = overageRepo;
+        this.addonChargeRepo = addonChargeRepo;
         this.invoiceRepo = invoiceRepo;
         this.invoiceLineRepo = invoiceLineRepo;
         this.billCycleRepo = billCycleRepo;
@@ -112,9 +117,20 @@ public class BillRunBatchProcessor {
             }
 
             try {
-                Invoice invoice = generateInvoice(subscriber, command.periodStart(), command.periodEnd());
+                // Addon purchases not yet on any invoice get exactly one line each; billed flips
+                // in this same bill-run transaction (Sprint 24 Feature 24.3, design-note D3).
+                List<AddonChargeRecord> unbilledAddonCharges =
+                        addonChargeRepo.findBySubscriptionIdAndBilledFalse(subscriptionId);
+
+                Invoice invoice = generateInvoice(subscriber, command.periodStart(),
+                        command.periodEnd(), unbilledAddonCharges);
                 invoiceRepo.save(invoice);
                 invoiceLineRepo.saveAll(invoice.getLines());
+
+                for (AddonChargeRecord charge : unbilledAddonCharges) {
+                    charge.markBilled(invoice.getId());
+                }
+                addonChargeRepo.saveAll(unbilledAddonCharges);
 
                 byte[] pdfBytes = pdfRenderer.render(invoice);
                 String pdfRef = storageService.store(
@@ -147,7 +163,8 @@ public class BillRunBatchProcessor {
     }
 
     private Invoice generateInvoice(SubscriberBillingRecord subscriber,
-                                    Instant periodStart, Instant periodEnd) {
+                                    Instant periodStart, Instant periodEnd,
+                                    List<AddonChargeRecord> addonCharges) {
         TariffPrice tariffPrice = tariffPriceRepo
                 .findByTariffCode(subscriber.getTariffCode())
                 .orElseThrow(() -> new IllegalStateException(
@@ -186,6 +203,15 @@ public class BillRunBatchProcessor {
                 InvoiceLine.of(invoice, "SMS overage: " + ov.getSmsOverageCount() + " SMS",
                         BigDecimal.valueOf(ov.getSmsOverageCount()), smsOverageRate);
             }
+        }
+
+        // One line per unbilled addon purchase (FR-22, design-note D3). The stored price is the
+        // full purchase amount, so the line quantity is 1 regardless of the purchased quantity.
+        for (AddonChargeRecord charge : addonCharges) {
+            String displayName = charge.getAddonName() != null
+                    ? charge.getAddonName() : charge.getAddonCode();
+            InvoiceLine.of(invoice, "Addon: " + displayName + " (" + charge.getAddonCode() + ")",
+                    BigDecimal.ONE, charge.getPrice());
         }
 
         // Recompute totals from lines.

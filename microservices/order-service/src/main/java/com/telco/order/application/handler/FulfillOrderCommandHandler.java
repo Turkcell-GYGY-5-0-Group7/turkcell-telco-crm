@@ -1,5 +1,6 @@
 package com.telco.order.application.handler;
 
+import com.telco.order.application.AddonPurchaseEventPublisher;
 import com.telco.order.application.AuditLogWriter;
 import com.telco.order.application.command.FulfillOrderCommand;
 import com.telco.order.application.dto.OrderResponse;
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Fulfills an order after {@code subscription.activated.v1} (saga step SUBSCRIPTION_ACTIVATED,
@@ -46,13 +48,16 @@ public class FulfillOrderCommandHandler implements CommandHandler<FulfillOrderCo
     private final OrderRepository orderRepository;
     private final SagaStateRepository sagaStateRepository;
     private final AuditLogWriter auditLogWriter;
+    private final AddonPurchaseEventPublisher addonPurchaseEventPublisher;
 
     public FulfillOrderCommandHandler(OrderRepository orderRepository,
                                       SagaStateRepository sagaStateRepository,
-                                      AuditLogWriter auditLogWriter) {
+                                      AuditLogWriter auditLogWriter,
+                                      AddonPurchaseEventPublisher addonPurchaseEventPublisher) {
         this.orderRepository = orderRepository;
         this.sagaStateRepository = sagaStateRepository;
         this.auditLogWriter = auditLogWriter;
+        this.addonPurchaseEventPublisher = addonPurchaseEventPublisher;
     }
 
     @Override
@@ -84,6 +89,12 @@ public class FulfillOrderCommandHandler implements CommandHandler<FulfillOrderCo
 
         order.fulfill();
         orderRepository.save(order);
+
+        // Addons bundled into the order top up the just-activated subscription: one
+        // addon.purchased.v1 per ADDON item, in the same transaction as the FULFILLED transition
+        // (Feature 24.3, design-note D1). No-op for orders without ADDON items.
+        addonPurchaseEventPublisher.publishFor(order,
+                command.subscriptionId() == null ? null : UUID.fromString(command.subscriptionId()));
 
         sagaStateRepository.findByOrderId(order.getId()).ifPresent(saga -> {
             saga.advance("SUBSCRIPTION_ACTIVATED", "FULFILLED",

@@ -161,8 +161,8 @@ class OrderTest {
         Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID, OrderType.ADDON);
         UUID target = UUID.randomUUID();
 
-        OrderItem item = order.addAddonItem("ADDON-5GB", "Extra 5GB", new BigDecimal("15.00"), 1,
-                target, 5120L, null, null);
+        OrderItem item = order.addAddonItem("ADDON-5GB", "Extra 5GB", "DATA", "TRY",
+                new BigDecimal("15.00"), 1, target, 5120L, null, null);
 
         assertThat(order.getItems()).hasSize(1);
         assertThat(item.getItemType()).isEqualTo(OrderItemType.ADDON);

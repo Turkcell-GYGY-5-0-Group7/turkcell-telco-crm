@@ -1708,7 +1708,7 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | DONE | 5/5 |
 | [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | TODO | 0/6 |
 | [23](sprint-23-sim-swap-fraud/README.md) | fraud-service, SIM-swap/fraud detection (**post-MVP**) | TODO | 0/5 |
-| [24](sprint-24-pdf-gap-closure/README.md) | MVP-spec gap closure: addon/plan-change orders, addon billing, contact info, payment method, Swagger/API polish | IN PROGRESS | 5/8 |
+| [24](sprint-24-pdf-gap-closure/README.md) | MVP-spec gap closure: addon/plan-change orders, addon billing, contact info, payment method, Swagger/API polish | IN PROGRESS | 6/8 |
 
 Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE / 0 IN PROGRESS
 / 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -

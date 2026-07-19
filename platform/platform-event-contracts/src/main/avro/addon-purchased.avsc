@@ -1,0 +1,83 @@
+{
+  "type": "record",
+  "name": "AddonPurchasedV1",
+  "namespace": "com.telco.platform.events.addon",
+  "doc": "Emitted once per ADDON order item when the owning order is fulfilled (addon.purchased.v1, Sprint 24 Feature 24.3, design-note D1/D3). Producer: order-service (outbox aggregate_type 'addon', aggregate_id = the order-item id, routed to topic addon.events). Consumers: usage-service (quota top-up), billing-service (addon invoice line). All catalog values are the immutable snapshot taken at order-creation time - no runtime catalog coupling (V5 tariff-snapshot precedent).",
+  "fields": [
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Identifier of the fulfilled order this purchase belongs to (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the purchasing customer (UUID)."
+    },
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Subscription receiving the addon: the newly activated subscription for addons bundled into a NEW_LINE order, or the order item's targetSubscriptionId for standalone ADDON orders (UUID)."
+    },
+    {
+      "name": "addonCode",
+      "type": "string",
+      "doc": "Catalog addon code snapshotted onto the order item at creation time."
+    },
+    {
+      "name": "addonName",
+      "type": "string",
+      "doc": "Addon display name snapshotted at order-creation time."
+    },
+    {
+      "name": "addonType",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Catalog addon category snapshotted at order-creation time (DATA, SMS, MINUTES or VAS). Null on events for order items created before the type was snapshotted (pre-24.3 rows)."
+    },
+    {
+      "name": "price",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Unit price snapshotted at order-creation time as an exact decimal (precision 19, scale 4). The total charged for this purchase is price * quantity."
+    },
+    {
+      "name": "currency",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "ISO-4217 currency of price, snapshotted at order-creation time. Null on events for order items created before the currency was snapshotted (pre-24.3 rows); consumers fall back to TRY."
+    },
+    {
+      "name": "quantity",
+      "type": "int",
+      "doc": "Quantity purchased. Allowance deltas are per unit; consumers multiply by quantity."
+    },
+    {
+      "name": "allowanceDataMb",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Per-unit data allowance delta in MB, snapshotted at order-creation time. Null for addons without a data component."
+    },
+    {
+      "name": "allowanceMinutes",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Per-unit voice allowance delta in minutes, snapshotted at order-creation time. Null for addons without a voice component."
+    },
+    {
+      "name": "allowanceSms",
+      "type": ["null", "long"],
+      "default": null,
+      "doc": "Per-unit SMS allowance delta, snapshotted at order-creation time. Null for addons without an SMS component."
+    },
+    {
+      "name": "occurredAt",
+      "type": "string",
+      "doc": "Instant the purchase was fulfilled, ISO-8601 (UTC)."
+    }
+  ]
+}

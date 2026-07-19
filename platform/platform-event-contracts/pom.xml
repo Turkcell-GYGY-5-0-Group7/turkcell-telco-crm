@@ -105,6 +105,7 @@
                         <customer.kyc-approved.v1>${project.basedir}/src/main/avro/customer-kyc-approved.avsc</customer.kyc-approved.v1>
                         <customer.kyc-rejected.v1>${project.basedir}/src/main/avro/customer-kyc-rejected.avsc</customer.kyc-rejected.v1>
                         <order.created.v1>${project.basedir}/src/main/avro/order-created.avsc</order.created.v1>
+                        <addon.purchased.v1>${project.basedir}/src/main/avro/addon-purchased.avsc</addon.purchased.v1>
                         <payment.completed.v1>${project.basedir}/src/main/avro/payment-completed.avsc</payment.completed.v1>
                         <msisdn.allocated.v1>${project.basedir}/src/main/avro/msisdn-allocated.avsc</msisdn.allocated.v1>
                         <msisdn.released.v1>${project.basedir}/src/main/avro/msisdn-released.avsc</msisdn.released.v1>

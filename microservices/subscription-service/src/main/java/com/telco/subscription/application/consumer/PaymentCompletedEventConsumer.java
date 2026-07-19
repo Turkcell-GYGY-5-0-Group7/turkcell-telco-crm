@@ -46,6 +46,11 @@ import java.util.UUID;
  *   <li>TERMINAL order lookup rejected ({@link OrderLookupRejectedException}: non-404 4xx, a
  *       contract/auth defect that cannot heal by redelivery) -&gt; dispatch
  *       {@code FailSubscriptionActivationCommand} (reason {@code ORDER_LOOKUP_REJECTED}).</li>
+ *   <li>Standalone ADDON order ({@code orderType == ADDON}, Sprint 24 Feature 24.3) -&gt; ignored
+ *       here entirely: there is no activation leg, order-service confirms and fulfills the order
+ *       itself on {@code payment.completed.v1} and publishes {@code addon.purchased.v1}. This
+ *       branch runs BEFORE the tariff-count invariant, which would otherwise see zero TARIFF
+ *       items and wrongly compensate a valid purchase.</li>
  *   <li>Not exactly one TARIFF item (one-tariff-line invariant violated) -&gt; dispatch
  *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).
  *       Since Sprint 24 Feature 24.2 (design-note D1) an order may bundle ADDON items alongside its
@@ -141,6 +146,17 @@ public class PaymentCompletedEventConsumer {
         // DependencyFailureException (transient) propagates uncaught -> Kafka retry, no inbox write.
 
         UUID customerId = order.customerId() != null ? order.customerId() : payloadCustomerId;
+
+        // Branch on the persisted order kind (Sprint 24 Feature 24.3, design-note D1/D2): a
+        // standalone ADDON order has NO activation leg - order-service owns its payment.completed
+        // reaction (confirm + fulfill + addon.purchased.v1). Without this skip the zero-TARIFF
+        // shape below would emit UNSUPPORTED_MULTI_ITEM_ORDER and wrongly trigger compensation
+        // for a perfectly valid addon purchase.
+        if ("ADDON".equals(order.orderType())) {
+            LOGGER.info("Ignoring payment.completed.v1 for ADDON order {} (no activation leg; "
+                    + "order-service fulfills it) messageId={}", orderId, messageId);
+            return;
+        }
 
         // One-tariff-line invariant (relaxed for Sprint 24 Feature 24.2): bundled ADDON items are
         // allowed alongside the single TARIFF item; zero or 2+ TARIFF items still compensate.

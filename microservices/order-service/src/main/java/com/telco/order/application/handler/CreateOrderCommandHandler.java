@@ -175,6 +175,8 @@ public class CreateOrderCommandHandler implements CommandHandler<CreateOrderComm
                 order.addAddonItem(
                         priced.addon().code(),
                         priced.addon().name(),
+                        priced.addon().type(),
+                        priced.addon().currency(),
                         priced.unitPrice(),
                         itemReq.quantity(),
                         itemReq.targetSubscriptionId(),

@@ -133,10 +133,12 @@ public class Order {
      * design-note D1). {@code targetSubscriptionId} is non-null for standalone {@link OrderType#ADDON}
      * orders and null for addons bundled into a {@link OrderType#NEW_LINE} order.
      */
-    public OrderItem addAddonItem(String productCode, String productName, BigDecimal unitPrice,
+    public OrderItem addAddonItem(String productCode, String productName, String addonType,
+                                  String currency, BigDecimal unitPrice,
                                   int quantity, UUID targetSubscriptionId, Long allowanceDataMb,
                                   Long allowanceMinutes, Long allowanceSms) {
-        OrderItem item = OrderItem.forAddon(this, productCode, productName, unitPrice, quantity,
+        OrderItem item = OrderItem.forAddon(this, productCode, productName, addonType, currency,
+                unitPrice, quantity,
                 targetSubscriptionId, allowanceDataMb, allowanceMinutes, allowanceSms);
         items.add(item);
         return item;

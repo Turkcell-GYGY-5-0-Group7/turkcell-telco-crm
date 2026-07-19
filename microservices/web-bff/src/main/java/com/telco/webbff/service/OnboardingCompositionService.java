@@ -105,9 +105,22 @@ public class OnboardingCompositionService {
         String customerId = resolveCustomer(request);
         UUID tariffId = resolveTariffId(request.tariffCode());
 
+        // One TARIFF item plus one ADDON item per selected addon code (Sprint 24 Feature 24.3,
+        // design-note D1): order-service derives NEW_LINE from this shape, snapshots each addon
+        // from the catalog, and publishes addon.purchased.v1 per item at fulfillment.
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(Map.of("tariffId", tariffId.toString(), "quantity", 1));
+        if (request.addonCodes() != null) {
+            for (String addonCode : request.addonCodes()) {
+                if (addonCode != null && !addonCode.isBlank()) {
+                    items.add(Map.of("itemType", "ADDON", "productCode", addonCode, "quantity", 1));
+                }
+            }
+        }
+
         Map<String, Object> orderBody = Map.of(
                 "customerId", customerId,
-                "items", List.of(Map.of("tariffId", tariffId.toString(), "quantity", 1)));
+                "items", items);
         GatewayOrder order = data(gateway.post("/api/v1/orders", orderBody, idempotencyKey, ORDER));
 
         return new OnboardingOrderResponse(order.id().toString(), order.status(), idempotencyKey);

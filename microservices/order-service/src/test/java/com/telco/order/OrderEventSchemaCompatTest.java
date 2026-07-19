@@ -36,7 +36,9 @@ class OrderEventSchemaCompatTest {
                 new SchemaCase("com.telco.platform.events.order.OrderCreatedV1",
                         "com.telco.order.application.event.OrderCreatedEvent"),
                 new SchemaCase("com.telco.platform.events.order.OrderCancelledV1",
-                        "com.telco.order.application.event.OrderCancelledEvent"));
+                        "com.telco.order.application.event.OrderCancelledEvent"),
+                new SchemaCase("com.telco.platform.events.addon.AddonPurchasedV1",
+                        "com.telco.order.application.event.AddonPurchasedEvent"));
     }
 
     @ParameterizedTest(name = "{0}")

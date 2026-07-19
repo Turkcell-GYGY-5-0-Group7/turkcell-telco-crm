@@ -73,6 +73,12 @@ public class OrderItem {
     @Column(name = "product_code", length = 64)
     private String productCode;
 
+    @Column(name = "addon_type", length = 20)
+    private String addonType;
+
+    @Column(name = "currency", length = 3)
+    private String currency;
+
     @Column(name = "target_subscription_id")
     private UUID targetSubscriptionId;
 
@@ -103,6 +109,7 @@ public class OrderItem {
 
     private OrderItem(UUID id, Order order, OrderItemType itemType, UUID tariffId, String tariffCode,
                       Integer tariffVersion, String tariffName, String productCode,
+                      String addonType, String currency,
                       UUID targetSubscriptionId, Long allowanceDataMb, Long allowanceMinutes,
                       Long allowanceSms, BigDecimal unitPrice, int quantity,
                       UUID campaignId, String campaignCode) {
@@ -114,6 +121,8 @@ public class OrderItem {
         this.tariffVersion = tariffVersion;
         this.tariffName = tariffName;
         this.productCode = productCode;
+        this.addonType = addonType;
+        this.currency = currency;
         this.targetSubscriptionId = targetSubscriptionId;
         this.allowanceDataMb = allowanceDataMb;
         this.allowanceMinutes = allowanceMinutes;
@@ -149,22 +158,26 @@ public class OrderItem {
         return new OrderItem(UUID.randomUUID(), order, OrderItemType.TARIFF,
                 Objects.requireNonNull(tariffId, "tariffId"),
                 Objects.requireNonNull(tariffCode, "tariffCode"),
-                tariffVersion, tariffName, null, targetSubscriptionId,
+                tariffVersion, tariffName, null, null, null, targetSubscriptionId,
                 null, null, null, unitPrice, quantity, campaignId, campaignCode);
     }
 
     /**
      * Creates an {@link OrderItemType#ADDON} line from the catalog addon snapshot taken at
      * order-creation time (design-note D1): price, display name (stored in the generic
-     * {@code tariffName} product-name column) and allowance deltas. {@code targetSubscriptionId} is
-     * non-null for standalone ADDON orders and null for addons bundled into a NEW_LINE order.
+     * {@code tariffName} product-name column), catalog category, price currency and allowance
+     * deltas. {@code targetSubscriptionId} is non-null for standalone ADDON orders and null for
+     * addons bundled into a NEW_LINE order. The full snapshot lets {@code addon.purchased.v1} be
+     * published at fulfillment time without a runtime catalog hop (Feature 24.3, design-note D3).
      */
     public static OrderItem forAddon(Order order, String productCode, String productName,
+                                     String addonType, String currency,
                                      BigDecimal unitPrice, int quantity, UUID targetSubscriptionId,
                                      Long allowanceDataMb, Long allowanceMinutes, Long allowanceSms) {
         return new OrderItem(UUID.randomUUID(), order, OrderItemType.ADDON,
                 null, null, null, productName,
                 Objects.requireNonNull(productCode, "productCode"),
+                addonType, currency,
                 targetSubscriptionId, allowanceDataMb, allowanceMinutes, allowanceSms,
                 unitPrice, quantity, null, null);
     }
@@ -204,6 +217,22 @@ public class OrderItem {
     /** The catalog addon code for ADDON items; {@code null} for TARIFF items. */
     public String getProductCode() {
         return productCode;
+    }
+
+    /**
+     * The catalog addon category (DATA, SMS, MINUTES, VAS) snapshotted at order-creation time;
+     * {@code null} for TARIFF items and for ADDON rows created before V9 (Feature 24.3).
+     */
+    public String getAddonType() {
+        return addonType;
+    }
+
+    /**
+     * ISO-4217 currency of {@code unitPrice} snapshotted at order-creation time; {@code null} for
+     * TARIFF items and for ADDON rows created before V9 (Feature 24.3).
+     */
+    public String getCurrency() {
+        return currency;
     }
 
     /**

@@ -32,9 +32,11 @@ verification; caffeinate-wrapped long commands; `make infra-down` immediately af
       unit tests; commit
 
 ## Phase 4 - 24.3 Addon purchase flow
-- [ ] addon-purchased.avsc + subject + compat + catalog row; order fulfillment publish legs +
+- [x] addon-purchased.avsc + subject + compat + catalog row; order fulfillment publish legs +
       standalone ADDON saga branch; usage addAllowance/TopUpQuota + consumer; billing
       addon_charge_record + consumer + invoice lines; web-bff forwards addonCodes; tests; commit
+      (order 131 / subscription 84 / usage 90 / billing 81 / web-bff 32 green; V9 added
+      addon_type+currency snapshot so the event publishes without a runtime catalog hop)
 
 ## Phase 5 - 24.4 Plan change flow
 - [ ] subscription-tariff-changed.avsc + subject + compat + catalog row; changeTariff +
