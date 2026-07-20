@@ -107,6 +107,42 @@ class SubscriptionStateMachineTest {
         assertThatThrownBy(s::terminate).isInstanceOf(BusinessRuleException.class);
     }
 
+    // --- changeTariff (FR-09 package change, Sprint 24 Feature 24.4, design-note D2) ---
+
+    @Test
+    void change_tariff_when_active_updates_code_and_version() {
+        Subscription s = newActive();
+
+        s.changeTariff("TARIFF_PLUS", 3);
+
+        assertThat(s.getTariffCode()).isEqualTo("TARIFF_PLUS");
+        assertThat(s.getTariffVersion()).isEqualTo(3);
+        assertThat(s.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+    }
+
+    @Test
+    void change_tariff_when_suspended_throws() {
+        Subscription s = newActive();
+        s.suspend();
+        assertThatThrownBy(() -> s.changeTariff("TARIFF_PLUS", 3))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void change_tariff_when_terminated_throws() {
+        Subscription s = newActive();
+        s.terminate();
+        assertThatThrownBy(() -> s.changeTariff("TARIFF_PLUS", 3))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
+    void change_tariff_to_the_same_code_throws() {
+        Subscription s = newActive();
+        assertThatThrownBy(() -> s.changeTariff(s.getTariffCode(), 9))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
     // --- FR-15: a customer may hold multiple ACTIVE subscriptions ---
 
     @Test

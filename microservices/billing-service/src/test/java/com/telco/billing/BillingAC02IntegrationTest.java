@@ -272,7 +272,7 @@ class BillingAC02IntegrationTest {
 
     /**
      * Seeds an unbilled addon charge row directly (Sprint 24 Feature 24.3). The consumer path that
-     * normally writes it is covered by {@code AddonPurchasedBillingConsumerIT}; going through the
+     * normally writes it is covered by {@code AddonPurchasedBillingConsumerTest}; going through the
      * repository here keeps this test independent of the mocked {@code InboxService} (whose default
      * {@code firstSeen=false} would skip every {@code IdempotentRequest} command).
      */

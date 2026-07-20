@@ -39,9 +39,12 @@ verification; caffeinate-wrapped long commands; `make infra-down` immediately af
       addon_type+currency snapshot so the event publishes without a runtime catalog hop)
 
 ## Phase 5 - 24.4 Plan change flow
-- [ ] subscription-tariff-changed.avsc + subject + compat + catalog row; changeTariff +
+- [x] subscription-tariff-changed.avsc + subject + compat + catalog row; changeTariff +
       ChangeTariffCommand + consumer branch; usage re-provision; billing tariffCode update;
       order fulfill consumer; contract docs; tests; commit
+      (order 135 / subscription 92 / usage 99 / billing 90 green; consumers dedup on orderId
+      business keys - the tariff-changed record key is the subscriptionId and repeats across
+      successive plan changes)
 
 ## Phase 6 - 24.8 Tests + E2E re-validation
 - [ ] Three new acceptance ITs + two-TARIFF regression

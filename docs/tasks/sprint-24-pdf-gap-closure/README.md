@@ -2,7 +2,7 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| IN PROGRESS | 6/8 | 2026-07-20 |
+| IN PROGRESS | 7/8 | 2026-07-20 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
@@ -25,7 +25,7 @@ Design decisions and accepted precedents: [design-note.md](design-note.md).
 | 24.1 | Catalog addon management (allowances, seeds, create API, internal snapshot) | DONE | [24.1-catalog-addon-management.md](24.1-catalog-addon-management.md) |
 | 24.2 | Order model generalization (order/item types, validation matrix, invariant relaxation) | DONE | [24.2-order-model-generalization.md](24.2-order-model-generalization.md) |
 | 24.3 | Addon purchase flow (addon.purchased.v1, quota top-up, invoice lines, web-bff forwarding) | DONE | [24.3-addon-purchase-flow.md](24.3-addon-purchase-flow.md) |
-| 24.4 | Plan change flow (subscription.tariff-changed.v1, changeTariff, quota re-provision) | TODO | [24.4-plan-change-flow.md](24.4-plan-change-flow.md) |
+| 24.4 | Plan change flow (subscription.tariff-changed.v1, changeTariff, quota re-provision) | DONE | [24.4-plan-change-flow.md](24.4-plan-change-flow.md) |
 | 24.5 | Customer contact info + type-conditional TCKN/VKN validation | DONE | [24.5-customer-contact-and-conditional-id-validation.md](24.5-customer-contact-and-conditional-id-validation.md) |
 | 24.6 | Payment method + Idempotency-Key header | DONE | [24.6-payment-method-and-idempotency-header.md](24.6-payment-method-and-idempotency-header.md) |
 | 24.7 | API polish: Swagger x7, sort param, quota-exceeded template | DONE | [24.7-api-polish-swagger-sort-notification.md](24.7-api-polish-swagger-sort-notification.md) |

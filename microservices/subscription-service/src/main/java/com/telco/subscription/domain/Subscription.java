@@ -82,6 +82,29 @@ public class Subscription {
     }
 
     /**
+     * Switches this subscription to a new tariff (FR-09 package change, Sprint 24 Feature 24.4,
+     * design-note D2). Guarded ACTIVE-only: a suspended or terminated subscription cannot change
+     * plans. The new version is the catalog version pinned on the PLAN_CHANGE order's snapshot at
+     * order-creation time. Changing to the tariff already in place raises
+     * {@link BusinessRuleException} (the order validation rejects it upfront; this guard keeps the
+     * aggregate self-consistent).
+     */
+    public void changeTariff(String newTariffCode, int newTariffVersion) {
+        if (this.status != SubscriptionStatus.ACTIVE) {
+            throw new BusinessRuleException(
+                    "Cannot change tariff of subscription in status: " + this.status.name()
+                            + ". Only ACTIVE subscriptions may change tariff.");
+        }
+        Objects.requireNonNull(newTariffCode, "newTariffCode");
+        if (newTariffCode.equals(this.tariffCode)) {
+            throw new BusinessRuleException(
+                    "Subscription is already on tariff " + newTariffCode);
+        }
+        this.tariffCode = newTariffCode;
+        this.tariffVersion = newTariffVersion;
+    }
+
+    /**
      * ACTIVE -> SUSPENDED. Suspending a subscription that is not ACTIVE raises
      * {@link BusinessRuleException}.
      */

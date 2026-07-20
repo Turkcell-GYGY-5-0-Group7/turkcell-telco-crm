@@ -1,0 +1,51 @@
+{
+  "type": "record",
+  "name": "SubscriptionTariffChangedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when a PLAN_CHANGE order switches a subscription to a new tariff (subscription.tariff-changed.v1, Sprint 24 Feature 24.4, design-note D2). Producer: subscription-service; rides the subscription.events topic (third event type on it - consumers MUST filter on the eventType header and use per-listener group ids). Consumers: usage-service (quota re-provision), billing-service (billing record tariff update), order-service (PLAN_CHANGE order fulfillment).",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer."
+    },
+    {
+      "name": "msisdn",
+      "type": "string",
+      "doc": "The subscription's mobile number (MSISDN)."
+    },
+    {
+      "name": "previousTariffCode",
+      "type": "string",
+      "doc": "Tariff code the subscription was on before the change."
+    },
+    {
+      "name": "newTariffCode",
+      "type": "string",
+      "doc": "Tariff code the subscription is on after the change."
+    },
+    {
+      "name": "newTariffVersion",
+      "type": "int",
+      "doc": "Catalog version of the new tariff, pinned from the order's snapshot at order-creation time (design-note D2)."
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "PLAN_CHANGE order that drove this change (saga correlation key, UUID). Always populated: plan change is order-driven only."
+    },
+    {
+      "name": "changedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the tariff change was applied, in epoch milliseconds (UTC)."
+    }
+  ]
+}

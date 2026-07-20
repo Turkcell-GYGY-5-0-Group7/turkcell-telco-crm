@@ -5,6 +5,7 @@ import com.telco.platform.common.exception.DependencyFailureException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.mediator.Mediator;
 import com.telco.subscription.application.command.ActivateSubscriptionCommand;
+import com.telco.subscription.application.command.ChangeTariffCommand;
 import com.telco.subscription.application.command.FailSubscriptionActivationCommand;
 import com.telco.subscription.application.dto.PaymentCompletedPayload;
 import com.telco.subscription.infrastructure.client.OrderClientResponse;
@@ -51,6 +52,10 @@ import java.util.UUID;
  *       itself on {@code payment.completed.v1} and publishes {@code addon.purchased.v1}. This
  *       branch runs BEFORE the tariff-count invariant, which would otherwise see zero TARIFF
  *       items and wrongly compensate a valid purchase.</li>
+ *   <li>PLAN_CHANGE order ({@code orderType == PLAN_CHANGE}, Sprint 24 Feature 24.4, design-note
+ *       D2) -&gt; dispatch {@code ChangeTariffCommand} for the single TARIFF item's
+ *       {@code targetSubscriptionId} instead of activating a new line. Terminal changeTariff
+ *       failures reuse the activation-failed event so the existing compensation runs.</li>
  *   <li>Not exactly one TARIFF item (one-tariff-line invariant violated) -&gt; dispatch
  *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).
  *       Since Sprint 24 Feature 24.2 (design-note D1) an order may bundle ADDON items alongside its
@@ -172,6 +177,27 @@ public class PaymentCompletedEventConsumer {
         }
 
         OrderItemClientResponse item = tariffItems.get(0);
+
+        // PLAN_CHANGE branch (Sprint 24 Feature 24.4, design-note D2): the paid order switches an
+        // EXISTING subscription's tariff instead of activating a new line. The single TARIFF item
+        // carries the target subscription and the pinned catalog snapshot.
+        if ("PLAN_CHANGE".equals(order.orderType())) {
+            if (item.targetSubscriptionId() == null) {
+                // Contract breach (order-service validates this shape at creation): terminal.
+                LOGGER.warn("PLAN_CHANGE order {} has no targetSubscriptionId -> activation-failed",
+                        orderId);
+                mediator.send(new FailSubscriptionActivationCommand(
+                        orderId, customerId, "MALFORMED_PLAN_CHANGE_ORDER", messageId));
+                return;
+            }
+            mediator.send(new ChangeTariffCommand(orderId, customerId,
+                    UUID.fromString(item.targetSubscriptionId()),
+                    item.tariffCode(), item.tariffVersion()));
+            LOGGER.info("Tariff change dispatched for orderId={} subscriptionId={}",
+                    orderId, item.targetSubscriptionId());
+            return;
+        }
+
         mediator.send(new ActivateSubscriptionCommand(orderId, customerId, item.tariffCode(), item.tariffVersion()));
         LOGGER.info("Activated subscription for orderId={} customerId={}", orderId, customerId);
     }

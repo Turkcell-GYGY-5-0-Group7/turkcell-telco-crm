@@ -42,7 +42,9 @@ class UsageEventSchemaCompatTest {
                 new SchemaCase(AVRO_PACKAGE + "CdrRecordedV1",
                         "com.telco.usage.application.consumer.CdrRecordedEventConsumer$CdrPayload"),
                 new SchemaCase("com.telco.platform.events.addon.AddonPurchasedV1",
-                        "com.telco.usage.application.consumer.AddonPurchasedEventConsumer$AddonPurchasedPayload")
+                        "com.telco.usage.application.consumer.AddonPurchasedEventConsumer$AddonPurchasedPayload"),
+                new SchemaCase("com.telco.platform.events.subscription.SubscriptionTariffChangedV1",
+                        "com.telco.usage.application.consumer.TariffChangedEventConsumer$TariffChangedPayload")
         );
     }
 

@@ -29,8 +29,8 @@ All endpoints require a valid JWT.
 
 | Direction | Event |
 | --- | --- |
-| Publish | `order.created.v1`, `order.confirmed.v1`, `order.cancelled.v1` |
-| Consume | `payment.completed.v1`, `payment.failed.v1`, `subscription.activated.v1` |
+| Publish | `order.created.v1`, `order.confirmed.v1`, `order.cancelled.v1`, `addon.purchased.v1` (one per ADDON item at fulfillment, topic `addon.events`) |
+| Consume | `payment.completed.v1`, `payment.failed.v1`, `subscription.activated.v1`, `subscription.tariff-changed.v1` (PLAN_CHANGE fulfillment) |
 
 ## Notes
 
@@ -90,5 +90,26 @@ need a runtime catalog hop. Item responses expose `itemType`, `productCode` and
 fields are `null` on `ADDON` items; `tariffName` doubles as the generic product-name snapshot).
 `order.created.v1` carries matching additive item fields `itemType` (default `TARIFF`),
 `productCode` and `targetSubscriptionId` (see event-catalog Section 5).
+
+## Saga fulfillment per order kind (Sprint 24 Features 24.3/24.4, design-note D1/D2/D3)
+
+All kinds confirm on `payment.completed.v1` (PENDING -> CONFIRMED). Fulfillment then differs:
+
+- `NEW_LINE` - fulfills on `subscription.activated.v1` (unchanged). If the order bundled `ADDON`
+  items, fulfillment additionally publishes one `addon.purchased.v1` PER addon item through the
+  outbox in the same transaction (aggregate_type `addon` -> topic `addon.events`; aggregate_id =
+  the order-item id, so each item is an independently deduplicable message), carrying the item's
+  creation-time catalog snapshot (name, type, unit price, currency, per-unit allowance deltas)
+  and the just-activated subscription id.
+- `ADDON` (standalone) - no activation leg: the `payment.completed.v1` reaction confirms AND
+  fulfills in one transaction (saga step `ADDON_FULFILLED`) and publishes one
+  `addon.purchased.v1` per item against each item's `targetSubscriptionId`.
+  subscription-service deliberately ignores these orders' payment events.
+- `PLAN_CHANGE` - fulfills on `subscription.tariff-changed.v1` (published by
+  subscription-service after it applies the change), correlated by the event's `orderId`; the
+  fulfillment command is deduped on `"plan-change-fulfill:" + orderId` because the record key
+  (subscriptionId) is not unique across successive plan changes. A failed change reuses
+  `subscription.activation-failed.v1`, so the existing refund/cancel compensation applies to
+  plan-change orders unchanged.
 
 Reference: [service-catalog](../architecture/service-catalog.md), [event-catalog](../architecture/event-catalog.md), ADR-015, ADR-027.

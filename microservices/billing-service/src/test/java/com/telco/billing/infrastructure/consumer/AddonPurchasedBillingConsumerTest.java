@@ -40,7 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 )
 @ActiveProfiles("test")
 @Testcontainers
-class AddonPurchasedBillingConsumerIT {
+class AddonPurchasedBillingConsumerTest {
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17");

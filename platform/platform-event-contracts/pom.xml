@@ -113,6 +113,7 @@
                         <subscription.suspended.v1>${project.basedir}/src/main/avro/subscription-suspended.avsc</subscription.suspended.v1>
                         <subscription.terminated.v1>${project.basedir}/src/main/avro/subscription-terminated.avsc</subscription.terminated.v1>
                         <subscription.activation-failed.v1>${project.basedir}/src/main/avro/subscription-activation-failed.avsc</subscription.activation-failed.v1>
+                        <subscription.tariff-changed.v1>${project.basedir}/src/main/avro/subscription-tariff-changed.avsc</subscription.tariff-changed.v1>
                         <invoice.generated.v1>${project.basedir}/src/main/avro/invoice-generated.avsc</invoice.generated.v1>
                         <cdr.recorded.v1>${project.basedir}/src/main/avro/cdr-recorded.avsc</cdr.recorded.v1>
                         <usage.recorded.v1>${project.basedir}/src/main/avro/usage-recorded.avsc</usage.recorded.v1>

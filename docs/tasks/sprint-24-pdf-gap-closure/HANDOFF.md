@@ -1,81 +1,76 @@
-# Sprint 24 Handoff (session ended 2026-07-19/20)
+# Sprint 24 Handoff (last updated 2026-07-20, after 24.4)
 
 State snapshot for whoever resumes this sprint. Branch: `feat/sprint-24-pdf-gap-closure`
-(created off master after PR #34 merged; NOT pushed yet). Progress: **5 of 8 features DONE and
-committed**; 24.3 was mid-implementation by a background agent when the session ended.
+(tracks origin; commits after 6bf685f are LOCAL ONLY - do not push until asked).
+Progress: **7 of 8 features DONE and committed**; only 24.8 (tests + E2E + closeout) remains.
+Approved plan: `~/.claude/plans/i-was-started-to-iridescent-bubble.md`.
 
 ## Commits on this branch (oldest first)
 
-| Commit | Feature |
-| --- | --- |
-| 852c3fd | Sprint scaffolding (README, design-note, 8 feature files, STATUS row) |
-| d32e228 | 24.7a - Swagger UI on all services (springdoc in 7 poms + order security permit) |
-| 2d8f0a5 | 24.5 - customer email/phone + type-conditional TCKN/VKN (111 tests green) |
-| 0194fd5 | 24.6 - payment method enum + Idempotency-Key header (72 tests green) |
-| 5b24d19 | 24.1 - addon catalog: allowance columns, 5 seeded addons, real POST /api/v1/addons, internal snapshot (67 tests green) |
-| 93f9968 | 24.7b/c - sort pagination on 6 list endpoints + quota-exceeded SMS addon suggestion with update-if-different seeder |
-| e64373e | 24.2 - order model generalization: order/item types, validation matrix, saga invariant relaxation, additive order-created.avsc, internal subscription read (order 119 / subscription 83 / payment 72 / campaign 104 green) |
+852c3fd scaffolding | d32e228 24.7a | 2d8f0a5 24.5 | 0194fd5 24.6 | 5b24d19 24.1 |
+93f9968 24.7b/c | e64373e 24.2 | a8a5a18 **24.3** | (HEAD) **24.4**
 
-## What was IN FLIGHT when the session ended: 24.3 (addon purchase flow)
+Suite baselines after 24.4 (all green, Testcontainers, stack down):
+order 135 / subscription 92 / usage 99 / billing 90 / web-bff 32.
 
-A background agent was implementing 24.3 per
-[24.3-addon-purchase-flow.md](24.3-addon-purchase-flow.md). It had stalled once with a CLEAN tree,
-was resumed, and may or may not have written files before the session died.
+## What 24.3 + 24.4 delivered (facts a resuming session needs)
 
-**First step on resume: run `git status`.**
-- If the tree is clean: nothing survived; re-run the whole 24.3 scope from the feature file.
-- If the tree has changes: they are 24.3 work-in-progress. Inventory them against the 24.3 task
-  list (schema, order publish legs, subscription skip, usage top-up, billing charges, web-bff
-  forwarding), finish what is missing, run the per-module suites, then commit as one
-  `feat(sprint-24): addon purchase flow end to end (24.3)` commit.
+- **addon.purchased.v1** (topic `addon.events`, outbox aggregate_type `addon`, aggregate_id =
+  ORDER-ITEM id - unique per event, safe as inbox key). Published by order-service once per ADDON
+  item at fulfillment: bundled NEW_LINE orders publish in `FulfillOrderCommandHandler` (with the
+  activation payload's subscriptionId), standalone ADDON orders confirm AND fulfill inside
+  `ConfirmOrderCommandHandler` (saga step `ADDON_FULFILLED`, no activation leg -
+  subscription-service skips ADDON orders). V9 added `order_items.addon_type`/`currency`.
+  usage tops up quota (`Quota.addAllowance`, flags re-armed); billing records
+  `addon_charge_records` (price = unit * quantity) billed as one line per charge on the next
+  bill run (billed flag flips in the bill-run tx).
+- **subscription.tariff-changed.v1** (rides `subscription.events` as its THIRD event type;
+  produced by `ChangeTariffCommandHandler` after the `payment.completed.v1` PLAN_CHANGE branch).
+  **The record key is the subscriptionId (outbox aggregate_id) and REPEATS across successive
+  plan changes - every consumer of this event dedups on orderId business keys:**
+  usage `"reprovision-quota:" + orderId` (quota reset via `Quota.reprovision`, remaining =
+  max(0, new - used), flags recomputed), billing `"billing-tariff-changed:" + orderId`
+  (`SubscriberBillingRecord.changeTariff`), order `"plan-change-fulfill:" + orderId`
+  (reuses `FulfillOrderCommand`). Terminal changeTariff failures REUSE
+  `subscription.activation-failed.v1` (documented reuse, D2) so the existing refund/cancel
+  compensation runs.
+- Billing consumer tests are named `*Test` (NOT `*IT` - surefire skips `*IT`; two files were
+  renamed for this: `AddonPurchasedBillingConsumerTest`, `TariffChangedBillingConsumerTest`).
+- Contract docs updated: order-service.md (events table + "Saga fulfillment per order kind"),
+  subscription-service.md (payment.completed branching + tariff-changed event), event-catalog
+  registry rows for both events. README 7/8, STATUS 7/8, todo.md Phases 4-5 checked.
 
-## Remaining work, in order
+## REMAINING: 24.8 only (spec: 24.8-tests-and-e2e-revalidation.md)
 
-1. **24.3** - addon purchase flow. Full spec in the feature file; design decisions in
-   [design-note.md](design-note.md) D1/D3/D4. Critical implementation notes discovered so far:
-   - subscription-service `PaymentCompletedEventConsumer` must SKIP orderType ADDON orders
-     (today a zero-TARIFF order would emit UNSUPPORTED_MULTI_ITEM_ORDER and trigger compensation).
-   - New event rides topic `addon.events` via aggregate_type `addon` (Debezium EventRouter routes
-     by aggregate_type; no connector change, but the acceptance stack must have the order
-     connector running).
-   - usage-service top-up when no quota row exists yet: THROW transient so Kafka redelivers
-     (activation provisioning may still be in flight) - mirrors order-service's
-     TRANSIENT/TERMINAL split.
-   - 24.2 already snapshots addon price/name/allowances onto order_items; addon display name is
-     in the tariff_name column; event tariffId/tariffName generalize to addon id/name.
-2. **24.4** - plan change flow. Spec: [24.4-plan-change-flow.md](24.4-plan-change-flow.md) +
-   design-note D2/D4. 24.2 already provides everything it needs (PLAN_CHANGE order validation,
-   orderType on the internal order read, subscription internal endpoint). Sequential after 24.3
-   (same modules).
-3. **24.8** - tests + full E2E re-validation + closeout. Spec:
-   [24.8-tests-and-e2e-revalidation.md](24.8-tests-and-e2e-revalidation.md). Three new acceptance
-   ITs (AddonOnboarding, StandaloneAddonPurchase, PlanChange), then the Sprint 14.6-pattern
-   fresh-stack run: `make infra-destroy` -> rebuild images -> boot -> `make infra-connectors` ->
-   full acceptance sweep -> browser onboarding WITH addon selection -> Swagger spot-check on the
-   7 newly-enabled services -> payments Idempotency-Key replay. Close out README/STATUS/
-   event-catalog/api-contracts/requirements traceability. Then update this file or delete it.
+1. **24.8a - acceptance ITs (stack down, write + compile only):** in the acceptance module
+   (reuse OnboardingSteps/GatewayApi/TokenProvider/AcceptanceConfig):
+   `AddonOnboardingAcceptanceIT` (onboarding+addon -> FULFILLED -> quota includes delta -> bill
+   run -> invoice carries addon line), `StandaloneAddonPurchaseAcceptanceIT` (ADDON order ->
+   payment -> FULFILLED -> quota topped up), `PlanChangeAcceptanceIT` (plan-change order ->
+   payment -> tariff changed -> quota re-provisioned -> FULFILLED -> next bill on new fee),
+   plus a two-TARIFF-order regression (still fails activation with compensation).
+2. **24.8b - fresh-stack E2E (SINGLE stack-up window; ASK THE USER before starting - they start
+   Docker Desktop and must approve the thermal window):** `make infra-destroy` -> rebuild
+   images -> boot -> `make infra-connectors` (order connector must be registered so
+   `addon.events` routes) -> full acceptance sweep (AC-01/02/03 + campaign + BFF + 3 new ITs)
+   -> browser onboarding WITH addon -> Swagger spot-check on the 7 newly-enabled services ->
+   payments Idempotency-Key replay. `caffeinate -dims` on long commands; `make infra-down`
+   IMMEDIATELY after. Append run report to sprint README.
+3. **24.8c - closeout:** README 8/8 + run report; STATUS.md; todo.md Phase 6; event-catalog
+   Section 3 saga sequences (addon + plan-change); requirements.md FR-09/FR-22 traceability;
+   lessons.md if corrections arose; finalize or delete this HANDOFF. Final commit. NO push
+   until asked.
 
-## Environment facts a resuming session must know
+## Environment facts (verified)
 
-- mvn is NOT on PATH: `/Users/winkoffice/.m2/wrapper/dists/apache-maven-3.9.15/9925cc1d/bin/mvn`.
-- Every Testcontainers-running Maven invocation needs `-Dapi.version=1.44` (Docker Engine 29
-  rejects the client's default API version). Typical:
-  `mvn -f microservices/pom.xml -pl <module> -am test -Dschema.registry.skip=true -Dapi.version=1.44`
-- Avro/platform rebuild after touching platform-event-contracts:
+- mvn: `/Users/winkoffice/.m2/wrapper/dists/apache-maven-3.9.15/9925cc1d/bin/mvn`
+- Suites: `mvn -f microservices/pom.xml -pl <module> test -Dschema.registry.skip=true -Dapi.version=1.44`
+  (Docker Engine 29 needs the api.version flag; wrap long runs in `caffeinate -dims`).
+- Platform rebuild after avsc changes:
   `mvn -f platform/pom.xml -pl platform-event-contracts install -DskipTests -Dschema.registry.skip=true`
-- Event rules: canonical .avsc + pom `<subjects>` + compat test + event-catalog row; outbox
-  publish; inbox dedup INSIDE handler tx (InboxBehavior); every new @KafkaListener gets its OWN
-  groupId and filters on the eventType header; Avro changes additive nullable-with-default only.
-- Thermal constraint (machine overheats and sleeps): code with the stack DOWN, one contiguous
-  stack-up window for live verification, wrap long live commands in `caffeinate -dims`,
-  `make infra-down` immediately after. Docker Desktop is started manually by the user.
-- `infra/docker/.env` has `PSP_MOCK_FORCE_OUTCOME=SUCCESS` (deterministic saga polling).
-- Commit after EVERY feature (user instruction), conventional messages, do not push until asked.
-
-## Where everything is specified
-
-- Approved plan: `~/.claude/plans/i-want-to-test-shimmying-hippo.md`
-- Working checklist: `docs/tasks/todo.md` (kept current through 24.2)
-- Sprint status: [README.md](README.md) (5/8) + `docs/tasks/STATUS.md` sprint-24 row
-- Audit that defined the gaps: `docs/tasks/sprint-14-testing-and-hardening/14.6-post-sprint21-e2e-retest.md`
-  (E2E baseline) + the conversation's PDF audit (summarized in the sprint README Objective)
+- New consumers: own groupId + fail-closed eventType header filter + IdempotentRequest command
+  dedup (InboxBehavior); never manual firstSeen; never the record key when the aggregate can
+  emit the same event type twice.
+- In tests a `@MockitoBean InboxService` silently skips every IdempotentRequest (firstSeen
+  defaults false) - use the real inbox or seed state directly.
+- `infra/docker/.env` has `PSP_MOCK_FORCE_OUTCOME=SUCCESS`. Commit per feature, no emojis.

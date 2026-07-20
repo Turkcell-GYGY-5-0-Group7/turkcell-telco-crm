@@ -53,7 +53,8 @@ version carried by the schema. Debezium routes on the outbox `aggregate_type` co
 | `subscription.activated.v1` | subscription-service | order, billing, notification | Subscription activated. |
 | `subscription.suspended.v1` | subscription-service | billing, notification | Subscription suspended (non-payment). |
 | `subscription.terminated.v1` | subscription-service | billing, notification | Subscription terminated. |
-| `subscription.activation-failed.v1` | subscription-service | payment, order, notification | Subscription activation failed; triggers saga compensation. |
+| `subscription.activation-failed.v1` | subscription-service | payment, order, notification | Subscription activation failed; triggers saga compensation. Also reused (documented reuse, Sprint 24 design-note D2) when a PLAN_CHANGE order's changeTariff fails, so the existing refund/cancel compensation runs with zero new consumers. |
+| `subscription.tariff-changed.v1` | subscription-service | usage, billing, order | PLAN_CHANGE order switched the subscription's tariff (Sprint 24 feature 24.4, design-note D2). usage-service re-provisions the current period's quota to the new allowances; billing-service updates the billing record's tariffCode; order-service fulfills the PLAN_CHANGE order. Third event type on `subscription.events` - eventType-header filtering and per-listener group ids are mandatory. |
 | `usage.recorded.v1` | usage-service | - | Usage applied to quota. |
 | `quota.threshold-reached.v1` | usage-service | notification | 80% usage threshold reached. |
 | `quota.exceeded.v1` | usage-service | billing, notification | 100% usage reached; overage begins. |
