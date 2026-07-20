@@ -242,33 +242,17 @@ class CustomerIntegrationTest {
     }
 
     @Test
-    void registration_and_update_persist_and_return_contact_info() {
+    void update_persists_and_returns_contact_info() {
         ResponseEntity<Map<String, Object>> registered = client.post()
                 .uri("/api/v1/customers")
                 .header("Authorization", "Bearer " + customerToken)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body("""
-                        {
-                            "type": "INDIVIDUAL",
-                            "firstName": "Ada",
-                            "lastName": "Lovelace",
-                            "identityNumber": "%s",
-                            "dateOfBirth": "1990-01-01",
-                            "email": "ada@example.com",
-                            "phone": "+905321112233"
-                        }
-                        """.formatted(VALID_TCKN))
+                .body(registerBody("Ada", "Lovelace", VALID_TCKN))
                 .retrieve()
                 .toEntity(MAP_TYPE);
 
         assertThat(registered.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(data(registered).get("email")).isEqualTo("ada@example.com");
-        assertThat(data(registered).get("phone")).isEqualTo("+905321112233");
         String id = data(registered).get("id").toString();
-
-        String storedEmail = jdbc.queryForObject(
-                "SELECT email FROM customers WHERE id = CAST(? AS uuid)", String.class, id);
-        assertThat(storedEmail).isEqualTo("ada@example.com");
 
         ResponseEntity<Map<String, Object>> updated = client.put()
                 .uri("/api/v1/customers/{id}", id)
@@ -289,25 +273,36 @@ class CustomerIntegrationTest {
         assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(data(updated).get("email")).isEqualTo("countess@example.com");
         assertThat(data(updated).get("phone")).isEqualTo("+905329998877");
+
+        String storedEmail = jdbc.queryForObject(
+                "SELECT email FROM customers WHERE id = CAST(? AS uuid)", String.class, id);
+        assertThat(storedEmail).isEqualTo("countess@example.com");
     }
 
     @Test
-    void registration_with_malformed_contact_info_returns_400() {
-        ResponseEntity<String> response = client.post()
+    void update_with_malformed_contact_info_returns_400() {
+        ResponseEntity<Map<String, Object>> registered = client.post()
                 .uri("/api/v1/customers")
                 .header("Authorization", "Bearer " + customerToken)
                 .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Ada", "Lovelace", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        String id = data(registered).get("id").toString();
+
+        ResponseEntity<String> response = client.put()
+                .uri("/api/v1/customers/{id}", id)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
                 .body("""
                         {
-                            "type": "INDIVIDUAL",
                             "firstName": "Ada",
                             "lastName": "Lovelace",
-                            "identityNumber": "%s",
                             "dateOfBirth": "1990-01-01",
                             "email": "not-an-email",
                             "phone": "not-a-phone"
                         }
-                        """.formatted(VALID_TCKN))
+                        """)
                 .retrieve()
                 .toEntity(String.class);
 

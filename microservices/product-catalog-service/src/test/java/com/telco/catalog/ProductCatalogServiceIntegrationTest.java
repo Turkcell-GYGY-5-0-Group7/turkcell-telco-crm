@@ -362,111 +362,6 @@ class ProductCatalogServiceIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
-    @Test
-    void admin_creates_addon_linked_to_tariff_and_list_filter_returns_it_with_allowances() {
-        createTariff("ADDON-PLAN-1");
-
-        ResponseEntity<Map<String, Object>> created = client.post()
-                .uri("/api/v1/addons")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(validCreateAddonJson("IT_DATA_2GB", "ADDON-PLAN-1"))
-                .retrieve()
-                .toEntity(MAP_TYPE);
-
-        assertThat(created.getStatusCode()).isEqualTo(HttpStatus.CREATED);
-        assertThat(created.getBody().get("success")).isEqualTo(true);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) created.getBody().get("data");
-        assertThat(data.get("code")).isEqualTo("IT_DATA_2GB");
-        assertThat(data.get("status")).isEqualTo("ACTIVE");
-        assertThat(data.get("dataMb")).isEqualTo(2048);
-        assertThat(data.get("id")).isNotNull();
-
-        ResponseEntity<Map<String, Object>> list = client.get()
-                .uri("/api/v1/addons?tariffCode=ADDON-PLAN-1")
-                .header("Authorization", "Bearer " + customerToken)
-                .retrieve()
-                .toEntity(MAP_TYPE);
-
-        assertThat(list.getStatusCode()).isEqualTo(HttpStatus.OK);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> pageData = (Map<String, Object>) list.getBody().get("data");
-        @SuppressWarnings("unchecked")
-        java.util.List<Map<String, Object>> content =
-                (java.util.List<Map<String, Object>>) pageData.get("content");
-        assertThat(content).hasSize(1);
-        assertThat(content.get(0).get("code")).isEqualTo("IT_DATA_2GB");
-        assertThat(content.get(0).get("dataMb")).isEqualTo(2048);
-    }
-
-    @Test
-    void non_admin_cannot_create_addon_returns_403() {
-        ResponseEntity<String> response = client.post()
-                .uri("/api/v1/addons")
-                .header("Authorization", "Bearer " + customerToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(validCreateAddonJson("FORBIDDEN_ADDON", null))
-                .retrieve()
-                .toEntity(String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
-    }
-
-    @Test
-    void duplicate_addon_code_against_seeded_catalog_returns_422() {
-        // VAS_CALLERTUNE is seeded by V2__addon_management.sql, so re-creating it must hit the
-        // duplicate-code business rule.
-        ResponseEntity<Map<String, Object>> response = client.post()
-                .uri("/api/v1/addons")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(validCreateAddonJson("VAS_CALLERTUNE", null))
-                .retrieve()
-                .toEntity(MAP_TYPE);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(422));
-    }
-
-    @Test
-    void addon_creation_with_unknown_tariff_code_returns_422() {
-        ResponseEntity<Map<String, Object>> response = client.post()
-                .uri("/api/v1/addons")
-                .header("Authorization", "Bearer " + adminToken)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(validCreateAddonJson("ORPHAN_ADDON", "NO-SUCH-TARIFF"))
-                .retrieve()
-                .toEntity(MAP_TYPE);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatusCode.valueOf(422));
-    }
-
-    @Test
-    void seeded_addon_snapshot_requires_no_auth_and_returns_allowances() {
-        ResponseEntity<Map<String, Object>> response = client.get()
-                .uri("/internal/addons/DATA_5GB/snapshot")
-                .retrieve()
-                .toEntity(MAP_TYPE);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> data = (Map<String, Object>) response.getBody().get("data");
-        assertThat(data.get("code")).isEqualTo("DATA_5GB");
-        assertThat(data.get("type")).isEqualTo("DATA");
-        assertThat(data.get("dataMb")).isEqualTo(5120);
-        assertThat(data.get("validityDays")).isEqualTo(30);
-    }
-
-    @Test
-    void unknown_addon_snapshot_returns_404() {
-        ResponseEntity<String> response = client.get()
-                .uri("/internal/addons/NONEXISTENT/snapshot")
-                .retrieve()
-                .toEntity(String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-    }
-
     // --- helpers ---
 
     private ResponseEntity<Map<String, Object>> createTariff(String code) {
@@ -489,26 +384,6 @@ class ProductCatalogServiceIntegrationTest {
                 new BigDecimal("49.99"), "TRY", 500, 100, 10240, null,
                 Instant.parse("2026-01-01T00:00:00Z"), null);
         return tariffRepository.save(tariff);
-    }
-
-    /**
-     * Valid addon creation body. When {@code tariffCode} is null, no tariff links are requested;
-     * otherwise the addon is linked to that single tariff code.
-     */
-    private static String validCreateAddonJson(String code, String tariffCode) {
-        String links = tariffCode == null ? "[]" : "[\"%s\"]".formatted(tariffCode);
-        return """
-                {
-                  "code": "%s",
-                  "name": "Test Addon %s",
-                  "price": 29.90,
-                  "currency": "TRY",
-                  "type": "DATA",
-                  "validityDays": 30,
-                  "dataMb": 2048,
-                  "applicableTariffCodes": %s
-                }
-                """.formatted(code, code, links);
     }
 
     private static String validCreateTariffJson(String code) {

@@ -55,10 +55,7 @@ public class SubscriberBillingRecord {
         return r;
     }
 
-    /**
-     * Records a plan change so the next bill run charges the new tariff's fee (Sprint 24 Feature
-     * 24.4, design-note D2).
-     */
+    /** Applies a plan change (FR-09): next bill-run prices from the new tariff code (FR-08 mirror). */
     public void changeTariff(String newTariffCode) {
         this.tariffCode = newTariffCode;
         this.updatedAt = Instant.now();

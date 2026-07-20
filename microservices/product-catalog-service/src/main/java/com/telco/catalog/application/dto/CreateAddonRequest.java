@@ -4,17 +4,15 @@ import com.telco.catalog.domain.model.AddonType;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
-import java.util.Set;
 
 /**
- * HTTP request body for creating an addon (POST /api/v1/addons). Allowance fields are optional
- * and type-dependent; {@code applicableTariffCodes} links the addon to existing tariffs.
+ * HTTP request body for creating an addon (FR-05, POST /api/v1/addons, ADMIN only). Allowance
+ * fields are optional and type-dependent.
  */
 public record CreateAddonRequest(
 
@@ -27,7 +25,7 @@ public record CreateAddonRequest(
         @NotNull @DecimalMin("0.00")
         BigDecimal price,
 
-        @NotBlank @Size(min = 3, max = 3) @Pattern(regexp = "[A-Z]{3}")
+        @NotBlank @Size(min = 3, max = 3)
         String currency,
 
         @NotNull
@@ -43,8 +41,6 @@ public record CreateAddonRequest(
         Long voiceMinutes,
 
         @PositiveOrZero
-        Long smsCount,
-
-        Set<String> applicableTariffCodes
+        Long smsCount
 ) {
 }

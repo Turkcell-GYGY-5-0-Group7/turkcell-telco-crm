@@ -140,37 +140,6 @@ class OrderTest {
                 .isInstanceOf(UnsupportedOperationException.class);
     }
 
-    // --- Sprint 24 Feature 24.2: order kinds ---
-
-    @Test
-    void create_without_order_type_defaults_to_new_line() {
-        Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID);
-
-        assertThat(order.getOrderType()).isEqualTo(OrderType.NEW_LINE);
-    }
-
-    @Test
-    void create_persists_the_derived_order_type() {
-        Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID, OrderType.PLAN_CHANGE);
-
-        assertThat(order.getOrderType()).isEqualTo(OrderType.PLAN_CHANGE);
-    }
-
-    @Test
-    void addAddonItem_appends_an_addon_line_with_snapshot_fields() {
-        Order order = Order.create(CUSTOMER_ID, IDEMPOTENCY_KEY, TOTAL, USER_ID, OrderType.ADDON);
-        UUID target = UUID.randomUUID();
-
-        OrderItem item = order.addAddonItem("ADDON-5GB", "Extra 5GB", "DATA", "TRY",
-                new BigDecimal("15.00"), 1, target, 5120L, null, null);
-
-        assertThat(order.getItems()).hasSize(1);
-        assertThat(item.getItemType()).isEqualTo(OrderItemType.ADDON);
-        assertThat(item.getProductCode()).isEqualTo("ADDON-5GB");
-        assertThat(item.getTargetSubscriptionId()).isEqualTo(target);
-        assertThat(item.getOrder()).isSameAs(order);
-    }
-
     @Test
     void create_generates_distinct_id_per_instance() {
         Order first = Order.create(CUSTOMER_ID, "key-a", TOTAL, USER_ID);

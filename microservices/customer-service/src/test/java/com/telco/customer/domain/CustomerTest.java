@@ -15,7 +15,7 @@ class CustomerTest {
 
     private static Customer pendingCustomer() {
         return Customer.register(CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146",
-                LocalDate.of(1990, 1, 1), null, null);
+                LocalDate.of(1990, 1, 1));
     }
 
     @Test
@@ -55,14 +55,13 @@ class CustomerTest {
     }
 
     @Test
-    void updateProfileReplacesContactInfo() {
-        Customer customer = Customer.register(CustomerType.INDIVIDUAL, "Ada", "Lovelace",
-                "10000000146", LocalDate.of(1990, 1, 1), "ada@example.com", "+905321112233");
+    void updateContactReplacesContactInfo() {
+        Customer customer = pendingCustomer();
+        customer.updateContact("ada@example.com", "+905321112233");
         assertEquals("ada@example.com", customer.getEmail());
         assertEquals("+905321112233", customer.getPhone());
 
-        customer.updateProfile("Ada", "Lovelace", LocalDate.of(1990, 1, 1),
-                "countess@example.com", null);
+        customer.updateContact("countess@example.com", null);
 
         assertEquals("countess@example.com", customer.getEmail());
         assertNull(customer.getPhone());

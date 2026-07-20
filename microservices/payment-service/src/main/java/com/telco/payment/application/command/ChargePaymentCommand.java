@@ -54,13 +54,6 @@ public record ChargePaymentCommand(
         UUID invoiceId,
 
         /**
-         * How the customer pays (FR-25). Nullable: the handler defaults a {@code null} method to
-         * {@link PaymentMethod#CREDIT_CARD}. Label only in the MVP - the mock PSP ignores it
-         * (Sprint 24 design-note D6).
-         */
-        PaymentMethod method,
-
-        /**
          * Idempotency key, typically derived from {@code orderId}. A stable key ensures that
          * duplicate Kafka deliveries of {@code order.created.v1} do not double-charge the customer.
          */
@@ -73,9 +66,21 @@ public record ChargePaymentCommand(
          * handler rollback re-arms redelivery. Must be non-null and stable per logical message.
          */
         @NotBlank @Size(max = 255)
-        String messageId
+        String messageId,
+
+        /**
+         * Settlement method (FR-25). Nullable - saga-path and legacy callers omit it and default
+         * to {@link PaymentMethod#CREDIT_CARD} in the {@link com.telco.payment.domain.Payment} factory.
+         */
+        PaymentMethod method
 
 ) implements Command<PaymentResponse>, IdempotentRequest {
+
+    /** Legacy shape without a method - defaults to CREDIT_CARD. Keeps saga consumers unchanged. */
+    public ChargePaymentCommand(UUID orderId, UUID customerId, BigDecimal amount, UUID invoiceId,
+                                String paymentRequestId, String messageId) {
+        this(orderId, customerId, amount, invoiceId, paymentRequestId, messageId, null);
+    }
 
     @Override
     public String idempotencyKey() {

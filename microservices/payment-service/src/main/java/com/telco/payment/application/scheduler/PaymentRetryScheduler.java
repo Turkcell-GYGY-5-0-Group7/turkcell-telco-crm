@@ -153,9 +153,9 @@ public class PaymentRetryScheduler {
                     payment.getCustomerId(),
                     payment.getAmount(),
                     payment.getInvoiceId(),
-                    payment.getMethod(),
                     payment.getPaymentRequestId(),
-                    retryMessageId));
+                    retryMessageId,
+                    payment.getMethod()));
         } catch (Exception e) {
             // Non-fatal: next run will try again if still within the retry window.
             LOGGER.warn("Retry dispatch failed for payment id={}: {}", payment.getId(), e.getMessage());

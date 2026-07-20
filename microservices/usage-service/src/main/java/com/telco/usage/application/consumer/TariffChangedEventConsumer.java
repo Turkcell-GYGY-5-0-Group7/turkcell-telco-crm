@@ -102,11 +102,9 @@ public class TariffChangedEventConsumer {
     record TariffChangedPayload(
             String subscriptionId,
             String customerId,
-            String msisdn,
-            String previousTariffCode,
-            String newTariffCode,
-            int newTariffVersion,
             String orderId,
+            String oldTariffCode,
+            String newTariffCode,
             long changedAt
     ) {
     }

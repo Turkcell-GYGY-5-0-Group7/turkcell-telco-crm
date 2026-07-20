@@ -31,6 +31,10 @@ public class TemplateSeeder implements CommandLineRunner {
                         + " Purchase a data add-on or upgrade your package to continue.");
         seed("TICKET_OPENED", "SMS", "en", "Support Ticket Created",
                 "Your support ticket {{ticketId}} has been created. Team {{assignedTeam}} will assist you.");
+        // Internal ops/security alert (Feature 23.4.3, OPS_ALERT channel) - not customer-facing.
+        seed("FRAUD_CASE_OPENED", "OPS_ALERT", "en", "Fraud case opened",
+                "Fraud case {{caseId}} opened for customer {{customerId}} (severity {{severity}}). "
+                        + "Review required.");
     }
 
     private void seed(String code, String channel, String locale, String subject, String body) {

@@ -52,7 +52,9 @@ public class OrderController {
                 request.customerId(),
                 idempotencyKey,
                 request.items(),
-                authentication.getName()
+                authentication.getName(),
+                request.orderType(),
+                request.subscriptionId()
         );
         return responses.ok(mediator.send(command));
     }

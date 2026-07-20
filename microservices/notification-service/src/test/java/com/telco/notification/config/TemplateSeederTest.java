@@ -36,7 +36,7 @@ class TemplateSeederTest {
         new TemplateSeeder(repo).run();
 
         ArgumentCaptor<NotificationTemplate> captor = ArgumentCaptor.forClass(NotificationTemplate.class);
-        verify(repo, times(7)).save(captor.capture());
+        verify(repo, times(8)).save(captor.capture());
         assertThat(captor.getAllValues())
                 .anySatisfy(t -> {
                     assertThat(t.getCode()).isEqualTo("QUOTA_EXCEEDED");

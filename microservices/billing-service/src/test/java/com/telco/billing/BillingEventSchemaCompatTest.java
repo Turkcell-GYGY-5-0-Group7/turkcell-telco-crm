@@ -38,11 +38,7 @@ class BillingEventSchemaCompatTest {
                 new SchemaCase("com.telco.platform.events.invoice.InvoicePaidV1",
                         "com.telco.billing.application.handler.MarkInvoicePaidCommandHandler$InvoicePaidEvent"),
                 new SchemaCase("com.telco.platform.events.invoice.InvoiceOverdueV1",
-                        "com.telco.billing.application.handler.MarkInvoicesOverdueCommandHandler$InvoiceOverdueEvent"),
-                new SchemaCase("com.telco.platform.events.addon.AddonPurchasedV1",
-                        "com.telco.billing.infrastructure.consumer.AddonPurchasedBillingConsumer$AddonPurchasedPayload"),
-                new SchemaCase("com.telco.platform.events.subscription.SubscriptionTariffChangedV1",
-                        "com.telco.billing.infrastructure.consumer.TariffChangedBillingConsumer$TariffChangedPayload"));
+                        "com.telco.billing.application.handler.MarkInvoicesOverdueCommandHandler$InvoiceOverdueEvent"));
     }
 
     @ParameterizedTest(name = "{0}")

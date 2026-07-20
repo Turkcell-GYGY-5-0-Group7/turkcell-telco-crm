@@ -54,8 +54,7 @@ public class CustomerController {
     public ApiResult<CustomerResponse> register(@Valid @RequestBody RegisterCustomerRequest request) {
         return responses.ok(mediator.send(new RegisterCustomerCommand(
                 request.type(), request.firstName(), request.lastName(),
-                request.identityNumber(), request.dateOfBirth(), request.email(), request.phone(),
-                resolveRegisteredByUserId())));
+                request.identityNumber(), request.dateOfBirth(), resolveRegisteredByUserId())));
     }
 
     /**

@@ -40,7 +40,7 @@ class DeleteCustomerCommandHandlerTest {
 
     private Customer aCustomer() {
         return Customer.register(CustomerType.INDIVIDUAL, "Grace", "Hopper", "10000000146",
-                LocalDate.of(1985, 5, 5), null, null);
+                LocalDate.of(1985, 5, 5));
     }
 
     @Test

@@ -82,26 +82,21 @@ public class Subscription {
     }
 
     /**
-     * Switches this subscription to a new tariff (FR-09 package change, Sprint 24 Feature 24.4,
-     * design-note D2). Guarded ACTIVE-only: a suspended or terminated subscription cannot change
-     * plans. The new version is the catalog version pinned on the PLAN_CHANGE order's snapshot at
-     * order-creation time. Changing to the tariff already in place raises
-     * {@link BusinessRuleException} (the order validation rejects it upfront; this guard keeps the
-     * aggregate self-consistent).
+     * Changes the tariff on an ACTIVE subscription (FR-09, plan-change order). Returns the previous
+     * tariff code for the {@code subscription.tariff-changed.v1} event. The tariff-version snapshot
+     * is left untouched: it pins the catalog version at activation; per-cycle pricing comes from
+     * billing's tariff-price mirror keyed by code. Re-applying the same code is a harmless no-op
+     * (inbox dedup is the first line of defense on redelivery).
      */
-    public void changeTariff(String newTariffCode, int newTariffVersion) {
+    public String changeTariff(String newTariffCode) {
         if (this.status != SubscriptionStatus.ACTIVE) {
             throw new BusinessRuleException(
                     "Cannot change tariff of subscription in status: " + this.status.name()
                             + ". Only ACTIVE subscriptions may change tariff.");
         }
-        Objects.requireNonNull(newTariffCode, "newTariffCode");
-        if (newTariffCode.equals(this.tariffCode)) {
-            throw new BusinessRuleException(
-                    "Subscription is already on tariff " + newTariffCode);
-        }
-        this.tariffCode = newTariffCode;
-        this.tariffVersion = newTariffVersion;
+        String oldTariffCode = this.tariffCode;
+        this.tariffCode = Objects.requireNonNull(newTariffCode, "newTariffCode");
+        return oldTariffCode;
     }
 
     /**

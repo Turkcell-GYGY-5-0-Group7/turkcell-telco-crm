@@ -38,14 +38,17 @@ kexec() {
   kubectl -n "$NAMESPACE" exec -i "$VAULT_POD" -- env VAULT_TOKEN="$VAULT_ROOT_TOKEN" "$@"
 }
 
-# 13 services from deploy/helm/values/*.yaml (deploy/helm/README.md "Config /
+# 16 services from deploy/helm/values/*.yaml (deploy/helm/README.md "Config /
 # Secret model": every one of them consumes at least EUREKA_PASSWORD today).
 SERVICES=(
   api-gateway
   billing-service
+  campaign-service
   config-server
   customer-service
   discovery-server
+  dispute-service
+  fraud-service
   identity-service
   notification-service
   order-service

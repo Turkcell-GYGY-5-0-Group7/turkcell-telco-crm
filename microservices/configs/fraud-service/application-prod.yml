@@ -1,0 +1,6 @@
+# fraud-service prod overrides. Credentials injected via Kubernetes Secrets / Vault.
+spring:
+  datasource:
+    url: ${FRAUD_DB_URL}
+    username: ${FRAUD_DB_USER}
+    password: ${FRAUD_DB_PASSWORD}

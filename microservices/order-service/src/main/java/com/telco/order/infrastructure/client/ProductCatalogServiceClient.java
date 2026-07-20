@@ -30,7 +30,7 @@ public class ProductCatalogServiceClient {
     private static final Logger log = LoggerFactory.getLogger(ProductCatalogServiceClient.class);
     private static final ParameterizedTypeReference<ApiResult<TariffClientResponse>> RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
-    private static final ParameterizedTypeReference<ApiResult<AddonSnapshotClientResponse>> ADDON_RESPONSE_TYPE =
+    private static final ParameterizedTypeReference<ApiResult<AddonClientResponse>> ADDON_RESPONSE_TYPE =
             new ParameterizedTypeReference<>() {};
 
     private final RestClient restClient;
@@ -74,35 +74,32 @@ public class ProductCatalogServiceClient {
     }
 
     /**
-     * Fetches the addon pricing/allowance snapshot for an ADDON order item (Sprint 24 Features
-     * 24.1/24.2) from the tokenless {@code GET /internal/addons/{code}/snapshot} endpoint. Throws
-     * {@link ResourceNotFoundException} (404) if the addon does not exist or is not ACTIVE, or
-     * {@link DependencyFailureException} (502/503) on circuit-open or unexpected failure -
-     * fail-closed like {@link #getTariff}: an addon is mandatory pricing data.
+     * Validates an addon exists and returns its price details (FR-09, ADDON orders). Same
+     * error/circuit-breaker contract as {@link #getTariff(UUID)}.
      */
-    public AddonSnapshotClientResponse getAddonSnapshot(String code) {
+    public AddonClientResponse getAddon(String addonCode) {
         try {
             return CircuitBreaker.decorateCallable(circuitBreaker, () -> {
-                ApiResult<AddonSnapshotClientResponse> result = restClient.get()
-                        .uri("/internal/addons/{code}/snapshot", code)
+                ApiResult<AddonClientResponse> result = restClient.get()
+                        .uri("/internal/addons/{code}", addonCode)
                         .retrieve()
                         .body(ADDON_RESPONSE_TYPE);
-                if (result == null || !result.success() || result.data() == null) {
+                if (result == null || !result.success()) {
                     throw new DependencyFailureException(
-                            "Unexpected response from product-catalog-service for addon code: " + code, null);
+                            "Unexpected response from product-catalog-service for addonCode: " + addonCode, null);
                 }
                 return result.data();
             }).call();
         } catch (CallNotPermittedException e) {
-            log.warn("product-catalog-service circuit breaker OPEN for addon code={}", code);
+            log.warn("product-catalog-service circuit breaker OPEN for addonCode={}", addonCode);
             throw new DependencyFailureException("product-catalog-service is currently unavailable", e);
         } catch (HttpClientErrorException.NotFound e) {
-            throw new ResourceNotFoundException("Addon not found: " + code);
+            throw new ResourceNotFoundException("Addon not found: " + addonCode);
         } catch (DependencyFailureException | ResourceNotFoundException e) {
             throw e;
         } catch (Exception e) {
-            log.error("Failed to call product-catalog-service for addon code={}", code, e);
-            throw new DependencyFailureException("Failed to validate addon: " + code, e);
+            log.error("Failed to call product-catalog-service for addonCode={}", addonCode, e);
+            throw new DependencyFailureException("Failed to validate addon: " + addonCode, e);
         }
     }
 }

@@ -881,6 +881,41 @@ services:
       retries: 15
       start_period: 90s
 
+  # dispute-service (Sprint 22, port 9012). Domain Orchestration. Uses MinIO for
+  # dispute evidence objects in addition to its own dispute_db (ADR-006).
+  dispute-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/dispute-service/Dockerfile
+    image: telco-dispute-service:local
+    container_name: telco-dispute-service
+    ports:
+      - "${DISPUTE_SERVICE_PORT:-9012}:9012"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9012/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
+  # fraud-service (Sprint 23, port 9013). CQRS + Mediator, own fraud_db.
+  fraud-service:
+    <<: *app-common
+    build:
+      context: ../../
+      dockerfile: microservices/fraud-service/Dockerfile
+    image: telco-fraud-service:local
+    container_name: telco-fraud-service
+    ports:
+      - "${FRAUD_SERVICE_PORT:-9013}:9013"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9013/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 90s
+
   # ---------------------------------------------------------------------------
   # web-bff (apps profile, port 9020). Simple Service Layer, fully stateless:
   # no Postgres, no Kafka, no Redis - its single egress is the API gateway over

@@ -84,6 +84,14 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Real Kafka broker for DisputeConsumersIntegrationTest (Sprint 22 Feature 22.6.3) -
+             proves the three dispute inbox consumers against a real dispute.events round trip. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>kafka</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Shared Testcontainers Redis harness (feature 17.2.1), reused by the bill-run's
              multi-instance concurrency test (feature 17.4.2) instead of duplicating setup. -->
         <dependency>

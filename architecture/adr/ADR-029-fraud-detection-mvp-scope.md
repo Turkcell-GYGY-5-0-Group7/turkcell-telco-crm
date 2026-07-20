@@ -1,7 +1,8 @@
 # ADR-029 Fraud Detection MVP Scope (SIM-Swap, Rule-Based)
 
-Status: Proposed
+Status: Accepted
 Date: 2026-07-11
+Ratified: 2026-07-17 (tech-lead, with Amendments 1-3 below; gates Sprint 23 build work)
 
 ---
 
@@ -19,6 +20,8 @@ The platform does, however, already publish the domain events needed to detect t
 of SIM-swap abuse - rapid MSISDN release/reallocation and unusual subscription-suspend/reactivate
 cycling - via `msisdn.allocated.v1`, `msisdn.released.v1`, `subscription.activated.v1`, and
 `subscription.suspended.v1` (all produced by subscription-service today, per `event-catalog.md`).
+Note (Amendment 1): `msisdn.released.v1` does not currently carry `customerId`, which
+`MSISDN_CHURN_VELOCITY` keys on; see Section 4.
 
 ## Decision
 
@@ -71,20 +74,38 @@ A fixed, small set of rule *codes* with admin-configurable thresholds - not a bo
 engine (that would be over-engineering for this phase):
 
 - `RAPID_SIM_SWAP`: `msisdn.released.v1` followed by `msisdn.allocated.v1` for the same MSISDN,
-  reassigned to a different SimCard/subscription, within a short window (default 15 minutes).
+  reassigned to a different `subscriptionId`, within a short window (default 15 minutes). (Amendment 2:
+  neither event carries a SimCard/ICCID identifier; `subscriptionId` is the only observable
+  re-assignment key and is the correct proxy, since MSISDN allocation is bound to a subscription at
+  activation.)
 - `MSISDN_CHURN_VELOCITY`: more than N (default 3) allocate/release cycles for the same `customerId`
   within a rolling 24-hour window.
-- `SUSPEND_REACTIVATE_VELOCITY` (second priority): unusual `subscription.suspended.v1` /
-  `subscription.activated.v1` cycling for the same subscription within a short window.
+- `SUSPEND_REACTIVATE_VELOCITY` (included this phase): unusual `subscription.suspended.v1` /
+  `subscription.activated.v1` cycling for the same subscription within a short window. Evaluation
+  SHOULD exclude `reason=NON_PAYMENT` suspensions (field present on `subscription.suspended.v1`) to
+  suppress legitimate dunning-cycle false positives (Amendment 3).
+
+Data dependency (Amendment 1): `MSISDN_CHURN_VELOCITY` keys on `customerId`, but `msisdn.released.v1`
+does not currently carry it. This ADR requires adding `customerId` to `msisdn.released.v1` as a
+BACKWARD-compatible nullable union (`["null","string"]`, default null), populated by
+subscription-service's `TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()`
+(already in scope) - mirroring the `orderId` nullable-union precedent in `subscription.activated.v1`
+and the `customerId` addition to `quota.threshold-reached.v1` (event-catalog.md 2026-07-04). This
+producer change is a prerequisite subtask of Sprint 23 (Feature 23.2). As defensive resilience,
+fraud-service SHOULD also resolve a release's `customerId` by joining to the most recent prior
+`MSISDN_ALLOCATED` signal for the same `msisdn` in `MsisdnLifecycleSignal` when the field is absent
+(covering events published before the field landed); releases with no known prior allocation are
+excluded from the velocity count.
 
 ### 5. Response model: detect and alert, no automated hold by default
 
 ADVANCED.md Section 4.4's "high-risk actions step up auth or hold" is explicitly **not** implemented
 automatically in this phase. fraud-service publishes `fraud.signal-raised.v1` (every rule hit) and
 `fraud.case-opened.v1` (escalated cases); ticket-service consumes `fraud.case-opened.v1` and
-auto-opens a linked ticket for agent review, reusing its existing SLA/assignment machinery (the same
-reuse pattern used by ADR-028's dispute-service -> ticket-service integration) rather than fraud-service
-reinventing case-management workflow. Any account suspension remains a manual agent action via
+auto-opens a linked ticket for agent review, reusing ticket-service's existing `OpenTicketCommandHandler`
+and `SlaPolicy` machinery via a new inbox consumer (the pattern ADR-028 also specifies for
+dispute-service; both consumers are new work - ticket-service has no event consumer today) rather than
+fraud-service reinventing case-management workflow. Any account suspension remains a manual agent action via
 subscription-service's existing `POST /api/v1/subscriptions/{id}/suspend` endpoint. Automating the
 hold is deferred until detection precision is proven, to avoid false-positive-driven customer harm.
 

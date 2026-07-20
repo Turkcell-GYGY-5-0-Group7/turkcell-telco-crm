@@ -85,10 +85,8 @@ class TariffChangedConsumerTest {
                                                                long offset, String eventType) {
         String json = "{\"subscriptionId\":\"" + subscriptionId + "\","
                 + "\"customerId\":\"" + UUID.randomUUID() + "\","
-                + "\"msisdn\":\"905320000001\","
-                + "\"previousTariffCode\":\"TARIFF_BASIC\","
+                + "\"oldTariffCode\":\"TARIFF_BASIC\","
                 + "\"newTariffCode\":\"TARIFF_PLUS\","
-                + "\"newTariffVersion\":2,"
                 + "\"orderId\":\"" + orderId + "\","
                 + "\"changedAt\":" + CHANGED_AT + "}";
         // Record key mirrors production: the outbox aggregate_id, i.e. the SUBSCRIPTION id.

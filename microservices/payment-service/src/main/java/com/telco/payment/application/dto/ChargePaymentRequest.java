@@ -2,6 +2,7 @@ package com.telco.payment.application.dto;
 
 import com.telco.payment.domain.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -20,12 +21,7 @@ public record ChargePaymentRequest(
         @NotNull @DecimalMin("0.01")
         BigDecimal amount,
 
-        /**
-         * Idempotency key (back-compat). Optional since Sprint 24: the standard
-         * {@code Idempotency-Key} header (PDF Section 12) wins when present; the controller
-         * rejects the request when NEITHER the header nor this field is supplied.
-         */
-        @Size(max = 64)
+        @NotBlank @Size(max = 64)
         String paymentRequestId,
 
         /**
@@ -37,9 +33,8 @@ public record ChargePaymentRequest(
         UUID invoiceId,
 
         /**
-         * How the customer pays (FR-25). Optional: {@code null} defaults to
-         * {@link PaymentMethod#CREDIT_CARD} in the handler. Label only in the MVP - the mock PSP
-         * ignores the method (Sprint 24 design-note D6).
+         * Settlement method (FR-25): CREDIT_CARD, BANK_TRANSFER, or WALLET.
+         * Optional - omitting it defaults to CREDIT_CARD.
          */
         PaymentMethod method
 ) {

@@ -1,0 +1,48 @@
+{
+  "type": "record",
+  "name": "FraudSignalRaisedV1",
+  "namespace": "com.telco.platform.events.fraud",
+  "doc": "Emitted for every fraud-rule hit (fraud.signal-raised.v1). Producer: fraud-service (ADR-029 Section 5).",
+  "fields": [
+    {
+      "name": "signalId",
+      "type": "string",
+      "doc": "Unique fraud-signal identifier (UUID)."
+    },
+    {
+      "name": "ruleCode",
+      "type": "string",
+      "doc": "The FraudRuleCode that fired: RAPID_SIM_SWAP, MSISDN_CHURN_VELOCITY, or SUSPEND_REACTIVATE_VELOCITY."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer the signal is raised against (UUID)."
+    },
+    {
+      "name": "msisdn",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Mobile number implicated by the signal, when the rule is MSISDN-scoped; null for customer-scoped rules."
+    },
+    {
+      "name": "subscriptionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Subscription implicated by the signal, when observable (UUID); null when the rule keys only on customer/MSISDN."
+    },
+    {
+      "name": "severity",
+      "type": "string",
+      "doc": "FraudSeverity of the raised signal: LOW, MEDIUM, or HIGH."
+    },
+    {
+      "name": "triggeredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the signal was raised, in epoch milliseconds (UTC)."
+    }
+  ]
+}

@@ -53,7 +53,7 @@ class ChargePaymentCommandHandlerTest {
 
     private ChargePaymentCommand command(String requestId) {
         return new ChargePaymentCommand(UUID.randomUUID(), UUID.randomUUID(),
-                new BigDecimal("49.99"), null, null, requestId, "msg-" + requestId);
+                new BigDecimal("49.99"), null, requestId, "msg-" + requestId);
     }
 
     @Test
@@ -132,7 +132,7 @@ class ChargePaymentCommandHandlerTest {
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ChargePaymentCommand command = new ChargePaymentCommand(newPayment.getOrderId(),
-                newPayment.getCustomerId(), new BigDecimal("49.99"), invoiceId, null, reqId,
+                newPayment.getCustomerId(), new BigDecimal("49.99"), invoiceId, reqId,
                 "msg-" + reqId);
 
         PaymentResponse response = handler.handle(command);
@@ -155,8 +155,8 @@ class ChargePaymentCommandHandlerTest {
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         PaymentResponse response = handler.handle(new ChargePaymentCommand(
-                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("49.99"), null, method,
-                reqId, "msg-" + reqId));
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("49.99"), null,
+                reqId, "msg-" + reqId, method));
 
         assertThat(response.method()).isEqualTo(method.name());
         ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);

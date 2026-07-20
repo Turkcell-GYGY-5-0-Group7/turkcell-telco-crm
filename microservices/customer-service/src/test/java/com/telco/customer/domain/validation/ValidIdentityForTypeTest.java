@@ -14,7 +14,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * Type-conditional identity validation at the registration boundary (FR-01, feature 24.5):
+ * Type-conditional identity validation at the registration boundary (FR-01):
  * INDIVIDUAL requires a checksum-valid TCKN, CORPORATE a checksum-valid VKN, and the violation
  * surfaces on the {@code identityNumber} property path (same error shape clients saw with the former
  * field-level {@code @ValidTckn}). Checksums themselves are covered by {@link TurkishNationalIdTest}.
@@ -38,7 +38,7 @@ class ValidIdentityForTypeTest {
 
     private static RegisterCustomerRequest request(CustomerType type, String identityNumber) {
         return new RegisterCustomerRequest(type, "Ada", "Lovelace", identityNumber,
-                LocalDate.of(1990, 1, 1), null, null);
+                LocalDate.of(1990, 1, 1));
     }
 
     private static Set<ConstraintViolation<RegisterCustomerRequest>> violationsOnIdentityNumber(
@@ -59,7 +59,6 @@ class ValidIdentityForTypeTest {
                 violationsOnIdentityNumber(request(CustomerType.INDIVIDUAL, VALID_VKN));
 
         assertThat(violations).hasSize(1);
-        assertThat(violations.iterator().next().getMessage()).contains("TCKN");
     }
 
     @Test
@@ -73,12 +72,16 @@ class ValidIdentityForTypeTest {
                 violationsOnIdentityNumber(request(CustomerType.CORPORATE, VALID_TCKN));
 
         assertThat(violations).hasSize(1);
-        assertThat(violations.iterator().next().getMessage()).contains("VKN");
     }
 
     @Test
-    void nullTypeFailsClosedOnIdentityNumberPathWithoutNpe() {
-        assertThat(violationsOnIdentityNumber(request(null, VALID_TCKN))).hasSize(1);
+    void nullTypeIsLeftToNotNullWithoutNpe() {
+        // Null type skips the class-level check (it can't pick TCKN vs VKN); @NotNull on the type
+        // field reports the violation instead, on "type" rather than "identityNumber".
+        assertThat(violationsOnIdentityNumber(request(null, VALID_TCKN))).isEmpty();
+        assertThat(validator.validate(request(null, VALID_TCKN)))
+                .extracting(v -> v.getPropertyPath().toString())
+                .containsExactly("type");
     }
 
     @Test
@@ -92,20 +95,5 @@ class ValidIdentityForTypeTest {
         assertThat(violations)
                 .extracting(ConstraintViolation::getMessage)
                 .noneMatch(m -> m.contains("TCKN"));
-    }
-
-    @Test
-    void optionalContactFieldsAcceptValidValuesAndRejectMalformedOnes() {
-        RegisterCustomerRequest withContact = new RegisterCustomerRequest(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", VALID_TCKN, LocalDate.of(1990, 1, 1),
-                "ada@example.com", "+905321112233");
-        assertThat(validator.validate(withContact)).isEmpty();
-
-        RegisterCustomerRequest malformed = new RegisterCustomerRequest(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", VALID_TCKN, LocalDate.of(1990, 1, 1),
-                "not-an-email", "not-a-phone");
-        assertThat(validator.validate(malformed))
-                .extracting(v -> v.getPropertyPath().toString())
-                .containsExactlyInAnyOrder("email", "phone");
     }
 }

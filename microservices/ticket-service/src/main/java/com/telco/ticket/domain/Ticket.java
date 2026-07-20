@@ -43,6 +43,14 @@ public class Ticket {
     @Column(nullable = false)
     private String subject;
 
+    /**
+     * Optional reference to an originating record in another bounded context (e.g. the fraud
+     * {@code caseId} for a ticket auto-opened from {@code fraud.case-opened.v1}, ADR-029 Section 5).
+     * Nullable - agent-opened tickets carry none. Provides the retrievable link back to the source.
+     */
+    @Column(name = "external_ref")
+    private String externalRef;
+
     private Instant slaDueAt;
 
     private Instant slaBreachedAt;
@@ -60,13 +68,20 @@ public class Ticket {
 
     protected Ticket() {}
 
+    /** Original 6-arg form, preserved for every existing (non-dispute) caller - externalRef defaults to null. */
     public static Ticket open(UUID customerId, String category, String priority, String subject,
                                String assignedTeam, Instant slaDueAt) {
+        return open(customerId, category, priority, subject, assignedTeam, slaDueAt, null);
+    }
+
+    public static Ticket open(UUID customerId, String category, String priority, String subject,
+                               String assignedTeam, Instant slaDueAt, String externalRef) {
         var t = new Ticket();
         t.customerId = customerId;
         t.category = category;
         t.priority = priority;
         t.subject = subject;
+        t.externalRef = externalRef;
         t.status = TicketStatus.OPEN;
         t.assignedTeam = assignedTeam;
         t.slaDueAt = slaDueAt;
@@ -105,6 +120,7 @@ public class Ticket {
     public TicketStatus getStatus() { return status; }
     public String getAssignedTeam() { return assignedTeam; }
     public String getSubject() { return subject; }
+    public String getExternalRef() { return externalRef; }
     public Instant getSlaDueAt() { return slaDueAt; }
     public Instant getSlaBreachedAt() { return slaBreachedAt; }
     public Instant getCreatedAt() { return createdAt; }

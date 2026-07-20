@@ -6,18 +6,15 @@ import com.telco.platform.cqrs.Command;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
-import java.util.Set;
 
 /**
- * Creates a new addon in the catalog, optionally linked to existing tariffs by code (FR-05,
- * feature 24.1). Allowance fields are nullable and type-dependent (DATA -> dataMb,
- * MINUTES -> voiceMinutes, SMS -> smsCount, VAS -> none).
+ * Creates a new addon in the catalog (FR-05, ADMIN only). Allowance fields are nullable and
+ * type-dependent (DATA -> dataMb, MINUTES -> voiceMinutes, SMS -> smsCount, VAS -> none).
  */
 public record CreateAddonCommand(
 
@@ -30,7 +27,7 @@ public record CreateAddonCommand(
         @NotNull @DecimalMin("0.00")
         BigDecimal price,
 
-        @NotBlank @Size(min = 3, max = 3) @Pattern(regexp = "[A-Z]{3}")
+        @NotBlank @Size(min = 3, max = 3)
         String currency,
 
         @NotNull
@@ -46,9 +43,7 @@ public record CreateAddonCommand(
         Long voiceMinutes,
 
         @PositiveOrZero
-        Long smsCount,
-
-        Set<String> applicableTariffCodes
+        Long smsCount
 
 ) implements Command<AddonResponse> {
 }

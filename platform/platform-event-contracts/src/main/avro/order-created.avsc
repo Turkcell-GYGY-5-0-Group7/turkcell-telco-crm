@@ -26,8 +26,9 @@
           "fields": [
             {
               "name": "tariffId",
-              "type": "string",
-              "doc": "Identifier of the tariff ordered."
+              "type": ["null", "string"],
+              "default": null,
+              "doc": "Identifier of the tariff ordered. Null on ADDON order items (FR-09), which carry addonCode instead; BACKWARD-compatible union widening."
             },
             {
               "name": "tariffName",
@@ -56,22 +57,28 @@
               "doc": "Identifier of the campaign that discounted unitPrice, if any (Sprint 21 Feature 21.3.3, ADR-027 Decision Section 4). Null when the item was priced at the undiscounted tariff rate."
             },
             {
-              "name": "itemType",
-              "type": "string",
-              "default": "TARIFF",
-              "doc": "TARIFF or ADDON (Sprint 24 Feature 24.2, design-note D1). Defaults to TARIFF for events written before item-type generalization. For ADDON items the non-null tariffId/tariffName fields generalize to the catalog product snapshot (addon id and addon name)."
-            },
-            {
-              "name": "productCode",
+              "name": "addonCode",
               "type": ["null", "string"],
               "default": null,
-              "doc": "Catalog addon code for ADDON items (Sprint 24 Feature 24.2). Null for TARIFF items."
+              "doc": "Catalog code of the addon ordered (FR-09, ADDON orders only). Null on tariff line items."
             },
             {
-              "name": "targetSubscriptionId",
+              "name": "addonType",
               "type": ["null", "string"],
               "default": null,
-              "doc": "Existing subscription this item targets: set on standalone ADDON items and on a PLAN_CHANGE order's tariff item (Sprint 24 Feature 24.2, design-note D1/D2). Null on NEW_LINE items."
+              "doc": "Addon type snapshot (DATA, SMS, MINUTES, VAS) for ADDON orders; lets billing map VAS fees without a catalog call. Null on tariff line items."
+            },
+            {
+              "name": "tariffCode",
+              "type": ["null", "string"],
+              "default": null,
+              "doc": "Tariff code snapshot (FR-09): lets subscription-service apply a PLAN_CHANGE without a synchronous order lookup. Null on addon items and from pre-FR-09 producers."
+            },
+            {
+              "name": "currency",
+              "type": ["null", "string"],
+              "default": null,
+              "doc": "ISO 4217 currency of unitPrice (FR-09). Null from pre-FR-09 producers."
             }
           ]
         }
@@ -97,6 +104,18 @@
       "name": "occurredAt",
       "type": "string",
       "doc": "Instant the order was created, ISO-8601 (UTC)."
+    },
+    {
+      "name": "orderType",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Order type (NEW_LINE, PLAN_CHANGE, ADDON - FR-09). Null means NEW_LINE (pre-FR-09 producers). Payment-service charges only NEW_LINE; PLAN_CHANGE and ADDON bill on the next invoice."
+    },
+    {
+      "name": "subscriptionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Target subscription for PLAN_CHANGE and ADDON orders. Null on NEW_LINE orders."
     }
   ]
 }

@@ -1,0 +1,74 @@
+# fraud-service (port 9013). CQRS + Mediator (Sprint 23, ADR-029).
+serviceName: fraud-service
+containerPort: 9013
+service:
+  port: 9013
+
+image:
+  tag: latest
+
+# Feature 19.3.2 (ADR-026 Section 2). fraud-service's only real caller is
+# api-gateway - the fraud-case review / rule-config API
+# (docs/api-contracts/fraud-service.md) is externally routed for support/
+# admin use. It reacts to subscription-service's lifecycle events purely via
+# the inbox (msisdn.allocated.v1/msisdn.released.v1/subscription.activated.v1/
+# subscription.suspended.v1, ADR-029 Section 1) and never accesses
+# subscription-db directly (ADR-006), so no `meshPolicy.authorizedClients`
+# override is needed - the chart default (`[api-gateway]`) is already
+# correct.
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record - MsisdnLifecycleSignal/FraudRule/
+# FraudSignal/FraudCase aggregates), Keycloak (JWKS validation -
+# FraudSecurityConfig is its own OAuth2 resource server, same pattern as
+# every other domain service), Kafka (consumes the four subscription/MSISDN
+# lifecycle events above via the inbox, publishes fraud.*.v1 via the
+# outbox). No Redis: service-catalog.md documents an optional future
+# velocity-counter cache, but no Redis dependency or config exists in the
+# service's code today (confirmed by inspection of fraud-service/pom.xml and
+# application.yml) - do not set `redis: true` on a documented-but-unbuilt
+# capability.
+networkPolicy:
+  egress:
+    postgres: true
+    keycloak: true
+    kafka: true
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  # Same in-cluster profile convention as every other PostgreSQL-backed
+  # domain service (Feature 18.5): dev,k8s reads DB credentials from the
+  # environment (microservices/configs/fraud-service/application-k8s.yml)
+  # instead of the docker profile's plaintext DB block.
+  SPRING_PROFILES_ACTIVE: dev,k8s
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/fraud-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  FRAUD_DB_USER: fraud
+  FRAUD_DB_PASSWORD: fraud
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/fraud-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: fraud-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: fraud-service/app
+      field: EUREKA_PASSWORD
+    - key: FRAUD_DB_USER
+      path: fraud-service/db-credentials
+      field: username
+    - key: FRAUD_DB_PASSWORD
+      path: fraud-service/db-credentials
+      field: password

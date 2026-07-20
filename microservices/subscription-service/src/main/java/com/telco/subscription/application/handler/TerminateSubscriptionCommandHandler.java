@@ -81,7 +81,8 @@ public class TerminateSubscriptionCommandHandler
                 new MsisdnReleasedV1(
                         msisdn,
                         subscription.getId().toString(),
-                        now
+                        now,
+                        subscription.getCustomerId().toString()
                 ));
 
         outboxService.publish(

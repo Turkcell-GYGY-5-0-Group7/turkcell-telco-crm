@@ -38,10 +38,6 @@ public class Order {
     @Column(nullable = false, length = 32)
     private OrderStatus status;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "order_type", nullable = false, length = 20)
-    private OrderType orderType;
-
     @Column(name = "idempotency_key", nullable = false, unique = true, length = 64)
     private String idempotencyKey;
 
@@ -50,6 +46,15 @@ public class Order {
 
     @Column(name = "total_amount", precision = 12, scale = 2)
     private BigDecimal totalAmount;
+
+    /** Order type (FR-09). Existing rows backfill to NEW_LINE via the V8 migration default. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "order_type", nullable = false, length = 32)
+    private OrderType orderType = OrderType.NEW_LINE;
+
+    /** Target subscription for PLAN_CHANGE and ADDON orders (FR-09). Null on NEW_LINE. */
+    @Column(name = "subscription_id")
+    private UUID subscriptionId;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -64,13 +69,11 @@ public class Order {
     protected Order() {
     }
 
-    private Order(UUID id, UUID customerId, String idempotencyKey, BigDecimal totalAmount,
-                  String userId, OrderType orderType) {
+    private Order(UUID id, UUID customerId, String idempotencyKey, BigDecimal totalAmount, String userId) {
         this.id = Objects.requireNonNull(id, "id");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.idempotencyKey = Objects.requireNonNull(idempotencyKey, "idempotencyKey");
         this.userId = Objects.requireNonNull(userId, "userId");
-        this.orderType = Objects.requireNonNull(orderType, "orderType");
         this.status = OrderStatus.PENDING;
         this.totalAmount = totalAmount;
         Instant now = Instant.now();
@@ -78,27 +81,35 @@ public class Order {
         this.updatedAt = now;
     }
 
-    /**
-     * Backward-compatible overload creating a {@link OrderType#NEW_LINE} order - the only kind that
-     * existed before Sprint 24 Feature 24.2.
-     */
+    /** Creates a new NEW_LINE order in {@link OrderStatus#PENDING} state. */
     public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount, String userId) {
-        return create(customerId, idempotencyKey, totalAmount, userId, OrderType.NEW_LINE);
+        return new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId);
     }
 
     /**
-     * Creates a new order in {@link OrderStatus#PENDING} state. {@code orderType} is derived from
-     * the items by the caller ({@code CreateOrderCommandHandler}) and persisted so saga consumers
-     * can branch without re-deriving (Sprint 24 design-note D1/D2).
+     * Creates an order of the given type (FR-09). PLAN_CHANGE and ADDON orders require the target
+     * {@code subscriptionId} and are created directly CONFIRMED: they carry no upfront payment
+     * (they bill on the next invoice, FR-22), so there is no payment.completed.v1 to confirm them
+     * and the existing CONFIRMED -> FULFILLED transition stays the single fulfilment path.
      */
     public static Order create(UUID customerId, String idempotencyKey, BigDecimal totalAmount,
-                               String userId, OrderType orderType) {
-        return new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId, orderType);
+                               String userId, OrderType orderType, UUID subscriptionId) {
+        Order order = new Order(UUID.randomUUID(), customerId, idempotencyKey, totalAmount, userId);
+        order.orderType = orderType == null ? OrderType.NEW_LINE : orderType;
+        if (order.orderType != OrderType.NEW_LINE) {
+            if (subscriptionId == null) {
+                throw new BusinessRuleException(
+                        order.orderType + " orders require a target subscriptionId");
+            }
+            order.subscriptionId = subscriptionId;
+            order.status = OrderStatus.CONFIRMED;
+        }
+        return order;
     }
 
     /**
-     * Adds a tariff item to this order with no campaign discount. Callers use this to build the item
-     * list before persisting.
+     * Adds an item to this order with no campaign discount. Callers use this to build the item list
+     * before persisting.
      */
     public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
                              BigDecimal unitPrice, int quantity) {
@@ -106,40 +117,20 @@ public class Order {
     }
 
     /**
-     * Adds a tariff item to this order, recording which campaign (if any) discounted
-     * {@code unitPrice} (Feature 21.3.3, ADR-027 Decision Section 4).
+     * Adds an item to this order, recording which campaign (if any) discounted {@code unitPrice}
+     * (Feature 21.3.3, ADR-027 Decision Section 4).
      */
     public OrderItem addItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
                              BigDecimal unitPrice, int quantity, UUID campaignId, String campaignCode) {
-        return addTariffItem(tariffId, tariffCode, tariffVersion, tariffName, unitPrice, quantity,
-                campaignId, campaignCode, null);
-    }
-
-    /**
-     * Adds a {@link OrderItemType#TARIFF} item. {@code targetSubscriptionId} is non-null only on a
-     * {@link OrderType#PLAN_CHANGE} order's single item (Sprint 24 design-note D2).
-     */
-    public OrderItem addTariffItem(UUID tariffId, String tariffCode, int tariffVersion, String tariffName,
-                                   BigDecimal unitPrice, int quantity, UUID campaignId,
-                                   String campaignCode, UUID targetSubscriptionId) {
-        OrderItem item = OrderItem.forTariff(this, tariffId, tariffCode, tariffVersion, tariffName,
-                unitPrice, quantity, campaignId, campaignCode, targetSubscriptionId);
+        OrderItem item = OrderItem.create(this, tariffId, tariffCode, tariffVersion, tariffName,
+                unitPrice, quantity, campaignId, campaignCode);
         items.add(item);
         return item;
     }
 
-    /**
-     * Adds an {@link OrderItemType#ADDON} item snapshotted from the catalog addon (Sprint 24
-     * design-note D1). {@code targetSubscriptionId} is non-null for standalone {@link OrderType#ADDON}
-     * orders and null for addons bundled into a {@link OrderType#NEW_LINE} order.
-     */
-    public OrderItem addAddonItem(String productCode, String productName, String addonType,
-                                  String currency, BigDecimal unitPrice,
-                                  int quantity, UUID targetSubscriptionId, Long allowanceDataMb,
-                                  Long allowanceMinutes, Long allowanceSms) {
-        OrderItem item = OrderItem.forAddon(this, productCode, productName, addonType, currency,
-                unitPrice, quantity,
-                targetSubscriptionId, allowanceDataMb, allowanceMinutes, allowanceSms);
+    /** Adds an addon line item (FR-09, ADDON orders). */
+    public OrderItem addAddonItem(String addonCode, String addonName, BigDecimal unitPrice, int quantity) {
+        OrderItem item = OrderItem.createAddon(this, addonCode, addonName, unitPrice, quantity);
         items.add(item);
         return item;
     }
@@ -212,11 +203,6 @@ public class Order {
         return customerId;
     }
 
-    /** The kind of order (NEW_LINE | ADDON | PLAN_CHANGE), derived from its items at creation. */
-    public OrderType getOrderType() {
-        return orderType;
-    }
-
     public OrderStatus getStatus() {
         return status;
     }
@@ -227,6 +213,15 @@ public class Order {
 
     public String getUserId() {
         return userId;
+    }
+
+    public OrderType getOrderType() {
+        return orderType;
+    }
+
+    /** Target subscription for PLAN_CHANGE/ADDON orders, or {@code null} on NEW_LINE (FR-09). */
+    public UUID getSubscriptionId() {
+        return subscriptionId;
     }
 
     public BigDecimal getTotalAmount() {

@@ -1,6 +1,7 @@
 package com.telco.acceptance.ac03;
 
 import com.telco.acceptance.support.AcceptanceConfig;
+import com.telco.acceptance.support.BillingDb;
 import com.telco.acceptance.support.CdrEventProducer;
 import com.telco.acceptance.support.GatewayApi;
 import com.telco.acceptance.support.OnboardingSteps;
@@ -146,6 +147,19 @@ class QuotaExhaustionAcceptanceIT {
                     adminToken, subscription.subscriptionId(), periodStart, periodEnd);
             aggregate.then().statusCode(200);
             assertThat(aggregate.jsonPath().getLong("data.dataOverageKb")).isEqualTo(10L);
+
+            // billing-service records the overage asynchronously (usage.aggregated.v1 ->
+            // UsageAggregatedBillingConsumer -> RecordOverageCommandHandler); the aggregate response
+            // above only confirms usage-service's own view. BillRunBatchProcessor skips a subscriber
+            // that already has an invoice for the period, so triggering the bill-run before this
+            // record lands would generate - and permanently lock in - an invoice with no overage
+            // line. Confirm the record has landed in billing_db before ever calling the bill-run.
+            await("billing-service has recorded the data overage before the bill-run is triggered")
+                    .atMost(AcceptanceConfig.SAGA_TIMEOUT)
+                    .pollInterval(AcceptanceConfig.POLL_INTERVAL)
+                    .untilAsserted(() -> assertThat(
+                            BillingDb.latestDataOverageKbForSubscription(subscription.subscriptionId()))
+                            .hasValue(10L));
 
             await("bill-run generates an invoice carrying the data overage line")
                     .atMost(AcceptanceConfig.SAGA_TIMEOUT)

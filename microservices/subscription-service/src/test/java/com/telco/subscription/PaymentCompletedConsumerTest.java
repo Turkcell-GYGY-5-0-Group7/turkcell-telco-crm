@@ -92,7 +92,7 @@ class PaymentCompletedConsumerTest {
     }
 
     private OrderClientResponse singleItemOrder(UUID customerId) {
-        return new OrderClientResponse(customerId, "NEW_LINE", "CONFIRMED",
+        return new OrderClientResponse(customerId, "CONFIRMED",
                 List.of(new OrderItemClientResponse("TARIFF_BASIC", 1)));
     }
 
@@ -213,11 +213,10 @@ class PaymentCompletedConsumerTest {
     }
 
     @Test
-    void multi_tariff_item_order_emits_activation_failed() {
+    void multi_item_order_emits_activation_failed() {
         UUID orderId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
-        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "NEW_LINE",
-                "CONFIRMED",
+        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "CONFIRMED",
                 List.of(new OrderItemClientResponse("TARIFF_BASIC", 1),
                         new OrderItemClientResponse("TARIFF_PLUS", 1))));
 
@@ -226,120 +225,5 @@ class PaymentCompletedConsumerTest {
         assertThat(count("SELECT count(*) FROM subscriptions")).isEqualTo(0L);
         assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1' "
                 + "AND payload->>'reason' = 'UNSUPPORTED_MULTI_ITEM_ORDER'")).isEqualTo(1L);
-    }
-
-    private UUID seedActiveSubscription(UUID customerId, String tariffCode, int tariffVersion) {
-        UUID subscriptionId = UUID.randomUUID();
-        jdbc.update("INSERT INTO subscriptions (id, customer_id, msisdn, tariff_code, tariff_version, "
-                        + "status, activated_at, created_at) VALUES (?, ?, ?, ?, ?, 'ACTIVE', now(), now())",
-                subscriptionId, customerId, "9053200000" + (System.nanoTime() % 100),
-                tariffCode, tariffVersion);
-        return subscriptionId;
-    }
-
-    private OrderClientResponse planChangeOrder(UUID customerId, UUID subscriptionId,
-                                                String newTariffCode, int newTariffVersion) {
-        return new OrderClientResponse(customerId, "PLAN_CHANGE", "CONFIRMED",
-                List.of(new OrderItemClientResponse(newTariffCode, newTariffVersion, "TARIFF", null,
-                        subscriptionId.toString())));
-    }
-
-    @Test
-    void plan_change_order_changes_the_tariff_and_emits_tariff_changed() {
-        // Sprint 24 Feature 24.4 (design-note D2): a paid PLAN_CHANGE order switches the target
-        // subscription's tariff instead of activating a new line.
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-        UUID subscriptionId = seedActiveSubscription(customerId, "TARIFF_BASIC", 1);
-        when(orderServiceClient.getOrder(orderId))
-                .thenReturn(planChangeOrder(customerId, subscriptionId, "TARIFF_PLUS", 2));
-
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-pc", orderId, customerId, 0L, "payment.completed.v1"));
-
-        assertThat(jdbc.queryForObject("SELECT tariff_code FROM subscriptions WHERE id = ?",
-                String.class, subscriptionId)).isEqualTo("TARIFF_PLUS");
-        assertThat(jdbc.queryForObject("SELECT tariff_version FROM subscriptions WHERE id = ?",
-                Integer.class, subscriptionId)).isEqualTo(2);
-        assertThat(count("SELECT count(*) FROM subscriptions")).isEqualTo(1L);
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.tariff-changed.v1' "
-                + "AND payload->>'orderId' = ? AND payload->>'previousTariffCode' = 'TARIFF_BASIC' "
-                + "AND payload->>'newTariffCode' = 'TARIFF_PLUS'", orderId.toString())).isEqualTo(1L);
-        assertThat(count("SELECT count(*) FROM msisdn_pool WHERE status = 'ALLOCATED'")).isEqualTo(0L);
-    }
-
-    @Test
-    void plan_change_redelivery_changes_the_tariff_at_most_once() {
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-        UUID subscriptionId = seedActiveSubscription(customerId, "TARIFF_BASIC", 1);
-        when(orderServiceClient.getOrder(orderId))
-                .thenReturn(planChangeOrder(customerId, subscriptionId, "TARIFF_PLUS", 2));
-
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-pc1", orderId, customerId, 0L, "payment.completed.v1"));
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-pc2", orderId, customerId, 1L, "payment.completed.v1"));
-
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.tariff-changed.v1'"))
-                .isEqualTo(1L);
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1'"))
-                .isEqualTo(0L);
-    }
-
-    @Test
-    void plan_change_on_not_owned_subscription_compensates_via_activation_failed() {
-        // Terminal changeTariff failure reuses subscription.activation-failed.v1 (documented reuse,
-        // design-note D2) so the existing refund/cancel compensation runs.
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-        UUID subscriptionId = seedActiveSubscription(UUID.randomUUID(), "TARIFF_BASIC", 1);
-        when(orderServiceClient.getOrder(orderId))
-                .thenReturn(planChangeOrder(customerId, subscriptionId, "TARIFF_PLUS", 2));
-
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-pcx", orderId, customerId, 0L, "payment.completed.v1"));
-
-        assertThat(jdbc.queryForObject("SELECT tariff_code FROM subscriptions WHERE id = ?",
-                String.class, subscriptionId)).isEqualTo("TARIFF_BASIC");
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1' "
-                + "AND payload->>'orderId' = ? AND payload->>'reason' = 'SUBSCRIPTION_NOT_OWNED'",
-                orderId.toString())).isEqualTo(1L);
-    }
-
-    @Test
-    void standalone_addon_order_is_ignored_entirely_no_activation_no_compensation() {
-        // Sprint 24 Feature 24.3 (design-note D1): a standalone ADDON order has no activation leg -
-        // order-service confirms and fulfills it itself. Without the orderType branch this
-        // zero-TARIFF shape would emit UNSUPPORTED_MULTI_ITEM_ORDER and wrongly compensate.
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "ADDON",
-                "CONFIRMED",
-                List.of(new OrderItemClientResponse(null, 0, "ADDON", "ADDON-5GB",
-                        UUID.randomUUID().toString()))));
-
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-addon", orderId, customerId, 0L, "payment.completed.v1"));
-
-        assertThat(count("SELECT count(*) FROM subscriptions")).isEqualTo(0L);
-        assertThat(count("SELECT count(*) FROM outbox_event")).isEqualTo(0L);
-        assertThat(count("SELECT count(*) FROM inbox_message")).isEqualTo(0L);
-    }
-
-    @Test
-    void one_tariff_item_with_bundled_addon_items_activates_from_the_tariff_snapshot() {
-        // Sprint 24 Feature 24.2 (design-note D1): the invariant counts TARIFF items only, so a
-        // NEW_LINE order bundling ADDON items alongside its single tariff line must activate.
-        UUID orderId = UUID.randomUUID();
-        UUID customerId = UUID.randomUUID();
-        when(orderServiceClient.getOrder(orderId)).thenReturn(new OrderClientResponse(customerId, "NEW_LINE",
-                "CONFIRMED",
-                List.of(new OrderItemClientResponse(null, 0, "ADDON", "ADDON-5GB", null),
-                        new OrderItemClientResponse("TARIFF_BASIC", 1, "TARIFF", null, null))));
-
-        consumer.onPaymentCompleted(paymentCompletedRecord("msg-bundle", orderId, customerId, 0L, "payment.completed.v1"));
-
-        assertThat(count("SELECT count(*) FROM subscriptions WHERE customer_id = ? AND status = 'ACTIVE' "
-                + "AND tariff_code = 'TARIFF_BASIC'", customerId)).isEqualTo(1L);
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activated.v1' "
-                + "AND payload->>'orderId' = ?", orderId.toString())).isEqualTo(1L);
-        assertThat(count("SELECT count(*) FROM outbox_event WHERE event_type = 'subscription.activation-failed.v1'"))
-                .isEqualTo(0L);
     }
 }

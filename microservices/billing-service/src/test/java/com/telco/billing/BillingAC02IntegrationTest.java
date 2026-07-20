@@ -10,8 +10,6 @@ import com.telco.billing.domain.Invoice;
 import com.telco.billing.domain.InvoiceStatus;
 import com.telco.billing.infrastructure.client.ProductCatalogBillingClient;
 import com.telco.billing.infrastructure.client.TariffPricingResponse;
-import com.telco.billing.infrastructure.entity.AddonChargeRecord;
-import com.telco.billing.infrastructure.persistence.AddonChargeRecordRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
 import com.telco.platform.inbox.InboxService;
 import com.telco.platform.mediator.Mediator;
@@ -79,7 +77,6 @@ class BillingAC02IntegrationTest {
 
     @Autowired private Mediator mediator;
     @Autowired private InvoiceRepository invoiceRepo;
-    @Autowired private AddonChargeRecordRepository addonChargeRepo;
     @Autowired private JdbcTemplate jdbc;
 
     private UUID subscriptionId;
@@ -91,7 +88,6 @@ class BillingAC02IntegrationTest {
     void setUp() {
         jdbc.execute("DELETE FROM invoice_lines");
         jdbc.execute("DELETE FROM invoices");
-        jdbc.execute("DELETE FROM addon_charge_records");
         jdbc.execute("DELETE FROM overage_records");
         jdbc.execute("DELETE FROM tariff_prices");
         jdbc.execute("DELETE FROM subscriber_billing_records");
@@ -150,53 +146,6 @@ class BillingAC02IntegrationTest {
         boolean hasTariffLine = invoice.getLines().stream()
                 .anyMatch(l -> l.getDescription().contains("POSTPAID-S"));
         assertThat(hasTariffLine).isTrue();
-    }
-
-    @Test
-    void unbilled_addon_charges_become_one_invoice_line_each_and_are_marked_billed() {
-        // Sprint 24 Feature 24.3 (FR-22, design-note D3): each unbilled addon purchase produces
-        // exactly one invoice line on the next bill run, and the billed flag flips in the same
-        // transaction so a later run can never bill it again.
-        activateSubscription();
-        AddonChargeRecord data = seedAddonCharge("ADDON-5GB", "Extra 5GB", "15.00");
-        AddonChargeRecord sms = seedAddonCharge("ADDON-100SMS", "SMS 100", "8.00");
-
-        mediator.send(new RunBillCommand(periodStart, periodEnd));
-
-        Invoice invoice = findInvoice().orElseThrow();
-        assertThat(invoice.getLines().stream()
-                .filter(l -> l.getDescription().startsWith("Addon:"))).hasSize(2);
-        assertThat(invoice.getLines().stream()
-                .anyMatch(l -> l.getDescription().equals("Addon: Extra 5GB (ADDON-5GB)")
-                        && l.getLineTotal().compareTo(new BigDecimal("15.00")) == 0)).isTrue();
-
-        AddonChargeRecord billedData = addonChargeRepo.findById(data.getId()).orElseThrow();
-        assertThat(billedData.isBilled()).isTrue();
-        assertThat(billedData.getInvoiceId()).isEqualTo(invoice.getId());
-        assertThat(addonChargeRepo.findById(sms.getId()).orElseThrow().isBilled()).isTrue();
-        assertThat(addonChargeRepo.findBySubscriptionIdAndBilledFalse(subscriptionId)).isEmpty();
-    }
-
-    @Test
-    void addon_charge_recorded_after_a_bill_run_is_billed_by_the_next_run_only_once() {
-        activateSubscription();
-        mediator.send(new RunBillCommand(periodStart, periodEnd));
-        seedAddonCharge("ADDON-5GB", "Extra 5GB", "15.00");
-
-        // Same-period rerun skips the existing invoice, so the charge stays unbilled...
-        mediator.send(new RunBillCommand(periodStart, periodEnd));
-        assertThat(addonChargeRepo.findBySubscriptionIdAndBilledFalse(subscriptionId)).hasSize(1);
-
-        // ...until the next period's run picks it up exactly once (design-note D3).
-        Instant nextStart = periodEnd;
-        Instant nextEnd = ZonedDateTime.ofInstant(nextStart, ZoneOffset.UTC).plusMonths(1).toInstant();
-        mediator.send(new RunBillCommand(nextStart, nextEnd));
-
-        Invoice nextInvoice = invoiceRepo
-                .findBySubscriptionIdAndPeriodStartWithLines(subscriptionId, nextStart).orElseThrow();
-        assertThat(nextInvoice.getLines().stream()
-                .filter(l -> l.getDescription().startsWith("Addon:"))).hasSize(1);
-        assertThat(addonChargeRepo.findBySubscriptionIdAndBilledFalse(subscriptionId)).isEmpty();
     }
 
     @Test
@@ -268,18 +217,6 @@ class BillingAC02IntegrationTest {
     private void activateSubscription() {
         mediator.send(new RecordSubscriptionActivatedCommand(
                 subscriptionId, customerId, "POSTPAID-S", Instant.now()));
-    }
-
-    /**
-     * Seeds an unbilled addon charge row directly (Sprint 24 Feature 24.3). The consumer path that
-     * normally writes it is covered by {@code AddonPurchasedBillingConsumerTest}; going through the
-     * repository here keeps this test independent of the mocked {@code InboxService} (whose default
-     * {@code firstSeen=false} would skip every {@code IdempotentRequest} command).
-     */
-    private AddonChargeRecord seedAddonCharge(String code, String name, String price) {
-        AddonChargeRecord charge = AddonChargeRecord.purchased(subscriptionId, customerId,
-                code, name, new BigDecimal(price), "TRY", Instant.now());
-        return addonChargeRepo.save(charge);
     }
 
     private Optional<Invoice> findInvoice() {

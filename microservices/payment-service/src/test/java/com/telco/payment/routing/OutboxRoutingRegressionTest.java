@@ -94,7 +94,7 @@ class OutboxRoutingRegressionTest {
         UUID orderId = UUID.randomUUID();
         String paymentRequestId = UUID.randomUUID().toString();
         mediator.send(new ChargePaymentCommand(
-                orderId, UUID.randomUUID(), new BigDecimal("49.99"), null, null,
+                orderId, UUID.randomUUID(), new BigDecimal("49.99"), null,
                 paymentRequestId, UUID.randomUUID().toString()));
 
         String aggregateType = jdbc.queryForObject(

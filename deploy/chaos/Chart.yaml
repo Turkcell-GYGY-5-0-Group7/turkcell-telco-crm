@@ -1,0 +1,28 @@
+apiVersion: v2
+name: telco-chaos-mesh
+description: >-
+  Chaos Mesh, in-cluster, as the platform's fault-injection control plane
+  (Sprint 20, Feature 20.1). Wraps the official `chaos-mesh/chaos-mesh` chart,
+  scoped to install its controller-manager and chaos-daemon DaemonSet into the
+  existing `telco` namespace (no new namespace, no `microservices/*` image
+  change) - the same "wrap the upstream chart as a dependency" pattern already
+  used by `deploy/helm/vault` and `deploy/helm/csi-driver`. Supplies the
+  `PodChaos`/`NetworkChaos`/`Schedule` (and other) CRDs the 20.3 experiment
+  library and 20.4 game days consume; the optional web dashboard is disabled
+  (20.1.3) in favor of `kubectl describe <kind>/<name>` to keep the
+  operational surface minimal, mirroring the README's reason for rejecting
+  Litmus's separate portal app.
+type: application
+version: 0.1.0
+appVersion: "2.8.3"
+keywords:
+  - telco-crm
+  - chaos-mesh
+  - chaos-engineering
+  - fault-injection
+maintainers:
+  - name: Telco CRM DevOps
+dependencies:
+  - name: chaos-mesh
+    version: 2.8.3
+    repository: https://charts.chaos-mesh.org

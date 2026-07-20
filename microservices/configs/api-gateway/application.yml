@@ -90,6 +90,20 @@ spring:
               predicates:
                 - Path=/api/v1/tickets/**
 
+            - id: dispute-service-route
+              uri: lb://dispute-service
+              predicates:
+                - Path=/api/v1/disputes/**
+
+            - id: fraud-service-route
+              uri: lb://fraud-service
+              predicates:
+                - Path=/api/v1/fraud-cases/**,/api/v1/fraud-rules/**
+
+            # campaign-service has no gateway route by design: its only external-shaped endpoint,
+            # POST /internal/campaigns/validate, is deliberately mounted under /internal (tokenless,
+            # network-perimeter trust) and is never gateway-routed (ADR-027).
+
             # web-bff composition layer (ADR-022). Narrowly scoped to /bff/v1/** (never /bff/**).
             # JWT-validated by GatewaySecurityConfig's .anyRequest().authenticated() default;
             # no permitAll entry and no custom filters. Sprint 16 Feature 16.1 (16.1.3).
@@ -170,6 +184,20 @@ spring:
               filters:
                 - SetPath=/v3/api-docs
 
+            - id: openapi-dispute
+              uri: lb://dispute-service
+              predicates:
+                - Path=/api-docs/dispute-service
+              filters:
+                - SetPath=/v3/api-docs
+
+            - id: openapi-fraud
+              uri: lb://fraud-service
+              predicates:
+                - Path=/api-docs/fraud-service
+              filters:
+                - SetPath=/v3/api-docs
+
   # JWKS URI validated against Keycloak realm (ADR-011). Port 8085 = local Keycloak.
   security:
     oauth2:
@@ -220,3 +248,7 @@ springdoc:
         url: /api-docs/notification-service
       - name: ticket-service
         url: /api-docs/ticket-service
+      - name: dispute-service
+        url: /api-docs/dispute-service
+      - name: fraud-service
+        url: /api-docs/fraud-service

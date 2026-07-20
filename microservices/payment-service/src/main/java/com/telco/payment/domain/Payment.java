@@ -49,14 +49,6 @@ public class Payment {
     private String paymentRequestId;
 
     /**
-     * How the customer pays (FR-25). Label only in the MVP: the mock PSP ignores the method and
-     * wallet balance modeling is out of scope (Sprint 24 design-note D6).
-     */
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private PaymentMethod method;
-
-    /**
      * Invoice this payment settles, when the charge originates from an invoice payment rather
      * than the order saga. Nullable: most payments in the MVP are order-driven (FR-25, FR-26);
      * this is set only when the caller supplies an {@code invoiceId} on the charge request, which
@@ -72,6 +64,14 @@ public class Payment {
     @Column(name = "updated_at")
     private Instant updatedAt;
 
+    @Column(name = "disputed", nullable = false)
+    private boolean disputed = false;
+
+    /** Settlement method (FR-25). Defaults to CREDIT_CARD, the only pre-FR-25 path. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false, length = 32)
+    private PaymentMethod method = PaymentMethod.CREDIT_CARD;
+
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PaymentAttempt> attempts = new ArrayList<>();
 
@@ -81,13 +81,13 @@ public class Payment {
 
     private Payment(UUID id, UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
                      UUID invoiceId, PaymentMethod method) {
+        this.method = method == null ? PaymentMethod.CREDIT_CARD : method;
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.amount = Objects.requireNonNull(amount, "amount");
         this.paymentRequestId = Objects.requireNonNull(paymentRequestId, "paymentRequestId");
         this.invoiceId = invoiceId;
-        this.method = method;
         this.status = PaymentStatus.PENDING;
         this.createdAt = Instant.now();
     }
@@ -101,7 +101,7 @@ public class Payment {
      * @param paymentRequestId idempotency key derived from the upstream command
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId) {
-        return create(orderId, customerId, amount, paymentRequestId, null, null);
+        return create(orderId, customerId, amount, paymentRequestId, null);
     }
 
     /**
@@ -121,23 +121,14 @@ public class Payment {
 
     /**
      * Factory: creates a new payment in {@link PaymentStatus#PENDING} state with an explicit
-     * payment method (FR-25).
-     *
-     * @param orderId          the order this payment covers
-     * @param customerId       the paying customer
-     * @param amount           the amount to charge (must be positive)
-     * @param paymentRequestId idempotency key derived from the upstream command
-     * @param invoiceId        the invoice this payment settles, or {@code null} for an order-only charge
-     * @param method           how the customer pays; {@code null} defaults to
-     *                         {@link PaymentMethod#CREDIT_CARD}
+     * settlement method (FR-25). A {@code null} method defaults to {@link PaymentMethod#CREDIT_CARD}.
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
                                   UUID invoiceId, PaymentMethod method) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessRuleException("Payment amount must be positive");
         }
-        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId,
-                method != null ? method : PaymentMethod.CREDIT_CARD);
+        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId, method);
     }
 
     /** Transitions to {@link PaymentStatus#COMPLETED}. */
@@ -190,6 +181,22 @@ public class Payment {
         this.attempts.add(attempt);
     }
 
+    /**
+     * Marks this payment as under dispute (ADR-028 Section 5) - a suppression flag only: it never
+     * calls the PSP and never changes {@link #status}, it only pauses {@code PaymentRetryScheduler}.
+     * Idempotent: re-applying is harmless, so this is an unconditional flag flip.
+     */
+    public void markDisputed() {
+        this.disputed = true;
+        this.updatedAt = Instant.now();
+    }
+
+    /** Clears the dispute flag with no financial change (ADR-028 Section 5, {@code RESOLVED_MERCHANT}). */
+    public void clearDisputed() {
+        this.disputed = false;
+        this.updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }
@@ -214,12 +221,11 @@ public class Payment {
         return paymentRequestId;
     }
 
-    /** How the customer pays (FR-25). Never {@code null}: defaults to CREDIT_CARD at creation. */
+    /** Invoice this payment settles, or {@code null} for an order-only (non-invoice) charge. */
     public PaymentMethod getMethod() {
         return method;
     }
 
-    /** Invoice this payment settles, or {@code null} for an order-only (non-invoice) charge. */
     public UUID getInvoiceId() {
         return invoiceId;
     }
@@ -230,6 +236,10 @@ public class Payment {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public boolean isDisputed() {
+        return disputed;
     }
 
     /** Unmodifiable view of all charge attempts for this payment. */

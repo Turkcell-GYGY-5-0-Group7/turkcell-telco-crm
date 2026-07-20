@@ -1,0 +1,6 @@
+# fraud-service dev overrides.
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/fraud_db
+    username: fraud
+    password: fraud

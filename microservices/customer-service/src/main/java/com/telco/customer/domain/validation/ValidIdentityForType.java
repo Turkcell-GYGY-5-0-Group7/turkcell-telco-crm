@@ -4,29 +4,23 @@ import jakarta.validation.Constraint;
 import jakarta.validation.Payload;
 
 import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import static java.lang.annotation.ElementType.ANNOTATION_TYPE;
-import static java.lang.annotation.ElementType.TYPE;
-import static java.lang.annotation.RetentionPolicy.RUNTIME;
-
 /**
- * Class-level constraint validating the identity number against the declared customer type (FR-01):
- * INDIVIDUAL requires a checksum-valid TCKN, CORPORATE a checksum-valid VKN. A null or unrecognized
- * type fails closed. The violation is reported on the {@code identityNumber} property so API clients
- * see the same field-level error shape as the former field-level {@code @ValidTckn}.
- *
- * <p>A null/blank identity number is considered valid here; presence is enforced separately by
- * {@code @NotBlank} on the field.
+ * Class-level constraint: the identity number must be a valid TCKN for INDIVIDUAL customers and a
+ * valid VKN for CORPORATE customers (FR-01). Replaces the former field-level {@code @ValidTckn},
+ * which rejected every corporate/VKN registration regardless of validity.
  */
 @Documented
 @Constraint(validatedBy = IdentityForTypeValidator.class)
-@Target({TYPE, ANNOTATION_TYPE})
-@Retention(RUNTIME)
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
 public @interface ValidIdentityForType {
 
-    String message() default "identity number does not match the customer type";
+    String message() default "identityNumber is not valid for the given customer type";
 
     Class<?>[] groups() default {};
 

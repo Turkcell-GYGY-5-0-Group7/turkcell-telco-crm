@@ -1,0 +1,103 @@
+# telco-chaos-mesh values (Sprint 20, Feature 20.1): scopes the vendored
+# `chaos-mesh/chaos-mesh` subchart (declared in Chart.yaml) to the `telco`
+# namespace, pins its image tags explicitly (no `latest`, `deploy/RUNBOOK.md`
+# Section 4.1.2's tag-pinning discipline), and disables the optional web
+# dashboard (20.1.3). All keys below nest under `chaos-mesh:` to reach the
+# subchart, the same shape `deploy/helm/vault/values.yaml` uses to reach its
+# `vault:` subchart.
+#
+# Install namespace: `-n telco` on the `helm upgrade --install` command (see
+# README.md) places every pod this chart creates - controller-manager,
+# chaos-daemon DaemonSet - into the existing `telco` namespace (no
+# `--create-namespace`, no new namespace: `deploy/RUNBOOK.md` Section 2
+# already creates and annotates `telco`). This is a dev-grade, single-cluster
+# install (same "dev-grade in-cluster dependency, hardened later" posture as
+# `deploy/helm/vault` and `deploy/helm/dependencies`) - full namespace-scoped
+# RBAC/blast-radius restriction (`clusterScoped: false`,
+# `controllerManager.targetNamespace`) is Feature 20.5's job, not this one;
+# this chart ships the chart defaults for that setting untouched.
+chaos-mesh:
+  # Pin the global image tag explicitly (chart appVersion 2.8.3's own
+  # default - restated here, not left implicit, per the tag-pinning
+  # discipline this repo applies to every other release, e.g.
+  # deploy/helm/values/*.yaml `image.tag`). ghcr.io is the chart's own
+  # upstream registry as of 2.8.3 (no self-hosted mirror in this dev-grade
+  # setup).
+  images:
+    registry: ghcr.io
+    tag: "v2.8.3"
+
+  # chaos-daemon needs to talk to the node's container runtime socket to
+  # inject faults (kill/pause containers, tc/iptables netns rules). A Kind
+  # node's container runtime is containerd, not Docker - the upstream
+  # chart's own values.yaml documents this exact override for Kind. Without
+  # it chaos-daemon looks for /var/run/docker.sock, which does not exist
+  # inside a Kind node, and pod-kill/network-partition experiments (20.3)
+  # would fail at the daemon, not just at the experiment.
+  chaosDaemon:
+    image:
+      tag: "v2.8.3"
+    runtime: containerd
+    socketPath: /run/containerd/containerd.sock
+
+  # DNSChaos is out of scope for this sprint's experiment types (20.3 covers
+  # only PodChaos and NetworkChaos); disabling the DNS server component keeps
+  # the footprint minimal on this dev-grade single-node Kind cluster. Re-enable
+  # (`create: true`) if a future feature adds a DNSChaos experiment.
+  dnsServer:
+    create: false
+    image:
+      tag: "v0.2.8"
+
+  # Dev-grade, single-node Kind posture: the chart's default replicaCount: 3
+  # (leader-election HA across nodes) does not fit a single-control-plane-node
+  # Kind cluster and is unnecessary for this sprint's single-operator,
+  # on-demand `kubectl apply` workflow. Mirrors the same singleton override
+  # this repo already applies to config-server/discovery-server
+  # (deploy/helm/README.md "HPA / PDB") and Vault (deploy/helm/vault/values.yaml)
+  # for the identical reason. A multi-node/production cluster would restore
+  # the chart default for real HA.
+  #
+  # 20.5.1 blast-radius scoping: the chart's own default is `clusterScoped:
+  # true` (see the vendored chart's values.yaml, top-level key, not nested
+  # under controllerManager), which makes
+  # templates/controller-manager-rbac.yaml bind the
+  # "<release>-chaos-controller-manager-target-namespace" ClusterRole (the
+  # role that actually grants get/list/watch/delete/update/patch/create on
+  # pods/configmaps/secrets and "*" on chaos-mesh.org resources - the
+  # permissions that matter for injecting/killing faults) via a
+  # ClusterRoleBinding, i.e. that capability reaches every namespace on the
+  # cluster. Setting `clusterScoped: false` here changes that same template's
+  # `{{- if .Values.clusterScoped }} ClusterRoleBinding {{- else }} RoleBinding
+  # {{- end }}` branch to bind the identical ClusterRole via a namespaced
+  # RoleBinding scoped to `controllerManager.targetNamespace` instead - so the
+  # pod/configmap/secret/chaos-mesh.org permissions are namespace-scoped to
+  # `telco`, not cluster-wide. Verified directly against
+  # templates/controller-manager-rbac.yaml inside
+  # deploy/chaos/charts/chaos-mesh-2.8.3.tgz this session, not assumed.
+  clusterScoped: false
+  controllerManager:
+    replicaCount: 1
+    targetNamespace: telco
+
+  # 20.1.3: the optional Chaos Mesh web dashboard is left disabled. The
+  # upstream chart's actual toggle is `dashboard.create` (there is no
+  # `dashboard.enabled` key in the chart - see chaos-mesh/chaos-mesh
+  # values.yaml/templates/chaos-dashboard-deployment.yaml); this is the field
+  # that controls whether the dashboard Deployment/PVC/Service render at all.
+  # Setting it explicitly (rather than leaving the chart's own `true`
+  # default) is the concrete effect of the "disabled" decision documented in
+  # README.md. Rationale: this sprint's workflow is a single operator running
+  # `kubectl apply`/`kubectl describe` against the CRDs directly (README
+  # Feature 20.5: no scheduled/automatic chaos), so a second portal-style web
+  # app adds operational surface without adding capability - the same reason
+  # the README rejects Litmus Portal for this scope.
+  dashboard:
+    create: false
+
+  # Reuse the existing Prometheus (`deploy/helm/dependencies`) as the
+  # observability surface for chaos experiments (20.2) - do not stand up a
+  # second, chart-bundled Prometheus. This is already the chart default;
+  # restated here so the decision is explicit rather than implicit.
+  prometheus:
+    create: false

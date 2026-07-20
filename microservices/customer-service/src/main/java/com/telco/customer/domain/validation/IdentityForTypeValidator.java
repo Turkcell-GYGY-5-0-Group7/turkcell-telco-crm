@@ -5,41 +5,27 @@ import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
 /**
- * Delegates {@link ValidIdentityForType} to the matching {@link TurkishNationalId} checksum:
- * {@link CustomerType#INDIVIDUAL} -> TCKN, {@link CustomerType#CORPORATE} -> VKN. A null type fails
- * closed (never an NPE); the violation always surfaces on the {@code identityNumber} property path.
+ * Delegates {@link ValidIdentityForType} to {@link TurkishNationalId}: TCKN checksum for
+ * INDIVIDUAL, VKN checksum for CORPORATE. Null type or number is valid here; presence is
+ * enforced separately by {@code @NotNull}/{@code @NotBlank} (same convention as
+ * {@link TcknValidator}/{@link VknValidator}). The violation is reported on the
+ * {@code identityNumber} property so API error shapes stay field-addressed.
  */
-public class IdentityForTypeValidator implements ConstraintValidator<ValidIdentityForType, IdentityTyped> {
+public class IdentityForTypeValidator
+        implements ConstraintValidator<ValidIdentityForType, IdentityBearing> {
 
     @Override
-    public boolean isValid(IdentityTyped value, ConstraintValidatorContext context) {
-        if (value == null) {
+    public boolean isValid(IdentityBearing value, ConstraintValidatorContext context) {
+        if (value == null || value.type() == null || value.identityNumber() == null) {
             return true;
         }
-        String identityNumber = value.identityNumber();
-        if (identityNumber == null || identityNumber.isBlank()) {
-            // Presence is enforced separately by @NotBlank on the field.
-            return true;
-        }
-
-        CustomerType type = value.type();
-        boolean valid;
-        String message;
-        if (type == CustomerType.INDIVIDUAL) {
-            valid = TurkishNationalId.isValidTckn(identityNumber);
-            message = "must be a checksum-valid TCKN for an INDIVIDUAL customer";
-        } else if (type == CustomerType.CORPORATE) {
-            valid = TurkishNationalId.isValidVkn(identityNumber);
-            message = "must be a checksum-valid VKN for a CORPORATE customer";
-        } else {
-            // Null/unknown type: fail closed; @NotNull reports the missing type on its own field.
-            valid = false;
-            message = "cannot be validated without a customer type";
-        }
-
+        boolean valid = value.type() == CustomerType.CORPORATE
+                ? TurkishNationalId.isValidVkn(value.identityNumber())
+                : TurkishNationalId.isValidTckn(value.identityNumber());
         if (!valid) {
             context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate(message)
+            context.buildConstraintViolationWithTemplate(
+                            context.getDefaultConstraintMessageTemplate())
                     .addPropertyNode("identityNumber")
                     .addConstraintViolation();
         }

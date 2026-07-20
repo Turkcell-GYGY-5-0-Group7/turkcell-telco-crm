@@ -1,0 +1,50 @@
+{
+  "type": "record",
+  "name": "DisputeOpenedV1",
+  "namespace": "com.telco.platform.events.dispute",
+  "doc": "Emitted when a dispute is opened and moves to UNDER_REVIEW (dispute.opened.v1). Producer: dispute-service. ADR-028 Section 5: this is the only signal a provisional hold ever travels on - never a financial instruction.",
+  "fields": [
+    {
+      "name": "disputeId",
+      "type": "string",
+      "doc": "Unique dispute identifier (UUID)."
+    },
+    {
+      "name": "invoiceId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Invoice this dispute contests, when applicable. Nullable for a payment-only dispute."
+    },
+    {
+      "name": "paymentId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Payment this dispute contests, when applicable. Nullable for an invoice-only dispute."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the customer who opened the dispute."
+    },
+    {
+      "name": "disputedAmount",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 2
+      },
+      "doc": "Amount contested, as an exact decimal (precision 19, scale 2)."
+    },
+    {
+      "name": "reasonCode",
+      "type": "string",
+      "doc": "Dispute reason code."
+    },
+    {
+      "name": "openedAt",
+      "type": "string",
+      "doc": "Instant the dispute was opened, ISO-8601 (UTC)."
+    }
+  ]
+}

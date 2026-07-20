@@ -45,8 +45,7 @@ class RegisterCustomerCommandHandlerTest {
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         RegisterCustomerCommand command = new RegisterCustomerCommand(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
-                null, null, null);
+                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1), null);
 
         CustomerResponse response = handler.handle(command);
 
@@ -59,53 +58,13 @@ class RegisterCustomerCommandHandlerTest {
     }
 
     @Test
-    void registersCustomerWithContactInfoAndCarriesItOnResponseAndEvent() {
-        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        RegisterCustomerCommand command = new RegisterCustomerCommand(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
-                "ada@example.com", "+905321112233", null);
-
-        CustomerResponse response = handler.handle(command);
-
-        assertThat(response.email()).isEqualTo("ada@example.com");
-        assertThat(response.phone()).isEqualTo("+905321112233");
-
-        ArgumentCaptor<Customer> savedCaptor = ArgumentCaptor.forClass(Customer.class);
-        verify(customers).save(savedCaptor.capture());
-        assertThat(savedCaptor.getValue().getEmail()).isEqualTo("ada@example.com");
-        assertThat(savedCaptor.getValue().getPhone()).isEqualTo("+905321112233");
-
-        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(outbox).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
-        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
-        assertThat(event.email()).isEqualTo("ada@example.com");
-        assertThat(event.phone()).isEqualTo("+905321112233");
-    }
-
-    @Test
-    void registersCustomerWithoutContactInfoLeavesEventContactFieldsNull() {
-        when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        handler.handle(new RegisterCustomerCommand(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
-                null, null, null));
-
-        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(outbox).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
-        CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
-        assertThat(event.email()).isNull();
-        assertThat(event.phone()).isNull();
-    }
-
-    @Test
     void selfServiceRegistrationPassesCallerUserIdThroughToEvent() {
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
         String callerUserId = UUID.randomUUID().toString();
 
         RegisterCustomerCommand command = new RegisterCustomerCommand(
                 CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
-                null, null, callerUserId);
+                callerUserId);
 
         handler.handle(command);
 
@@ -120,8 +79,7 @@ class RegisterCustomerCommandHandlerTest {
         when(customers.save(any(Customer.class))).thenAnswer(inv -> inv.getArgument(0));
 
         RegisterCustomerCommand command = new RegisterCustomerCommand(
-                CustomerType.INDIVIDUAL, "Grace", "Hopper", "10000000146", LocalDate.of(1990, 1, 1),
-                null, null, null);
+                CustomerType.INDIVIDUAL, "Grace", "Hopper", "10000000146", LocalDate.of(1990, 1, 1), null);
 
         handler.handle(command);
 

@@ -7,17 +7,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Read DTO for an order. Domain entities are never exposed directly (ADR-015).
- *
- * <p>{@code orderType} (NEW_LINE | ADDON | PLAN_CHANGE) is the kind derived from the items at
- * creation time (Sprint 24 Feature 24.2, design-note D1/D2).
- */
+/** Read DTO for an order. Domain entities are never exposed directly (ADR-015). */
 public record OrderResponse(
         UUID id,
         UUID customerId,
-        String orderType,
         String status,
+        String orderType,
+        UUID subscriptionId,
         String idempotencyKey,
         BigDecimal totalAmount,
         List<OrderItemResponse> items,
@@ -32,8 +28,9 @@ public record OrderResponse(
         return new OrderResponse(
                 order.getId(),
                 order.getCustomerId(),
-                order.getOrderType().name(),
                 order.getStatus().name(),
+                order.getOrderType().name(),
+                order.getSubscriptionId(),
                 order.getIdempotencyKey(),
                 order.getTotalAmount(),
                 items,

@@ -30,7 +30,7 @@ History reads require a valid JWT. Direct send is internal (event-driven in norm
 
 | Direction | Event |
 | --- | --- |
-| Consume | most domain events (template-mapped): `customer.*`, `payment.*`, `subscription.*`, `invoice.*`, `quota.*`, `ticket.*` |
+| Consume | most domain events (template-mapped): `customer.*`, `payment.*`, `subscription.*`, `invoice.*`, `quota.*`, `ticket.*`, `fraud.case-opened.v1` (internal ops/security alert, Sprint 23 Feature 23.4.3) |
 | Publish | `notification.dispatched.v1` |
 
 ## Notes
@@ -40,6 +40,10 @@ History reads require a valid JWT. Direct send is internal (event-driven in norm
   (direction optional, `desc` assumed; default `createdAt,desc`). Sortable fields: `createdAt`,
   `sentAt`, `status`, `channel`. Any other field or a malformed value returns the standard 400
   validation error shape.
+- `fraud.case-opened.v1` (fraud-service, ADR-029 Section 5) raises one internal ops/security alert on
+  the `OPS_ALERT` channel (distinct from customer-facing SMS/email/push, keyed to the `security-ops`
+  responder queue) via the `FRAUD_CASE_OPENED` template. Informational only: it triggers no
+  subscription-service call and no automated suspension.
 - Closes the messaging loops for AC-01 (welcome SMS), AC-02 (invoice email), AC-03 (quota SMS).
 - Persistence: notification documents and history live in MongoDB; the lone event
   `notification.dispatched.v1` is written via a co-located PostgreSQL outbox (non-atomic across the

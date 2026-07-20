@@ -1,0 +1,78 @@
+# Network-partition experiment (Sprint 20, Feature 20.3, subtask 20.3.3).
+#
+# Steady-state hypothesis (verbatim from deploy/chaos/STEADY-STATE.md, 20.2.1):
+#   "Isolating billing-service from Kafka does not lose messages - consumer
+#   lag rises while the partition is in effect but drains back down once the
+#   partition heals (no KafkaConsumerLagHigh sustained past recovery),
+#   consistent with the outbox/inbox pattern's at-least-once, idempotent
+#   recovery (ADR-009/019)."
+#
+# Watch (per STEADY-STATE.md 20.2.1):
+#   Dashboard: kafka-billing-ops
+#   Panel:     "Kafka Consumer Lag by Group" (primary), "Bill-Run Duration"
+#              (secondary - watch for stalled bill-runs during the partition)
+#   Alert:     KafkaConsumerLagHigh
+#              (kafka_consumer_fetch_manager_records_lag > 1000, for 5m)
+#   Abort threshold: abort if lag has not started draining within 5 minutes
+#     of the partition healing, or if KafkaConsumerLagHigh is still firing 5
+#     minutes after this NetworkChaos resource is deleted.
+#
+# Manual abort (per README Feature 20.5 guardrail):
+#   kubectl delete -f deploy/chaos/experiments/partition-billing-service-kafka.yaml
+#
+# No-message-loss verification (per task file 20.3.3, no new tooling): before
+# and after the partition, compare row counts on billing-service's own
+# outbox_event table - the platform-wide outbox table every service gets via
+# starter-outbox's V900__platform_outbox.sql migration
+# (platform/platform-starters/starter-outbox/src/main/resources/db/migration/platform/V900__platform_outbox.sql),
+# applied to billing-service's own database via
+# spring.flyway.locations=classpath:db/migration,classpath:db/migration/platform
+# (ADR-016). Concretely:
+#   SELECT count(*) FROM outbox_event WHERE created_at >= '<partition-start>';
+#   -- immediately before the partition starts, then again after recovery -
+#   -- the count of rows created during the partition window must equal the
+#   -- count of the corresponding events observed on the Kafka topic after
+#   -- recovery (no row stuck at status != 'PUBLISHED'/whatever terminal
+#   -- status this service's outbox relay uses - see the relay's own status
+#   -- values, not invented here).
+#
+# Kafka label selector verified against the real chart template (not
+# guessed): deploy/helm/dependencies/templates/kafka.yaml's Service and
+# StatefulSet both render
+# {{ include "telco-deps.componentLabels" (dict "ctx" . "component" "kafka") }}
+# / {{ include "telco-deps.selectorLabels" (dict "component" "kafka") }},
+# which per deploy/helm/dependencies/templates/_helpers.tpl expand to
+# app.kubernetes.io/name: kafka and app.kubernetes.io/component: kafka.
+#
+# Verification status: NOT verified this session. Docker Desktop is down;
+# this manifest has not been kubectl-applied to any cluster. A follow-up pass
+# once Docker recovers must confirm: the kafka-billing-ops consumer-lag panel
+# rises during the partition and drains after healing, and the outbox_event
+# before/after row-count check shows no permanently lost event.
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: partition-billing-service-kafka
+  namespace: telco
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - telco
+    labelSelectors:
+      app.kubernetes.io/name: billing-service
+  direction: both
+  target:
+    mode: all
+    selector:
+      namespaces:
+        - telco
+      labelSelectors:
+        app.kubernetes.io/name: kafka
+        app.kubernetes.io/component: kafka
+  # Bounded duration; Chaos Mesh automatically heals (removes the injected
+  # iptables partition rules) once this elapses - no manual cleanup needed
+  # for the fault itself, though the manual-abort command above still applies
+  # for cutting an in-progress experiment short.
+  duration: "90s"

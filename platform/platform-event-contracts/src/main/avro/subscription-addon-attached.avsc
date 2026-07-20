@@ -1,0 +1,56 @@
+{
+  "type": "record",
+  "name": "SubscriptionAddonAttachedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when an addon is attached to a subscription via an addon order (subscription.addon-attached.v1, FR-09). The fee bills on the next invoice (FR-22). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer."
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Addon order that triggered the attach; order-service fulfils on it."
+    },
+    {
+      "name": "addonCode",
+      "type": "string",
+      "doc": "Catalog code of the attached addon."
+    },
+    {
+      "name": "addonType",
+      "type": "string",
+      "doc": "Addon type (DATA, SMS, MINUTES, VAS); billing maps VAS to a VAS invoice line."
+    },
+    {
+      "name": "price",
+      "type": {
+        "type": "bytes",
+        "logicalType": "decimal",
+        "precision": 19,
+        "scale": 4
+      },
+      "doc": "Addon fee to bill on the next invoice, as an exact decimal."
+    },
+    {
+      "name": "currency",
+      "type": "string",
+      "doc": "ISO 4217 currency code, for example TRY."
+    },
+    {
+      "name": "attachedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the addon was attached (epoch millis UTC)."
+    }
+  ]
+}

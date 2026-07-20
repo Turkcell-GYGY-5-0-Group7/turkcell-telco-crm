@@ -2,12 +2,18 @@
 
 | Status | Progress | Last updated |
 | --- | --- | --- |
-| TODO | 0/5 | 2026-07-11 |
+| DONE | 5/5 | 2026-07-17 |
 
 Legend: DONE / IN PROGRESS / TODO / BLOCKED / DEFERRED. Cross-sprint rollup: [../STATUS.md](../STATUS.md).
 
-> This is a **post-MVP** sprint. It is documented now (design pass + Proposed ADR) and built later.
-> Feature subtask files will be authored when the sprint is scheduled.
+> This is a **post-MVP** sprint. ADR-029 was **ratified (Accepted) 2026-07-17** with three amendments
+> (see the ADR and `../STATUS.md`); build work is unblocked. All three rules are in scope this phase.
+>
+> **Independence caveat (Amendment 1):** `MSISDN_CHURN_VELOCITY` needs a `customerId` that
+> `msisdn.released.v1` does not publish today, so Feature 23.2 adds `customerId` to that event
+> (backward-compatible nullable union) via subscription-service's `TerminateSubscriptionCommandHandler`.
+> The sprint therefore carries one small subscription-service producer change - it is not purely
+> self-contained. It still adds no new subscription-service *event* and never reads `subscription-db`.
 
 ## Objective
 
@@ -26,11 +32,11 @@ response model).
 
 | ID | Feature | Status | File |
 | --- | --- | --- | --- |
-| 23.1 | fraud-service scaffold and schema (ADR-017 template, `fraud-db`, FraudCase/FraudSignal/FraudRule/MsisdnLifecycleSignal) | TODO | [23.1-fraud-service-scaffold-and-schema.md](23.1-fraud-service-scaffold-and-schema.md) |
-| 23.2 | Rule evaluation: RAPID_SIM_SWAP, MSISDN_CHURN_VELOCITY (consume msisdn/subscription events via inbox) | TODO | [23.2-rule-evaluation-engine.md](23.2-rule-evaluation-engine.md) |
-| 23.3 | Fraud case API (list/view/resolve case, admin rule-threshold config) | TODO | [23.3-fraud-case-api.md](23.3-fraud-case-api.md) |
-| 23.4 | Fraud eventing (`fraud.signal-raised.v1`, `fraud.case-opened.v1`) + ticket-service auto-ticket consumer | TODO | [23.4-fraud-eventing-and-ticket-integration.md](23.4-fraud-eventing-and-ticket-integration.md) |
-| 23.5 | Tests (unit/integration; rolling-window velocity scenarios) | TODO | [23.5-tests.md](23.5-tests.md) |
+| 23.1 | fraud-service scaffold and schema (ADR-017 template, `fraud-db`, FraudCase/FraudSignal/FraudRule/MsisdnLifecycleSignal) | DONE | [23.1-fraud-service-scaffold-and-schema.md](23.1-fraud-service-scaffold-and-schema.md) |
+| 23.2 | Rule evaluation: RAPID_SIM_SWAP, MSISDN_CHURN_VELOCITY, SUSPEND_REACTIVATE_VELOCITY (consume msisdn/subscription events via inbox) | DONE | [23.2-rule-evaluation-engine.md](23.2-rule-evaluation-engine.md) |
+| 23.3 | Fraud case API (list/view/resolve case, admin rule-threshold config) | DONE | [23.3-fraud-case-api.md](23.3-fraud-case-api.md) |
+| 23.4 | Fraud eventing (`fraud.signal-raised.v1`, `fraud.case-opened.v1`) + ticket-service auto-ticket consumer | DONE | [23.4-fraud-eventing-and-ticket-integration.md](23.4-fraud-eventing-and-ticket-integration.md) |
+| 23.5 | Tests (unit/integration; rolling-window velocity scenarios) | DONE | [23.5-tests.md](23.5-tests.md) |
 
 ## Sprint Deliverables
 

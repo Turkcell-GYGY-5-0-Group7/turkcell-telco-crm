@@ -1,0 +1,18 @@
+# dispute-service Docker Compose overrides applied when SPRING_PROFILES_ACTIVE includes 'docker'.
+# Overrides the localhost values in application.yml with Docker service names.
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/dispute_db
+    username: dispute
+    password: dispute
+  kafka:
+    bootstrap-servers: kafka:9092
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwks-uri: http://keycloak:8080/realms/telco-crm/protocol/openid-connect/certs
+
+minio:
+  endpoint: http://minio:9000

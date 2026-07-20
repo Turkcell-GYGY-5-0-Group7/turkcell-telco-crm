@@ -1,11 +1,9 @@
 -- product-catalog-service: addon management (Sprint 24, feature 24.1, FR-05).
 -- Adds nullable allowance columns to addons and seeds the standard addon catalog.
 --
--- NOTE on tariff_addons links: V1 seeds no tariffs (tariffs are created at runtime through
--- POST /api/v1/tariffs), so there is no tariff id or code that SQL could reference here without
--- inventing catalog rows the admin flow owns. Links are therefore runtime-managed: the
--- POST /api/v1/addons handler accepts applicableTariffCodes and attaches the addon through the
--- owning Tariff.addons side, which persists the tariff_addons join rows.
+-- NOTE on tariff_addons links: this migration seeds no links. Addons are attached to a tariff at
+-- runtime through the owning Tariff.addons side (Tariff#addAddon), which persists the
+-- tariff_addons join rows; POST /api/v1/addons does not accept tariff codes.
 
 ALTER TABLE addons
     ADD COLUMN data_mb       BIGINT,

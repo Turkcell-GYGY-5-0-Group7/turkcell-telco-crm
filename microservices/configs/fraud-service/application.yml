@@ -1,0 +1,55 @@
+# fraud-service base config (port 9013, CQRS+Mediator, PostgreSQL fraud-db - ADR-029).
+# Per-env overrides in fraud-service/application-{dev,docker,k8s,staging,prod,test}.yml.
+# Scaffold scope (Feature 23.1): schema + aggregates only. The inbox consumers (23.2) and outbox
+# publishers (23.4) are enabled here so their platform tables (inbox V901, outbox V900) apply, but no
+# Kafka listeners or event publishers exist yet.
+
+server:
+  port: 9013
+
+spring:
+  datasource:
+    url: ${FRAUD_DB_URL:jdbc:postgresql://localhost:5432/fraud_db}
+    username: ${FRAUD_DB_USER:fraud}
+    password: ${FRAUD_DB_PASSWORD:fraud}
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      # Flyway owns the schema; Hibernate never alters it (ADR-016).
+      ddl-auto: none
+    open-in-view: false
+  flyway:
+    # Service migrations + platform migrations (outbox V900, inbox V901). ADR-016.
+    locations: classpath:db/migration,classpath:db/migration/platform
+  kafka:
+    # Consumes subscription-service events (msisdn.allocated.v1/msisdn.released.v1,
+    # subscription.activated.v1/subscription.suspended.v1) idempotently via the inbox - wired in
+    # Feature 23.2 (ADR-005, ADR-009, ADR-029 Section 4). Present here for forward config parity.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: fraud-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+security:
+  oauth2:
+    resourceserver:
+      jwt:
+        jwks-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/telco-crm/protocol/openid-connect/certs}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+
+telco:
+  platform:
+    observability:
+      correlation:
+        enabled: true
+    outbox:
+      enabled: true
+    inbox:
+      enabled: true

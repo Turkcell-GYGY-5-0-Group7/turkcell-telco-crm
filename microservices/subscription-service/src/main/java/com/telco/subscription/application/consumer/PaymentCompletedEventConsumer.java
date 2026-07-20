@@ -5,7 +5,6 @@ import com.telco.platform.common.exception.DependencyFailureException;
 import com.telco.platform.common.exception.ResourceNotFoundException;
 import com.telco.platform.mediator.Mediator;
 import com.telco.subscription.application.command.ActivateSubscriptionCommand;
-import com.telco.subscription.application.command.ChangeTariffCommand;
 import com.telco.subscription.application.command.FailSubscriptionActivationCommand;
 import com.telco.subscription.application.dto.PaymentCompletedPayload;
 import com.telco.subscription.infrastructure.client.OrderClientResponse;
@@ -20,7 +19,6 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -47,21 +45,8 @@ import java.util.UUID;
  *   <li>TERMINAL order lookup rejected ({@link OrderLookupRejectedException}: non-404 4xx, a
  *       contract/auth defect that cannot heal by redelivery) -&gt; dispatch
  *       {@code FailSubscriptionActivationCommand} (reason {@code ORDER_LOOKUP_REJECTED}).</li>
- *   <li>Standalone ADDON order ({@code orderType == ADDON}, Sprint 24 Feature 24.3) -&gt; ignored
- *       here entirely: there is no activation leg, order-service confirms and fulfills the order
- *       itself on {@code payment.completed.v1} and publishes {@code addon.purchased.v1}. This
- *       branch runs BEFORE the tariff-count invariant, which would otherwise see zero TARIFF
- *       items and wrongly compensate a valid purchase.</li>
- *   <li>PLAN_CHANGE order ({@code orderType == PLAN_CHANGE}, Sprint 24 Feature 24.4, design-note
- *       D2) -&gt; dispatch {@code ChangeTariffCommand} for the single TARIFF item's
- *       {@code targetSubscriptionId} instead of activating a new line. Terminal changeTariff
- *       failures reuse the activation-failed event so the existing compensation runs.</li>
- *   <li>Not exactly one TARIFF item (one-tariff-line invariant violated) -&gt; dispatch
- *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).
- *       Since Sprint 24 Feature 24.2 (design-note D1) an order may bundle ADDON items alongside its
- *       single tariff, so the invariant counts TARIFF items only - an item with a null
- *       {@code itemType} (pre-24.2 order-service) counts as TARIFF. Two or more TARIFF items (or
- *       none) still fail exactly as before.</li>
+ *   <li>Multi-item order (one-line MVP invariant violated) -&gt; dispatch
+ *       {@code FailSubscriptionActivationCommand} (reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}).</li>
  * </ul>
  *
  * <p>Idempotency: dedup is delegated to the mediator. The dispatched commands
@@ -152,52 +137,15 @@ public class PaymentCompletedEventConsumer {
 
         UUID customerId = order.customerId() != null ? order.customerId() : payloadCustomerId;
 
-        // Branch on the persisted order kind (Sprint 24 Feature 24.3, design-note D1/D2): a
-        // standalone ADDON order has NO activation leg - order-service owns its payment.completed
-        // reaction (confirm + fulfill + addon.purchased.v1). Without this skip the zero-TARIFF
-        // shape below would emit UNSUPPORTED_MULTI_ITEM_ORDER and wrongly trigger compensation
-        // for a perfectly valid addon purchase.
-        if ("ADDON".equals(order.orderType())) {
-            LOGGER.info("Ignoring payment.completed.v1 for ADDON order {} (no activation leg; "
-                    + "order-service fulfills it) messageId={}", orderId, messageId);
-            return;
-        }
-
-        // One-tariff-line invariant (relaxed for Sprint 24 Feature 24.2): bundled ADDON items are
-        // allowed alongside the single TARIFF item; zero or 2+ TARIFF items still compensate.
-        List<OrderItemClientResponse> tariffItems = order.items() == null
-                ? List.of()
-                : order.items().stream().filter(OrderItemClientResponse::isTariffItem).toList();
-        if (tariffItems.size() != 1) {
-            LOGGER.warn("Order {} has {} TARIFF items; one-tariff-line invariant violated -> activation-failed",
-                    orderId, tariffItems.size());
+        if (order.items() == null || order.items().size() != 1) {
+            int count = order.items() == null ? 0 : order.items().size();
+            LOGGER.warn("Order {} has {} items; one-line MVP invariant violated -> activation-failed", orderId, count);
             mediator.send(new FailSubscriptionActivationCommand(
                     orderId, customerId, "UNSUPPORTED_MULTI_ITEM_ORDER", messageId));
             return;
         }
 
-        OrderItemClientResponse item = tariffItems.get(0);
-
-        // PLAN_CHANGE branch (Sprint 24 Feature 24.4, design-note D2): the paid order switches an
-        // EXISTING subscription's tariff instead of activating a new line. The single TARIFF item
-        // carries the target subscription and the pinned catalog snapshot.
-        if ("PLAN_CHANGE".equals(order.orderType())) {
-            if (item.targetSubscriptionId() == null) {
-                // Contract breach (order-service validates this shape at creation): terminal.
-                LOGGER.warn("PLAN_CHANGE order {} has no targetSubscriptionId -> activation-failed",
-                        orderId);
-                mediator.send(new FailSubscriptionActivationCommand(
-                        orderId, customerId, "MALFORMED_PLAN_CHANGE_ORDER", messageId));
-                return;
-            }
-            mediator.send(new ChangeTariffCommand(orderId, customerId,
-                    UUID.fromString(item.targetSubscriptionId()),
-                    item.tariffCode(), item.tariffVersion()));
-            LOGGER.info("Tariff change dispatched for orderId={} subscriptionId={}",
-                    orderId, item.targetSubscriptionId());
-            return;
-        }
-
+        OrderItemClientResponse item = order.items().get(0);
         mediator.send(new ActivateSubscriptionCommand(orderId, customerId, item.tariffCode(), item.tariffVersion()));
         LOGGER.info("Activated subscription for orderId={} customerId={}", orderId, customerId);
     }

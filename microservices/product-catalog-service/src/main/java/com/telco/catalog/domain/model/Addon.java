@@ -1,5 +1,6 @@
 package com.telco.catalog.domain.model;
 
+import com.telco.platform.common.exception.BusinessRuleException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -66,32 +67,35 @@ public class Addon {
     protected Addon() {
     }
 
-    private Addon(UUID id, String code, String name, BigDecimal price, String currency,
-                  AddonType type, int validityDays, Long dataMb, Long voiceMinutes, Long smsCount) {
-        this.id = Objects.requireNonNull(id, "id");
-        this.code = Objects.requireNonNull(code, "code");
-        this.name = Objects.requireNonNull(name, "name");
-        this.price = Objects.requireNonNull(price, "price");
-        this.currency = Objects.requireNonNull(currency, "currency");
-        this.type = Objects.requireNonNull(type, "type");
-        this.validityDays = validityDays;
-        this.status = "ACTIVE";
-        this.dataMb = dataMb;
-        this.voiceMinutes = voiceMinutes;
-        this.smsCount = smsCount;
-        this.createdAt = Instant.now();
-    }
-
     /**
-     * Factory that creates a new addon in {@code ACTIVE} status. Allowance fields are nullable:
+     * Factory that creates a new ACTIVE addon (FR-05). Tariff links are managed from the
+     * {@link Tariff} side of the many-to-many. Allowance fields are nullable and type-dependent:
      * a DATA addon carries {@code dataMb}, a MINUTES addon {@code voiceMinutes}, an SMS addon
-     * {@code smsCount}, and a VAS addon none. The entity stays immutable after creation.
+     * {@code smsCount}, and a VAS addon none.
      */
     public static Addon create(String code, String name, BigDecimal price, String currency,
                                AddonType type, int validityDays,
                                Long dataMb, Long voiceMinutes, Long smsCount) {
-        return new Addon(UUID.randomUUID(), code, name, price, currency, type, validityDays,
-                dataMb, voiceMinutes, smsCount);
+        if (price == null || price.signum() < 0) {
+            throw new BusinessRuleException("Addon price must be zero or positive: " + code);
+        }
+        if (validityDays <= 0) {
+            throw new BusinessRuleException("Addon validityDays must be positive: " + code);
+        }
+        Addon addon = new Addon();
+        addon.id = UUID.randomUUID();
+        addon.code = Objects.requireNonNull(code, "code");
+        addon.name = Objects.requireNonNull(name, "name");
+        addon.price = price;
+        addon.currency = Objects.requireNonNull(currency, "currency");
+        addon.type = Objects.requireNonNull(type, "type");
+        addon.validityDays = validityDays;
+        addon.status = "ACTIVE";
+        addon.dataMb = dataMb;
+        addon.voiceMinutes = voiceMinutes;
+        addon.smsCount = smsCount;
+        addon.createdAt = Instant.now();
+        return addon;
     }
 
     public UUID getId() {

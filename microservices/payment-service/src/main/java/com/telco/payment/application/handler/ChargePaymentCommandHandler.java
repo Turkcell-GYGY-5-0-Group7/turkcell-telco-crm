@@ -9,7 +9,6 @@ import com.telco.payment.application.service.PaymentCreationService;
 import com.telco.payment.domain.AttemptStatus;
 import com.telco.payment.domain.Payment;
 import com.telco.payment.domain.PaymentAttempt;
-import com.telco.payment.domain.PaymentMethod;
 import com.telco.payment.domain.PaymentStatus;
 import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.payment.infrastructure.psp.ChargeResult;
@@ -90,17 +89,13 @@ public class ChargePaymentCommandHandler
             payment = found;
         } else {
             // Step 2: New payment - persist in a separate TX so it survives circuit-open rollback.
-            // Method defaults to CREDIT_CARD when the caller did not specify one (FR-25); the mock
-            // PSP ignores the method either way (design-note D6).
-            PaymentMethod method =
-                    command.method() != null ? command.method() : PaymentMethod.CREDIT_CARD;
             payment = Payment.create(
                     command.orderId(),
                     command.customerId(),
                     command.amount(),
                     command.paymentRequestId(),
                     command.invoiceId(),
-                    method);
+                    command.method());
             paymentCreationService.saveNewPayment(payment);
             LOGGER.info("Created new payment id={} for orderId={}", payment.getId(), command.orderId());
         }

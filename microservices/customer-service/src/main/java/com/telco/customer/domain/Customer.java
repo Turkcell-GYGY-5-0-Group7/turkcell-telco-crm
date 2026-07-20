@@ -62,14 +62,12 @@ public class Customer {
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
-    // Contact info (FR-03, feature 24.5): stored plain per design-note D5 (no encryption mandate),
-    // but masked in the log/persistence view (ADR-021).
-    @Sensitive(MaskStrategy.EMAIL)
-    @Column(name = "email", length = 255)
+    /** Contact e-mail (FR-03). PII: masked in logs via DTO-level {@code @Sensitive}, never logged raw. */
+    @Column(length = 255)
     private String email;
 
-    @Sensitive(MaskStrategy.PARTIAL)
-    @Column(name = "phone", length = 32)
+    /** Contact phone in E.164-ish free form (FR-03). Same PII handling as {@link #email}. */
+    @Column(length = 32)
     private String phone;
 
     @Enumerated(EnumType.STRING)
@@ -87,29 +85,23 @@ public class Customer {
     }
 
     public Customer(UUID id, CustomerType type, String firstName, String lastName,
-                    String identityNumber, LocalDate dateOfBirth, String email, String phone,
-                    CustomerStatus status, Instant createdAt) {
+                    String identityNumber, LocalDate dateOfBirth, CustomerStatus status,
+                    Instant createdAt) {
         this.id = Objects.requireNonNull(id, "id");
         this.type = Objects.requireNonNull(type, "type");
         this.firstName = Objects.requireNonNull(firstName, "firstName");
         this.lastName = Objects.requireNonNull(lastName, "lastName");
         this.identityNumber = Objects.requireNonNull(identityNumber, "identityNumber");
         this.dateOfBirth = dateOfBirth;
-        this.email = email;
-        this.phone = phone;
         this.status = Objects.requireNonNull(status, "status");
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt");
     }
 
-    /**
-     * Registers a new customer in {@link CustomerStatus#PENDING}, awaiting the KYC decision (FR-01).
-     * Contact info is optional at registration (FR-03): {@code email} and {@code phone} may be null.
-     */
+    /** Registers a new customer in {@link CustomerStatus#PENDING}, awaiting the KYC decision (FR-01). */
     public static Customer register(CustomerType type, String firstName, String lastName,
-                                    String identityNumber, LocalDate dateOfBirth,
-                                    String email, String phone) {
+                                    String identityNumber, LocalDate dateOfBirth) {
         return new Customer(UUID.randomUUID(), type, firstName, lastName, identityNumber, dateOfBirth,
-                email, phone, CustomerStatus.PENDING, Instant.now());
+                CustomerStatus.PENDING, Instant.now());
     }
 
     /**
@@ -137,18 +129,25 @@ public class Customer {
         }
     }
 
-    /**
-     * Updates mutable profile fields (FR-03), including optional contact info. The identity number is
-     * immutable and not updatable. A null {@code email}/{@code phone} clears the stored value: the
-     * update is a full profile replacement, consistent with {@code dateOfBirth}.
-     */
-    public void updateProfile(String firstName, String lastName, LocalDate dateOfBirth,
-                              String email, String phone) {
+    /** Updates mutable profile fields (FR-03). The identity number is immutable and not updatable. */
+    public void updateProfile(String firstName, String lastName, LocalDate dateOfBirth) {
         this.firstName = Objects.requireNonNull(firstName, "firstName");
         this.lastName = Objects.requireNonNull(lastName, "lastName");
         this.dateOfBirth = dateOfBirth;
+    }
+
+    /** Updates contact information (FR-03). Both fields are optional; null clears the value. */
+    public void updateContact(String email, String phone) {
         this.email = email;
         this.phone = phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPhone() {
+        return phone;
     }
 
     /** Soft-deletes the customer (FR-04). Idempotent: re-deleting keeps the original timestamp. */
@@ -184,14 +183,6 @@ public class Customer {
 
     public LocalDate getDateOfBirth() {
         return dateOfBirth;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public String getPhone() {
-        return phone;
     }
 
     public CustomerStatus getStatus() {

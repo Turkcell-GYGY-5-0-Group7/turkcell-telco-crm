@@ -391,6 +391,10 @@ kubectl -n telco port-forward svc/prometheus 9090:9090   # metrics + alerts
 # OTLP to otel-collector:4318 and logs to loki:3100 (the `docker` profile addresses).
 ```
 
+Running a chaos game day against these dashboards? See
+[`deploy/chaos/GAMEDAY-RUNBOOK.md`](chaos/GAMEDAY-RUNBOOK.md) (Sprint 20) for the full
+prerequisites, per-experiment execution walkthrough, and post-game-day findings template.
+
 ---
 
 ## 11. Teardown

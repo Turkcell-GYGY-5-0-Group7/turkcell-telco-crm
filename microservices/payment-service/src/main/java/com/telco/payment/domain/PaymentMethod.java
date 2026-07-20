@@ -1,11 +1,8 @@
 package com.telco.payment.domain;
 
 /**
- * How the customer pays (FR-25): credit card, bank transfer, or wallet.
- *
- * <p>Label only in the MVP: the mock PSP ignores the method - every method flows through the same
- * charge path. Wallet balance modeling (the PDF's Wallet aggregate) is deliberately out of scope
- * per Sprint 24 design-note D6; {@link #WALLET} is a labeled method, not a balance-backed one.
+ * How a payment is settled (FR-25). All methods route through the same mock PSP in the MVP;
+ * the method is captured for reporting and future PSP routing, not differential processing.
  */
 public enum PaymentMethod {
     CREDIT_CARD,

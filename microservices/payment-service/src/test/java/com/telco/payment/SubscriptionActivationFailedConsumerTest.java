@@ -94,7 +94,7 @@ class SubscriptionActivationFailedConsumerTest {
     /** Seeds a COMPLETED payment for the given order via the real charge pipeline (PSP mocked OK). */
     private UUID chargeCompleted(UUID orderId) {
         PaymentResponse response = mediator.send(new ChargePaymentCommand(
-                orderId, UUID.randomUUID(), new BigDecimal("49.99"), null, null,
+                orderId, UUID.randomUUID(), new BigDecimal("49.99"), null,
                 orderId.toString(), "seed-" + orderId));
         return response.id();
     }

@@ -51,4 +51,14 @@ public interface UsageRecordRepository extends JpaRepository<UsageRecord, UUID> 
             @Param("type") UsageType type,
             @Param("from") Instant from,
             @Param("to") Instant to);
+
+    /**
+     * Distinct subscriptions with any overage usage in the window - the population the scheduled
+     * monthly aggregation (FR-20) must emit {@code usage.aggregated.v1} for.
+     */
+    @Query("SELECT DISTINCT r.subscriptionId FROM UsageRecord r "
+            + "WHERE r.overage = true AND r.recordedAt >= :from AND r.recordedAt < :to")
+    List<UUID> findSubscriptionIdsWithOverage(
+            @Param("from") Instant from,
+            @Param("to") Instant to);
 }

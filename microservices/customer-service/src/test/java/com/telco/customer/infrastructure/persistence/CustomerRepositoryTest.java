@@ -78,8 +78,7 @@ class CustomerRepositoryTest {
     @Test
     void softDeleteExcludesFromDefaultReadsButRetainsTheRow() {
         Customer customer = customers.save(Customer.register(
-                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1),
-                null, null));
+                CustomerType.INDIVIDUAL, "Ada", "Lovelace", "10000000146", LocalDate.of(1990, 1, 1)));
         UUID id = customer.getId();
         flushAndClear();
 
@@ -103,8 +102,7 @@ class CustomerRepositoryTest {
     @Test
     void identityNumberIsStoredAsCiphertextNotPlaintext() {
         Customer customer = customers.save(Customer.register(
-                CustomerType.INDIVIDUAL, "Grace", "Hopper", "11111111110", LocalDate.of(1985, 5, 5),
-                null, null));
+                CustomerType.INDIVIDUAL, "Grace", "Hopper", "11111111110", LocalDate.of(1985, 5, 5)));
         flushAndClear();
 
         Object stored = entityManager.getEntityManager()
@@ -121,9 +119,10 @@ class CustomerRepositoryTest {
     @Test
     void contactInfoRoundTripsThroughTheV2Columns() {
         // Feature 24.5 (FR-03): email/phone are plain nullable columns added by V2__customer_contact.
-        Customer customer = customers.save(Customer.register(
-                CustomerType.INDIVIDUAL, "Radia", "Perlman", "10000000146", LocalDate.of(1951, 12, 18),
-                "radia@example.com", "+905321112233"));
+        Customer customer = Customer.register(
+                CustomerType.INDIVIDUAL, "Radia", "Perlman", "10000000146", LocalDate.of(1951, 12, 18));
+        customer.updateContact("radia@example.com", "+905321112233");
+        customer = customers.save(customer);
         flushAndClear();
 
         Customer reloaded = customers.findById(customer.getId()).orElseThrow();
@@ -140,8 +139,7 @@ class CustomerRepositoryTest {
     @Test
     void findsDefaultAddressForCustomer() {
         Customer customer = customers.save(Customer.register(
-                CustomerType.INDIVIDUAL, "Edsger", "Dijkstra", "10000000146", LocalDate.of(1970, 3, 3),
-                null, null));
+                CustomerType.INDIVIDUAL, "Edsger", "Dijkstra", "10000000146", LocalDate.of(1970, 3, 3)));
         flushAndClear();
 
         addresses.save(Address.create(customer.getId(), "Sok 1", "Istanbul", "Kadikoy", "34000", true));

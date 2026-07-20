@@ -1,0 +1,86 @@
+# campaign-service (port 9011). Domain service (Sprint 21, ADR-027).
+serviceName: campaign-service
+containerPort: 9011
+service:
+  port: 9011
+
+image:
+  tag: latest
+
+# Feature 19.3.2 (ADR-026 Section 2). campaign-service has exactly ONE real
+# caller: order-service, calling its tokenless internal validate endpoint at
+# order-creation time (CampaignServiceClient, fail-open circuit breaker,
+# microservices/campaign-service/CLAUDE.md: "No gateway route is registered
+# for campaign-service (internal service-to-service call only, ADR-005/
+# ADR-011)"). Unlike most domain services, api-gateway is NOT a legitimate
+# caller here - there is no external/gateway-routed campaign API - so this
+# overrides the chart default's `[api-gateway]` with `[order-service]` only,
+# the same shape 19.3's cross-service caller audit already used for
+# customer-service/order-service/product-catalog-service.
+meshPolicy:
+  authorizedClients:
+    - order-service
+
+# Feature 19.4.3 (ADR-026 Section 3, service-catalog.md Section 5 + event-
+# catalog.md). Postgres (system of record - Campaign/CampaignRedemption
+# aggregates), Keycloak (JWKS validation - CampaignSecurityConfig is its own
+# OAuth2 resource server, same pattern as every other domain service), Kafka
+# (consumes order.created.v1/order.cancelled.v1/payment.completed.v1/
+# tariff.created.v1/tariff.price-changed.v1 via the inbox, publishes
+# campaign.*.v1 via the outbox). `redis: true` beyond the Infrastructure
+# Profile table's cache-only framing, mirroring subscription-service/
+# billing-service's documented exception: campaign-service's redemption
+# reservation-expiry reaper (CampaignRedemptionReservationExpiryReaper) is
+# coordinated across replicas via starter-lock's Redisson-backed distributed
+# lock (ADR-024), confirmed live by reading
+# microservices/configs/campaign-service/application.yml's
+# `telco.platform.lock.redis.address`.
+networkPolicy:
+  egress:
+    postgres: true
+    redis: true
+    keycloak: true
+    kafka: true
+
+config:
+  CONFIG_SERVER_URI: http://config-server:8888
+  CONFIG_SERVER_USER: config
+  # Same in-cluster profile convention as every other PostgreSQL-backed
+  # domain service (Feature 18.5): dev,k8s reads DB credentials from the
+  # environment (microservices/configs/campaign-service/application-k8s.yml)
+  # instead of the docker profile's plaintext DB block.
+  SPRING_PROFILES_ACTIVE: dev,k8s
+  EUREKA_USERNAME: eureka
+
+secrets:
+  CONFIG_SERVER_PASSWORD: config
+  EUREKA_PASSWORD: eureka
+  REDIS_PASSWORD: telco
+  # LOCAL-DEV-ONLY placeholders. Real values live in Vault KV v2 at
+  # secret/campaign-service/db-credentials (18.5.1,
+  # deploy/helm/vault/seed-secrets.sh) and are never committed here.
+  CAMPAIGN_DB_USER: campaign
+  CAMPAIGN_DB_PASSWORD: campaign
+
+# Vault-backed secret sync (18.3.2, ADR-025 Section 1). Only consulted when
+# vault.enabled=true (deploy/helm/telco-service/values.yaml default: false,
+# local/dev unaffected). roleName defaults to serviceName above, matching the
+# auth/kubernetes/role/campaign-service role written by
+# deploy/helm/vault/bootstrap-k8s-auth.sh (18.2.3).
+vault:
+  secretKeys:
+    - key: CONFIG_SERVER_PASSWORD
+      path: campaign-service/app
+      field: CONFIG_SERVER_PASSWORD
+    - key: EUREKA_PASSWORD
+      path: campaign-service/app
+      field: EUREKA_PASSWORD
+    - key: REDIS_PASSWORD
+      path: campaign-service/app
+      field: REDIS_PASSWORD
+    - key: CAMPAIGN_DB_USER
+      path: campaign-service/db-credentials
+      field: username
+    - key: CAMPAIGN_DB_PASSWORD
+      path: campaign-service/db-credentials
+      field: password

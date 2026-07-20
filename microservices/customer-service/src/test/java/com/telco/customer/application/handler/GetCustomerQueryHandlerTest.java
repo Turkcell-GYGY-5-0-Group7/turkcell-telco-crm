@@ -35,7 +35,7 @@ class GetCustomerQueryHandlerTest {
     @Test
     void returnsCustomerResponseForExistingId() {
         Customer customer = Customer.register(CustomerType.INDIVIDUAL, "Alan", "Turing",
-                "10000000146", LocalDate.of(1912, 6, 23), null, null);
+                "10000000146", LocalDate.of(1912, 6, 23));
         when(customers.findById(customer.getId())).thenReturn(Optional.of(customer));
 
         CustomerResponse response = handler.handle(new GetCustomerQuery(customer.getId()));

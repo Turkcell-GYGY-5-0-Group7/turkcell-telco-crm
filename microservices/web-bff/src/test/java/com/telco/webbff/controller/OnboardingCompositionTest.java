@@ -30,7 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
-import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -188,36 +187,6 @@ class OnboardingCompositionTest {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getBody()).contains(orderId.toString());
-        gatewayServer.verify();
-    }
-
-    @Test
-    void order_forwards_addon_codes_as_addon_items() {
-        // Sprint 24 Feature 24.3 (design-note D1): addonCodes on the onboarding request become
-        // ADDON items alongside the tariff item; order-service snapshots and prices them.
-        String key = UUID.randomUUID().toString();
-        UUID tariffId = UUID.randomUUID();
-
-        gatewayServer.expect(requestTo(containsString("/api/v1/tariffs/TRF-1")))
-                .andRespond(withSuccess(apiOk(tariffObject(tariffId, "TRF-1", "Mega 20GB", "199.90")),
-                        MediaType.APPLICATION_JSON));
-        gatewayServer.expect(requestTo(containsString("/api/v1/orders")))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(jsonPath("$.items.length()").value(3))
-                .andExpect(jsonPath("$.items[0].tariffId").value(tariffId.toString()))
-                .andExpect(jsonPath("$.items[1].itemType").value("ADDON"))
-                .andExpect(jsonPath("$.items[1].productCode").value("ADD-1"))
-                .andExpect(jsonPath("$.items[2].itemType").value("ADDON"))
-                .andExpect(jsonPath("$.items[2].productCode").value("ADD-2"))
-                .andRespond(withSuccess(apiOk("{\"id\":\"" + UUID.randomUUID()
-                                + "\",\"status\":\"PENDING_PAYMENT\"}"),
-                        MediaType.APPLICATION_JSON));
-
-        ResponseEntity<String> response = postOrder(key,
-                "{\"customerId\":\"" + UUID.randomUUID() + "\",\"tariffCode\":\"TRF-1\","
-                        + "\"addonCodes\":[\"ADD-1\",\"ADD-2\"]}");
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         gatewayServer.verify();
     }
 

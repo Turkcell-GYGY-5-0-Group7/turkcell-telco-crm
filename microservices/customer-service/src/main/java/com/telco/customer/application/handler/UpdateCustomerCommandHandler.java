@@ -38,14 +38,13 @@ public class UpdateCustomerCommandHandler
         Customer customer = customers.findById(command.id())
                 .orElseThrow(() -> new ResourceNotFoundException("customer not found: " + command.id()));
 
-        customer.updateProfile(command.firstName(), command.lastName(), command.dateOfBirth(),
-                command.email(), command.phone());
+        customer.updateProfile(command.firstName(), command.lastName(), command.dateOfBirth());
+        customer.updateContact(command.email(), command.phone());
         customers.save(customer);
 
         String id = customer.getId().toString();
         outbox.publish(OUTBOX_AGGREGATE_TYPE, id, EVENT_TYPE, new CustomerUpdatedV1(
-                id, customer.getFirstName(), customer.getLastName(), Instant.now().toEpochMilli(),
-                customer.getEmail(), customer.getPhone()));
+                id, customer.getFirstName(), customer.getLastName(), Instant.now().toEpochMilli()));
 
         audit.log("CUSTOMER_UPDATED", AGGREGATE_TYPE, id, null);
 

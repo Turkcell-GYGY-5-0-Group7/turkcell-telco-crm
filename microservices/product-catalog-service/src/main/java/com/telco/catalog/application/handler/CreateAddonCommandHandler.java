@@ -3,37 +3,25 @@ package com.telco.catalog.application.handler;
 import com.telco.catalog.application.command.CreateAddonCommand;
 import com.telco.catalog.application.dto.AddonResponse;
 import com.telco.catalog.domain.model.Addon;
-import com.telco.catalog.domain.model.Tariff;
 import com.telco.catalog.infrastructure.persistence.AddonRepository;
-import com.telco.catalog.infrastructure.persistence.TariffRepository;
 import com.telco.platform.common.exception.BusinessRuleException;
 import com.telco.platform.cqrs.CommandHandler;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Component;
 
-import java.util.Set;
-
 /**
- * Creates a new addon and links it to the requested tariffs (FR-05, feature 24.1). The
- * {@code tariff_addons} join table is owned by {@code Tariff.addons}, so links are attached via
- * {@link Tariff#addAddon(Addon)} and persisted through the tariff repository - join rows never
- * persist from the addon side. The mediator TransactionBehavior wraps this handler so the addon
- * insert and all join rows commit atomically (ADR-005).
- *
- * <p>Cache: evicts the whole {@code addons} cache because a new addon invalidates both the
- * unfiltered list entry ({@code 'all'}) and every linked tariff-code entry. The {@code tariffs}
- * cache is untouched - {@code TariffResponse} carries no addon data.
+ * Creates a new addon (FR-05) and evicts the addon list cache so reads see it immediately.
+ * No domain event is published: the governed catalog contract defines {@code tariff.created.v1}
+ * and {@code tariff.price-changed.v1} only; an addon lifecycle event would be a new Avro contract
+ * (event-integration scope), and no current consumer needs one.
  */
 @Component
 public class CreateAddonCommandHandler implements CommandHandler<CreateAddonCommand, AddonResponse> {
 
     private final AddonRepository addonRepository;
-    private final TariffRepository tariffRepository;
 
-    public CreateAddonCommandHandler(AddonRepository addonRepository,
-                                     TariffRepository tariffRepository) {
+    public CreateAddonCommandHandler(AddonRepository addonRepository) {
         this.addonRepository = addonRepository;
-        this.tariffRepository = tariffRepository;
     }
 
     @Override
@@ -55,20 +43,7 @@ public class CreateAddonCommandHandler implements CommandHandler<CreateAddonComm
                 command.voiceMinutes(),
                 command.smsCount()
         );
-
         addonRepository.save(addon);
-
-        Set<String> tariffCodes = command.applicableTariffCodes();
-        if (tariffCodes != null) {
-            for (String tariffCode : tariffCodes) {
-                Tariff tariff = tariffRepository.findByCode(tariffCode)
-                        .orElseThrow(() -> new BusinessRuleException(
-                                "Unknown tariff code: " + tariffCode));
-                tariff.addAddon(addon);
-                tariffRepository.save(tariff);
-            }
-        }
-
         return AddonResponse.from(addon);
     }
 }

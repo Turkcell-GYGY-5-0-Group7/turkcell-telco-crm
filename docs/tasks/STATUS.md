@@ -14,7 +14,426 @@ Features table) and this table together whenever a feature changes state.
 | BLOCKED | Cannot proceed until a dependency is resolved |
 | DEFERRED | Intentionally postponed (for example, needs infrastructure not yet stood up) |
 
-Last updated: 2026-07-18 (Sprint 14 Feature 14.6 - **post-Sprint-21 full E2E re-test: PASS on all
+Last updated: 2026-07-20 (**FR-09/FR-22 closure - addon and plan-change orders end to end, the last
+open MVP requirement gap.** Design decision (recorded in `docs/tasks/todo.md` and the FR-22 flow):
+NEW_LINE keeps the paid saga unchanged; PLAN_CHANGE and ADDON orders skip the payment leg entirely
+and bill on the next monthly invoice - that is what makes FR-22's addon/VAS invoice lines correct
+rather than a double charge. Delivery: **contracts** - two new governed Avro events
+`subscription.tariff-changed.v1` / `subscription.addon-attached.v1` (avsc + pom subjects +
+event-catalog rows), and BACKWARD-compatible evolution of `order-created.avsc` (nullable
+`orderType`/`subscriptionId` at record level; nullable `addonCode`/`addonType`/`tariffCode`/
+`currency` at item level; `tariffId` widened to a nullable union for addon items).
+**product-catalog** - `GET /internal/addons/{code}` on a new `AddonInternalController` (same trust
+model as `TariffInternalController`) + public `GET /api/v1/addons/{code}`, cached under the addons
+cache the create-addon handler evicts. **order-service** - `OrderType` enum, `subscription_id` on
+orders + `addon_code` on order_items (V8, with a CHECK that every item references exactly one
+product kind), type-branched `CreateOrderCommandHandler` (addon items priced via the new internal
+catalog route; non-NEW_LINE orders require exactly one item and are created directly CONFIRMED so
+the existing CONFIRMED->FULFILLED path stays the single fulfilment transition), and a new
+`SubscriptionProvisionedEventConsumer` (distinct group) fulfilling on either new subscription event.
+**payment-service** - `OrderCreatedEventConsumer` now ignores `orderType != NEW_LINE` (double-bill
+guard). **subscription-service** - `OrderCreatedProvisioningConsumer` on `order.events` provisions
+hop-free from the event snapshot: PLAN_CHANGE -> `Subscription.changeTariff` (ACTIVE-only guard,
+customer-ownership guard) publishing tariff-changed; ADDON -> new `subscription_addons` table (V3,
+unique `(order_id, addon_code)`) publishing addon-attached; both commands are inbox-keyed
+`IdempotentRequest`s. **billing-service** - consumes both events (manual-inbox convention):
+tariff-changed updates `SubscriberBillingRecord.tariffCode` (with the FR-08 price mirror this
+completes plan-change repricing); addon-attached records an `addon_charges` row (V3,
+first-write-wins per order+addon); the bill-run adds one typed `ADDON`/`VAS` line per unbilled
+charge and marks it billed only after the invoice persists; `InvoiceLineType` gained ADDON/VAS; and
+a latent bug was fixed where the invoice-rebuild copy loop silently downgraded every typed line to
+RECURRING (would have erased Sprint 22's ADJUSTMENT lines on any rebuilt invoice too). **Verified:**
+platform contracts reinstalled; all five touched modules compile (src+tests) and their suites run -
+**zero assertion failures**; the only errors are the documented repo-wide Testcontainers/Docker
+bootstrap classes (identical lists to this session's pre-change baselines). The strongest proof:
+subscription-service's `SubscriptionEventSchemaCompatTest` now covers the two new payloads and
+passes 6/6 against the generated canonical Avro classes. **Honest residuals:** no live Kafka round
+trip for the new chain yet; no dedicated unit tests for the new handlers/consumers (qa follow-up);
+usage-service does not yet grant quota for attached addons (a deliberate non-goal of FR-09/FR-22 -
+flagged as a future feature); web frontend does not yet offer the new order types. Nothing
+committed yet (user choice). Prior updates below.)
+
+Prior update, 2026-07-20 (MVP requirement gap-closure pass, driven by the 2026-07-19 full
+FR-01..FR-33 source-level audit. Closed this session, smallest-diff-first: **FR-25** payment method
+modeled (`PaymentMethod` CREDIT_CARD/BANK_TRANSFER/WALLET, `V6` migration, request/command/response
+plumbing; a legacy-shape delegating constructor keeps every saga caller and test untouched);
+**FR-05** addon admin write (`POST /api/v1/addons` ADMIN, `CreateAddonCommand`/Handler,
+`Addon.create` factory, `addons` cache eviction; no new event - the governed catalog contract
+defines tariff events only); **FR-08** billing-service now consumes `tariff.price-changed.v1`
+(`TariffPriceChangedBillingConsumer`, this service's manual-inbox convention, upserts the
+`tariff_prices` mirror that was previously seeded once and never refreshed); **FR-21** monthly
+bill-run cron (1st 02:00 UTC; multi-replica-safe via the existing period-keyed `DistributedLock`
+plus the handler's per-period skip idempotency); **FR-20** monthly usage aggregation cron (1st
+01:30 UTC, before the bill-run; deliberately lock-free because billing's
+`RecordOverageCommandHandler` is first-write-wins per subscription+period); **FR-01** corporate
+registration actually wired (class-level `@ValidIdentityForType` replaces the hardcoded field-level
+`@ValidTckn` - TCKN for INDIVIDUAL, VKN for CORPORATE, violation still reported on
+`identityNumber`); **FR-03** contact info (`email`/`phone`, `V2` migration, update/response
+plumbing), address `DELETE` endpoint (audited hard delete), and document list `GET`; **FR-11/FR-31**
+naming drift ratified as PLATFORM NOTEs in `TELCO-CRM-MVP.md` (delivered `OrderStatus` names and
+SLA-policy-driven ticket categories are canonical) rather than churning working code. Also fixed:
+**ticket-service master did not compile** - duplicate `externalRef` field/getter from the Sprint
+22/23 merges each adding their own external-ref link; deduplicated, 48/48 Docker-free tests green.
+**Deliberately DEFERRED** (cross-service design, not quick-fixable): FR-09/FR-22 - addon and
+plan-change order types end to end (order-type discriminator, subscription/billing consumption,
+Avro contract changes; needs architecture/tech-lead per ADR-004/ADR-019). **Verified:** `mvn test`
+on all five touched modules - every Docker-free test class green; the only failures are the
+pre-existing repo-wide Testcontainers/Docker bootstrap classes (lessons.md 2026-07-12), each
+individually confirmed "Could not find a valid Docker environment", not regressions. Honest
+residuals: the new handlers/crons ship without dedicated unit tests this pass (qa follow-up), and
+none of the new Kafka/cron paths has run against a live stack yet. Nothing committed yet (user
+choice). Prior updates below.)
+
+Prior update, 2026-07-19 (Merged branch `feature/sprint-23-sim-swap-fraud` into `master`, reconciling Sprint 23 (SIM-Swap / Fraud Detection) completion with the trunk's Sprint 20/22 merge reconciliation, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 23 (SIM-Swap / Fraud Detection) **DONE (5/5)**, the third post-MVP sprint (17-23) to reach full DONE, after Sprint 17 and Sprint 21. Both branches' prior update chains are preserved verbatim below - the Sprint 23 chain first, then the trunk's own reconciliation chain. Prior updates below.)
+
+Prior update, 2026-07-19 (Sprint 19 Service Mesh and mTLS - **FORMAL SUBTASK CLOSURE, now 5/5
+formally DONE** (was tracked 2/5 formal / substantially-DONE after the three 2026-07-18 live passes).
+Pass 4 authored the one full-deploy completeness item pass 3 had deferred as "a mechanical extension":
+services' **observability egress** (`otel-collector`/`loki` on the meshed 4143 port, universal, default
+`true`) in `deploy/helm/telco-service/templates/networkpolicy-egress.yaml`, and **backend
+inter-dependency egress** in `deploy/helm/dependencies/templates/networkpolicy-default-deny.yaml`
+(`allow-backend-ingress` extended to the five observability backends + a new `allow-backend-egress`
+mirror for `keycloak->postgres`, `kafka-connect->kafka,postgres`, `schema-registry->kafka`,
+`otel-collector->tempo,loki`, `grafana->prometheus,loki,tempo`, `prometheus->otel-collector` - each edge
+read from real dependency config). **Test:** both charts `helm lint` clean; `helm template` renders the
+dependencies chart and all 15 service values files without error, with the new rules present as designed.
+With that item closed, **19.3 / 19.4 / 19.5 all flip to DONE** against their acceptance criteria (the
+security-critical ones live-proven passes 1-3: mesh L7 enforcement, mesh-aware default-deny, forged-header
+rejection at both layers). One honestly-scoped residual remains for a FULL deploy and does NOT gate the
+security exit criteria: the smoke test's authenticated-read step (needs Keycloak) and prometheus scraping
+the telco-service pods (metrics ingress). All Sprint-19 changes remain chart/doc-only (19.5.3 holds).
+Detail: sprint-19 README "Formal Closure Record (2026-07-19, pass 4)". Prior updates below.)
+
+Prior update, 2026-07-17 (Sprint 23 SIM-Swap / Fraud Detection - **DONE (5/5), the second post-MVP
+sprint (17-23) to reach full DONE after Sprint 21**. Built this session on top of this session's own
+ADR-029 ratification (see the entry directly below), one specialized sub-agent per feature, with a
+front-loaded event-integration "eventing foundation" pass carved out of ADR-029 Amendment 1 and 23.4.1
+so no downstream feature had to stub-then-rework an Avro payload. Delivery, in build order:
+**Eventing foundation (event-integration):** ADR-029 Amendment 1 landed - `msisdn.released.v1` gained a
+BACKWARD-compatible nullable `customerId` (`["null","string"]` default null) in
+`platform/platform-event-contracts/src/main/avro/msisdn-released.avsc` + `MsisdnReleasedV1`, populated by
+subscription-service's `TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()` (the one
+and only publish site, grep-confirmed); `MsisdnEventSchemaCompatTest` proves the evolution non-breaking.
+The three outbound fraud contracts (`fraud.signal-raised.v1`, `fraud.case-opened.v1`,
+`fraud.case-resolved.v1`) were defined (avsc + payload records), registered in the
+`platform-event-contracts` pom `<subjects>`, given `event-catalog.md` producer rows, a
+`fraud-outbox-connector.json` Debezium registration, and a `FraudEventSchemaCompatTest`. **23.1
+(microservice-generator):** `fraud-service` scaffolded from the ADR-017 template (port 9013, CQRS +
+Mediator, starters only - zero direct platform-core, ADR-018 confirmed by dependency tree), `fraud-db`
+(PostgreSQL 17) with four tables + platform outbox/inbox + the three seeded `FraudRule` rows
+(RAPID_SIM_SWAP 15/1/HIGH, MSISDN_CHURN_VELOCITY 1440/3/MEDIUM, SUSPEND_REACTIVATE_VELOCITY 60/2/LOW),
+four JPA aggregates + repositories with rolling-window queries, full infra/config/catalog parity with
+campaign-service. **23.2 (domain-engineer):** four idempotent inbox consumers (fan-out consumer groups on
+the shared `subscription.events` topic, `eventType`-header filtered, `starter-inbox` firstSeen) appending
+to `MsisdnLifecycleSignal`; all three rule evaluators (Amendment 2: RAPID_SIM_SWAP keys on a different
+`subscriptionId`, not a SimCard; Amendment 3: SUSPEND_REACTIVATE_VELOCITY excludes `reason=NON_PAYMENT`
+via a persisted `reason` column, `V3` migration); Amendment 1's release-`customerId` used with a
+defensive prior-allocation join-back fallback; `FraudCase` escalation - all publishing via `OutboxService`,
+never Kafka directly, and all detect-and-alert-only (an explicit zero-outbound-subscription-call test on
+the escalation handler). **23.3 (domain-engineer):** the five-route case/rule API (`GET`/`GET {id}`/`POST
+{id}/resolve` on `/api/v1/fraud-cases`, `GET`/`PUT {code}` on `/api/v1/fraud-rules`), thin controllers ->
+mediator, `ApiResult`/`PageResult`, reused `ResourceNotFoundException`/`BusinessRuleException`, `resolvedBy`
+from the platform `CurrentUserProvider`, RBAC reusing the existing `SUPPORT`/`ADMIN` taxonomy (ADMIN gates
+rule writes), publishing `fraud.case-resolved.v1`; live rule-tuning confirmed (evaluators read `FraudRule`
+fresh each run). **23.4 (event-integration):** ticket-service auto-opens a `FRAUD_REVIEW` ticket on
+`fraud.case-opened.v1` via a new inbox consumer that reuses the existing `OpenTicketCommandHandler`/
+`SlaPolicy` path (new nullable `external_ref` link column, `V2` migration, `fraud-ops` SLA policies seeded)
+- no parallel ticketing; notification-service raises exactly one internal `OPS_ALERT` (new channel adapter
++ `FRAUD_CASE_OPENED` template); both idempotent, informational-only. **23.5 (qa):** rule-boundary unit
+tests (window-edge +/-1s, at/above/below threshold, disabled-rule short-circuit, same-subscription
+exclusion, no-duplicate-case), Testcontainers integration tests for inbox->outbox atomicity and the API
+surface, and the sprint's most important test - `RapidSimSwapToAutoTicketAcceptanceTest` proving the
+release->reallocate -> FraudSignal -> FraudCase -> auto-ticket chain and asserting, both behaviorally
+(a subscription-service HTTP stand-in records zero `/suspend` calls) and structurally (compiled-class scan
+finds zero RestClient/WebClient/Feign to subscription-service; fraud entities map only fraud-owned tables),
+that NO automated subscription suspension and NO direct `subscription-db` access ever occurs (ADR-029
+Section 5 / Exit Criteria bullets 2-3). **All three Exit Criteria met.** **Verified:** `mvn -pl
+fraud-service test -Dschema.registry.skip=true` -> 66 non-Testcontainers tests pass (0 failures), including
+all 28 handler tests and the 4 acceptance tests; the 3 Testcontainers integration classes are written to
+the campaign-service pattern but cannot run in this sandbox - they fail identically to an untouched
+`CampaignRepositoryTest` with "Could not find a valid Docker environment" (the documented repo-wide
+Testcontainers/Docker-API limitation, `docs/tasks/lessons.md` 2026-07-12, NOT a regression). ticket-service
+(`FraudCaseOpenedEventConsumerTest` 5/5) and notification-service (17/17) consumer suites green.
+**code-review (enforcing gate):** APPROVE after one HIGH fix - `EvaluateRapidSimSwapCommandHandler` logged a
+raw MSISDN, and the platform Layer-B PII masker regex does not cover the `90...` MSISDN format this repo
+uses, so it genuinely leaked (ADR-021); fixed by dropping MSISDN from the log line (now `signalId`/
+`subscriptionId` only), re-verified 11/11 green. All other ADR categories (018/004/006/009/019/015, reuse,
+migrations, no-emojis) clean on first pass. **Follow-ups flagged, not in scope:** (1) the platform MSISDN
+mask pattern missing the `90...` format is a platform-wide gap - raise with platform-engineer; (2) the five
+Sprint 21 campaign avsc subjects were never added to the `platform-event-contracts` pom `<subjects>` list
+(pre-existing, found by the eventing-foundation pass) - close the same way the fraud subjects were
+registered. Nothing committed yet (user choice, consistent with prior post-MVP sprints). Detail:
+`docs/tasks/sprint-23-sim-swap-fraud/` (README + 23.1-23.5), `microservices/fraud-service/`,
+`architecture/adr/ADR-029-fraud-detection-mvp-scope.md`.
+
+Prior update, 2026-07-17 (Sprint 23 SIM-Swap / Fraud Detection - **not started; ADR-029 ratified this
+session, gating build work now unblocked**. ADR-029 was Proposed; ratified (Accepted) by tech-lead with
+three amendments after verification against the codebase - the same not-rubber-stamp process ADR-027
+(Sprint 21) went through. Architecture review found a genuine buildable-design gap of the ADR-027 class:
+`MSISDN_CHURN_VELOCITY` keys on `customerId`, but `msisdn.released.v1` does not carry `customerId` today
+(only `msisdn`/`subscriptionId`/`releasedAt`, per `platform/platform-event-contracts/src/main/avro/
+msisdn-released.avsc` and `MsisdnReleasedV1`), so built as drafted every release row would land with a
+null customer and be silently dropped from the velocity count, defeating the rule. **Amendment 1
+(mandatory, product decision Option A):** add `customerId` to `msisdn.released.v1` as a BACKWARD-compatible
+nullable union (`["null","string"]`, default null), populated by subscription-service's
+`TerminateSubscriptionCommandHandler` from `subscription.getCustomerId()` (already in scope for the
+sibling `SubscriptionTerminatedV1` in the same method) - a prerequisite subtask of Sprint 23 Feature
+23.2; fraud-service also joins a release back to the most recent prior `MSISDN_ALLOCATED` signal as
+defensive resilience for pre-field events. This one producer change means Sprint 23 is no longer purely
+self-contained (chosen over the fraud-service-only join-back Option B, per user direction). **Amendment 2
+(mandatory, wording):** `RAPID_SIM_SWAP` re-assignment key is a different `subscriptionId`, not a
+"different SimCard" - neither MSISDN event carries a SimCard/ICCID identifier. **Amendment 3
+(recommended):** corrected the Section 5 citation (the ADR-028 dispute-service -> ticket-service "reuse
+pattern" is itself unbuilt; ticket-service has zero event consumers today, so 23.4 builds the
+fraud -> ticket inbox consumer new), and added a `reason=NON_PAYMENT` exclusion to
+`SUSPEND_REACTIVATE_VELOCITY` to suppress dunning-cycle false positives. Verified sound and unchanged:
+new `fraud-service` (port 9013, free - 9011 campaign, 9012 dispute), CQRS + Mediator (usage-service
+precedent), `fraud-db` PostgreSQL 17 + Redis-cache-only (ADR-006), detect-and-alert-only response model.
+Product decision this sprint: INCLUDE all three rules. No code written yet; Sprint 23 build work
+(23.1-23.5) may now proceed, executed one feature per specialized sub-agent. Detail:
+`architecture/adr/ADR-029-fraud-detection-mvp-scope.md` (Amendments 1-3, dated 2026-07-17),
+`docs/tasks/sprint-23-sim-swap-fraud/`.
+
+Prior update, 2026-07-19 (Merged branch `feature/sprint-22-dispute-chargeback` into `master`, reconciling Sprint 20 (Chaos Engineering) and Sprint 22 (Invoice Dispute/Chargeback) completion with the trunk's Sprint 14 E2E re-test, Sprint 19 mTLS live-verification, and web CRM-console progress. This entry only reconciles the branches' status logs - no delivery status changed as a result of the merge itself. Combined delivery status is now: Sprint 19 (Service Mesh and mTLS) **DONE (5/5)**; Sprint 20 (Chaos Engineering) feature-complete in authored form, live-cluster exit criteria still open (see the entry below); Sprint 22 (Invoice Dispute/Chargeback) **DONE (code-complete, 6/6)**. Both branches' prior update chains are preserved verbatim below - the Sprint 20/22 chain first, then the trunk's own reconciliation chain. Prior updates below.)
+
+Prior update, 2026-07-18 (Sprint 22 Invoice Dispute/Chargeback - **Feature 22.6 (event registration +
+ticket-service integration + cross-service test suite) closes the sprint at 6/6, code-complete**.
+Six `dispute.*.v1` events registered as governed Avro contracts (ADR-019), `dispute-outbox-connector.json`
+added (closing the real gap flagged at the end of 22.4/22.5 - `dispute.events` was never actually
+producible before this), and a new `DisputeOpenedTicketConsumer` auto-opens a `DISPUTE`-category ticket
+reusing ticket-service's existing SLA machinery (`OpenTicketCommand`/`Ticket.open(...)` extended via an
+additive overload - the ~15 existing call sites needed zero changes, confirmed by Grep before and after).
+The sprint's own Exit Criteria's cross-service proof (`billing-service`/`payment-service
+DisputeConsumersIntegrationTest`, `DisputeResolutionAcceptanceIT`) is written and compile-verified only,
+per this sprint's standing no-Docker constraint - never executed, deferred to the next Docker-available
+session. **A significant correction surfaced during this close-out pass**: the "JaCoCo 70% gate met"
+claims recorded for Features 22.4/22.5 (below) and repeated in this session's earlier entries were based
+on an incremental `mvn verify` that silently merged in `jacoco.exec` coverage data left over in
+`target/` from a prior Docker-available run, inflating the reported percentage. A genuine `mvn clean
+verify` with the same Docker-gated-test exclusions shows the gate does **not** actually pass
+Docker-free-only for billing-service (61.3%) or payment-service (54.1%) - a pre-existing property of
+those two services' coverage profile (their Docker-gated integration/perf tests carry real coverage
+weight that no Docker-free unit test replaces), not a Sprint 22 regression. dispute-service (73.2%) and
+ticket-service (88.1%) were independently confirmed to genuinely meet the gate on a clean build. All
+Docker-free *test-pass* counts throughout this sprint remain accurate; only the coverage-gate claims for
+billing-service/payment-service were wrong. Detail: sprint-22 README's new "22.6 Build and Verification
+Record" section, which also corrects the 22.4/22.5 record in place.
+
+Prior update, 2026-07-17 (Sprint 22 Invoice Dispute/Chargeback - **Features 22.4/22.5 (billing-service
+and payment-service dispute extensions) built this session on top of 22.1-22.3 (5/6 total); Feature
+22.6 (ticket-service integration + cross-service tests) remains TODO, correctly last since it depends
+on 22.3/22.4/22.5 all being done**. A genuine, non-obvious finding drove this session's design: two
+Explore agents disagreed on which inbox-dedup pattern is real in this codebase (manual
+`InboxService.firstSeen` vs. `IdempotentRequest`/`InboxBehavior`) - resolved by reading the actual
+consumer source directly rather than trusting either summary, revealing that **both patterns are
+genuinely real, split by service**: billing-service still uses the manual `firstSeen(messageId,
+handler)` path; payment-service was deliberately refactored to the `IdempotentRequest` pipeline path
+(confirmed via each service's own existing consumer javadocs and by reading `InboxBehavior.java`
+directly - its dedup key is `(idempotencyKey(), request.getClass().getName())`). Each of the six new
+consumers (three per service) follows its own service's established convention; using the wrong one
+anywhere would have been a real, easy-to-miss bug. A second correctness question was resolved before
+writing any consumer: Debezium's `EventRouter` sets the Kafka record key to `aggregate_id` (=
+`disputeId`, constant across all six dispute event types per ADR-028 Section 6's own ordering
+guarantee) - verified safe to reuse as the dedup id anyway, since each event type has its own
+dedicated consumer/command and fires at most once per dispute in the state machine. **22.4**: `Invoice`
+gained `disputeStatus` (hold flag, unconditional flip) and `applyDisputeAdjustment(amount)`
+(check-then-act: no-ops unless `ON_HOLD` - the ratified ADR-028 amendment's required second line of
+defense), a new additive `InvoiceLine.of(...)` overload with a `lineType` param (old 4-arg factory
+delegates to it, zero existing call sites touched), three commands/handlers, and three Kafka consumers
+mirroring `SubscriptionSuspendedBillingConsumer`'s manual-inbox shape; the overdue/dunning query now
+excludes `ON_HOLD` invoices. **22.5**: `Payment` gained `disputed` (unconditional flip, no PSP call, no
+status change), the two retry-selection repository queries now filter `disputed = false` (a bonus
+effect: this also correctly suppresses permanent-failure expiry while disputed), two `IdempotentRequest`
+commands, and three Kafka consumers mirroring `OrderCreatedEventConsumer`/
+`SubscriptionActivationFailedEventConsumer`'s pipeline shape - the customer-resolved consumer
+dispatches the **existing, unmodified** `RefundPaymentCommand` (diff-verifiable, zero changes to
+`RefundPaymentCommandHandler.java`), with a read-side no-op guard mirroring
+`SubscriptionActivationFailedEventConsumer`'s exactly and `Payment.markRefunded()`'s existing guard as
+the second line of defense. **Live-verified this session** (no Docker needed): both modules compile
+clean, `dependency:tree` re-confirms zero `platform-core` in either graph (ADR-018, no new deps
+added), and full `mvn verify` on both - excluding only each service's own pre-existing, already-Docker-
+gated tests (confirmed failing purely on "Docker environment not found," unrelated to this session) -
+**billing-service 91/91 green** (its entire suite, not just the new tests), **payment-service 55/55
+green** (same), both package to a valid jar. (The "JaCoCo 70% gate met on both" claim originally made
+here was corrected in the 2026-07-18 update above - see that entry.) One real test bug (not a
+production bug) was found and fixed during this session's own verification: a
+`DisputeResolvedCustomerPaymentConsumerTest` assertion compared the wrong UUID variable; fixed and
+re-verified green. **NOT verified live** (needs Docker/a live Kafka cluster): an actual Kafka round
+trip for any of the six new consumers. Also flagged: `infra/docker/kafka-connect/connectors/` has no
+`dispute-outbox-connector.json` yet - a genuine, separate infra gap meaning `dispute.events` is never
+actually produced end to end regardless of Docker availability, flagged for Feature 22.6 or a
+`devops`/`event-integration` follow-up. Nothing committed yet (user choice). Detail: sprint-22
+README's new "22.4/22.5 Build and Verification Record" section.
+
+Prior update, 2026-07-17 (Sprint 22 Invoice Dispute/Chargeback - **Feature 22.3 (Dispute API +
+evidence upload) built this session on top of 22.1/22.2 (3/6 total); Features 22.4-22.6 remain TODO**.
+22.3 added `GetDisputeQuery`/`GetDisputesByCustomerQuery` + handlers (both
+`@Transactional(readOnly = true)` - load-bearing, since the response DTO touches lazy
+`@OneToMany` collections and `open-in-view` is platform-wide `false`), MinIO evidence storage
+(`DisputeEvidenceStorage`/`MinioDisputeEvidenceStorage`/`MinioConfig`, mirrors customer-service's KYC
+adapter exactly, reuses the already-shared `minio` resilience4j instance), `DisputeController`
+(`/api/v1/disputes`: open/evidence-upload/evidence-download-url/resolve/withdraw/get/list),
+`DisputeSecurityConfig`/`DisputeAccessDeniedAdvice` (verbatim copies of order-service's), and
+`docs/api-contracts/dispute-service.md`. A real, pre-existing bug in a sibling service was found and
+deliberately not replicated: ticket-service's `@PreAuthorize("hasRole('ADMIN') or
+hasRole('SUPPORT')")` references a `SUPPORT` role that does not exist in the Keycloak realm
+(canonical roles per `docs/architecture/keycloak-and-auth.md`: `SUBSCRIBER, CALL_CENTER_AGENT,
+DEALER, MARKETING_MANAGER, BILLING_OPERATOR, ADMIN, SERVICE`) - dispute-service's agent-facing
+`/resolve` endpoint uses the real `CALL_CENTER_AGENT` role instead; fixing ticket-service's own bug
+was out of this sprint's scope. Phase 1's `OpenDisputeCommand`/`SubmitEvidenceCommand`/
+`WithdrawDisputeCommand` (and their handlers/tests) were retrofitted with `callerCustomerId`/
+`callerIsAdmin` fields and now 403 via `AccessDeniedException` when a non-admin caller acts on
+someone else's dispute - required by 22.3.3's own acceptance criteria, and correctly compared
+against the caller's own linked customer-service id (`UserContext.customerId()` via
+`CurrentUserProvider`), not the raw Keycloak subject, since `Dispute.customerId` and a Keycloak
+subject are different id spaces (order-service's `Order.userId`-as-owner model doesn't transfer
+directly here). List-by-customer uses the "silently scope, don't 403" style instead, matching
+order-service's own list-endpoint convention. **Live-verified this session**: `mvn ... -am compile`
+clean with the two new deps (`io.minio:minio`, `springdoc-openapi-starter-webmvc-ui`, both
+version-managed centrally, no explicit version needed); `dependency:tree` re-confirms zero
+`platform-core` (ADR-018); full `mvn ... verify` - **84/84 tests green**, JaCoCo 70% line-coverage
+gate met (required two added handler-level tests after an initial 69% miss), `package` produces a
+valid jar. **NOT verified live** (needs Docker, deferred): a real multipart upload against a real
+MinIO instance, a real `@PreAuthorize`/`SecurityFilterChain` integration test against a real JWT
+(`DisputeController` itself has no direct `@WebMvcTest` - covered only transitively via the
+handler/query tests it dispatches to), and actual service startup/`/actuator/health`. Nothing
+committed yet (user choice). Detail: sprint-22 README's new "22.3 Build and Verification Record"
+section, `docs/api-contracts/dispute-service.md`.
+
+Prior update, 2026-07-17 (Sprint 22 Invoice Dispute/Chargeback - **ADR-028 ratified (Proposed ->
+Accepted) and Features 22.1/22.2 built this session (2/6), scoped to this session by explicit user
+choice - Features 22.3-22.6 remain TODO**. Branch `feature/sprint-20-chaos-experiment-library` (no new
+branch created this session). Before any code: an `architecture` agent validated ADR-028 against
+ADR-004/006/009/017/019/021 - verdict "approve with amendment," no redesign - and a `tech-lead` agent
+ratified it, applying four amendments in place: (1) Section 5 now states explicitly that
+payment-service's refund reuse is an internal `Mediator` dispatch inside its own inbox consumer, never
+a synchronous cross-service HTTP call from dispute-service (closes an ADR-006 misreading risk); (2)
+Section 5 now requires billing-service's future `ApplyDisputeAdjustmentCommandHandler` (22.4.3) to be
+check-then-act (`Invoice.disputeStatus == ON_HOLD`, no-op otherwise) as a second line of defense against
+a duplicate financial adjustment if inbox dedup is ever bypassed - payment-service's mirror path already
+gets this for free from `Payment.markRefunded()`'s existing guard, billing-service's didn't; (3)
+Section 4's ambiguous 3-line ASCII state diagram was replaced with design-note.md's unambiguous tree
+form (the two documents were never in actual disagreement, only ADR-028's rendering was unclear); (4)
+Section 6 now states explicitly that all six `dispute.*.v1` events use `aggregate_id = disputeId`,
+load-bearing for the per-dispute Kafka ordering the provisional-hold invariant depends on. Separately
+flagged (not fixed, pre-existing and unrelated): `docs/architecture/service-catalog.md`'s
+audit-mandated list omits order-service despite order-service shipping its own `audit_log` table -
+recommended for a future reconciliation pass, out of this sprint's scope. **22.1**: scaffolded
+`microservices/dispute-service/` (port 9012, Domain Orchestration, parent `domain-services-parent` +
+`starter-mediator` only, matching payment-service's shape rather than service-template's) - pom.xml,
+Application class, application.yml, `microservices/configs/dispute-service/application.yml`, Dockerfile
+(Sprint 15 pattern), README.md/CLAUDE.md; registered the module in `microservices/pom.xml` and added a
+new Section 6 (Post-MVP Services) to `docs/architecture/service-catalog.md` with a dispute-service row
+(the catalog's Sections 1-5 are explicitly MVP-scoped, so a new section was added rather than mutating
+those tables' own stated scope). Flyway migrations for `disputes`/`dispute_evidence`/
+`dispute_state_history` (design-note.md Section 7 exact field list) and `audit_log` (mirrors
+payment-service's V3 exactly). Structural JPA `Dispute`/`DisputeEvidence`/`DisputeStateHistory`/
+`DisputeStatus`/`AuditLog` (framework-free, `Order.java`/`OrderItem.java`-style private-ctor +
+static-factory, `DisputeStateHistory` modeled as a true JPA child entity since no existing
+`*StateHistory*` analogue exists anywhere in this codebase) plus four Spring Data repositories.
+**22.2**: full `Dispute` state machine (`beginReview`/`submitEvidence`/`resolveCustomer`/
+`resolveMerchant`/`withdraw`/`close`) resolving the state diagram's `EVIDENCE_SUBMITTED -> UNDER_REVIEW`
+loop by making `beginReview()` legal from both `OPENED` and `EVIDENCE_SUBMITTED` (confirmed correct by
+the exact task-spec math: 7 states x 6 methods = 42 legal+illegal cases, matching `DisputeStateMachineTest`'s
+own stated count precisely) - each transition appends one `DisputeStateHistory` row via a private
+`transitionTo(...)` helper. Six commands/handlers (`Open`/`SubmitEvidence`/`ResolveDisputeCustomer`/
+`ResolveDisputeMerchant`/`Withdraw`/`Close`), `AuditLogWriter` (mirrors payment-service's exactly), six
+frozen `dispute.*.v1` event DTOs (ADR-028 Section 6/design-note.md Section 8's exact field lists) -
+each handler follows `RefundPaymentCommandHandler`'s exact load -> domain-transition -> save -> audit ->
+`OutboxService.publish("dispute", disputeId, eventType, payload)` shape, no `@Transactional` (Mediator's
+`TransactionBehavior` wraps it), no direct Kafka call, no write to `billing-db`/`payment-db` anywhere -
+the provisional-hold invariant (ADR-028 Section 5) is upheld structurally, not just by convention.
+**Live-verified this session** (no Docker needed for any of this): full `platform` reactor install
+clean; `dispute-service` module `-am compile` clean; `dependency:tree` confirms zero `platform-core` in
+the graph (ADR-018); full `mvn ... verify` - **66/66 tests green** (48 `DisputeStateMachineTest` cases +
+18 Mockito-based handler tests across all six handlers, happy-path + illegal-transition/not-found
+rejection each), JaCoCo 70% line-coverage gate met ("All coverage checks have been met"), and `package`
+produces a valid Spring Boot fat jar. **NOT verified live** (needs Docker, deferred to next session):
+`DisputeRepositoryTest` (`@DataJpaTest` + Testcontainers round-trip persistence for all three entities,
+written to the same standard as `OrderRepositoryTest` but not run); actual service startup, Eureka
+registration, and `/actuator/health` returning `UP` (22.1.1's own stated acceptance criteria). Nothing
+committed yet (user choice, matches this repo's established pattern). Detail: sprint-22 README's
+Features table and new "22.1/22.2 Build and Verification Record" section, ADR-028 (ratification notes
+in Sections 4/5/6), `docs/architecture/service-catalog.md` Section 6.
+
+Prior update, 2026-07-14 (Sprint 20 Chaos Engineering - **all 5 features authored this session
+(5/5), zero live-verified** - a genuinely different completion shape than most prior sprints, so
+read carefully before treating this as "done". Built on branch `feature/sprint-20-chaos-experiment-library`
+(new, off `master`; Sprint 19 - see the entry directly below - was confirmed already merged via
+`git log`, PR #29, contradicting that entry's own "nothing committed yet" text, itself a live
+example of the 2026-07-13 lessons.md rule about not trusting a stale claim without checking). No new
+ADR (tech-lead ruling, extends ADR-012/ADR-013, per the sprint README). **20.1**: `deploy/chaos/`
+Chart.yaml/Chart.lock/charts/chaos-mesh-2.8.3.tgz (first repo chart to vendor an upstream dependency
+via `dependencies:`+`Chart.lock`, mirroring `deploy/helm/vault`'s existing precedent - not the
+self-authored-template shape of `deploy/helm/dependencies`), values.yaml (telco-namespace scoped,
+pinned image tags, `dashboard.create: false`, containerd runtime override for Kind), README.md
+(install/CRD-verification/dashboard-decision docs). Live-verified for real before Docker died:
+`helm dependency update`, `helm lint`, `helm template`, and two `helm upgrade --install` runs
+(chart deployed=true both times); `chaos-daemon` confirmed `2/2 Running`. NOT verified:
+`chaos-controller-manager` reaching `Running` (last seen `Pending`/`Insufficient memory` - a
+pre-existing, unrelated leftover Kind cluster from an earlier session was already at ~99% node
+memory with 13 services + deps mid-reschedule after its node container had been stopped and
+restarted) and the CRD-registration checks (20.1.2) - Docker Desktop itself then became unresponsive
+(`500 Internal Server Error` / connection timeouts on `docker info`/`docker ps`, `wsl -d
+docker-desktop` unreachable) and did not recover for the rest of this session despite repeated
+polling. **20.2**: `deploy/chaos/STEADY-STATE.md` - hypothesis/dashboard/panel/alert mapping table,
+pre-flight dashboard-reachability section, baseline PromQL queries, all citing real, verified values
+(not the README's loose phrasing) - and explicitly corrects two inaccuracies found in the sprint's
+own source docs: (1) `platform-overview` has no p99 latency panel, only p95 ("HTTP p95 Latency by
+Service (s)"); (2) the README/20.3 task file's assumed `order-service -> payment-service`
+Resilience4j pairing does not exist (that link is Kafka-only/async) - the real pairing is
+`order-service -> customer-service` (the only two breakers order-service's `ResilienceConfig.java`
+actually registers are named `customer-service` and `product-catalog-service`), and there is no
+`slowCallDurationThreshold` configured, so the breaker trips via the failure-rate path, not a
+slow-call path. Documentation-only, no live cluster needed - fully authored, no live gap. **20.3**:
+`deploy/chaos/experiments/{pod-kill-order-service,latency-order-to-customer,
+partition-billing-service-kafka}.yaml` (the second file renamed from the task's original
+`latency-order-to-payment.yaml` per the 20.2 correction above), each with a bounded `duration`,
+header hypothesis/abort-command comments, and `selector.namespaces`/`target.selector.namespaces`
+hard-set to `["telco"]` only; selectors grounded in the real Helm chart label conventions
+(`deploy/helm/telco-service/templates/_helpers.tpl`, `deploy/helm/dependencies/templates/kafka.yaml`)
+and the real `outbox_event` table (`starter-outbox`'s `V900__platform_outbox.sql`), not invented.
+Per this repo's lessons.md rule (2026-06-23, propagate a corrected assumption to its source, not
+just the deliverable), subtask 20.3.2 and the README's Feature 20.3 note were corrected in place to
+match the real pairing. A genuine new finding surfaced and documented (not silently papered over):
+`order-service`'s `customerRestClient` bean has no configured connect/read timeout at all, so a
+delay-only `NetworkChaos` fault may not reliably produce failures for the breaker to count - flagged
+in the manifest header for live investigation, not assumed to work. Entirely authored, zero
+`kubectl apply` runs - Docker was down for this feature's whole session. **20.4**:
+`deploy/chaos/GAMEDAY-RUNBOOK.md` (prerequisites + one subsection per experiment with copy-paste
+apply/dashboard/abort steps, sourced from 20.1-20.3's real outputs) plus a post-game-day findings
+template (explicitly marked unfilled/example-only - no fabricated results) and a two-line
+cross-link added to `deploy/RUNBOOK.md` Section 10 (Observability - corrected from the task files'
+assumed Section 9, since Sprint 15.5's runbook has grown to 15 sections and Observability is
+actually Section 10). Documentation only; explicitly flagged in the file itself that none of its
+commands have been dry-run against a live cluster yet. **20.5**: real, not assumed, RBAC finding -
+extracted the vendored `chaos-mesh-2.8.3.tgz` and read its actual `controller-manager-rbac.yaml`
+Go templates rather than accepting the task file's "likely cannot be namespace-scoped" assumption:
+the fault-injection permission set (pods/configmaps/secrets/chaos-mesh.org CRs - the one that
+matters) CAN be namespace-scoped via the chart's own `clusterScoped`/`controllerManager.targetNamespace`
+values, so `deploy/chaos/values.yaml` was updated to set `clusterScoped: false` and
+`controllerManager.targetNamespace: telco` - closing a real gap rather than only documenting it as
+residual risk. One permission set (read-only node/PV/PVC watch + SAR create) is irreducibly
+cluster-wide by the chart's own unconditional `ClusterRoleBinding` template - documented as accepted
+residual risk (read-only, no fault-injection capability, and every experiment's own selector is
+`telco`-only regardless). 20.5.2's guardrail checklist and 20.5.3's manual-only/CI-untouched grep
+checks were both run for real (`grep -rl "kind: Schedule\|kind: Workflow" deploy/chaos/*.yaml
+deploy/chaos/experiments/*.yaml deploy/chaos/values.yaml` and `grep -rl "deploy/chaos"
+.github/workflows/`, both empty as required). Deferred to a live cluster: the `kubectl auth can-i
+--list` confirmation and the `helm template` render check proving a `RoleBinding` (not
+`ClusterRoleBinding`) actually renders - the conclusion is from reading the chart's raw template
+source, not a live render, since `helm` dropped out of this session's `PATH`-augmented shell once
+Docker died mid-session. **Overall**: this sprint is **feature-complete in authored form** but
+**none of its live-cluster exit criteria are proven** - a pod actually being killed and rescheduled,
+a breaker actually tripping, a partition actually healing with zero lost `outbox_event` rows, and
+dashboards actually rendering live data are all open follow-up work for the next session with a
+healthy Docker Desktop. Committed as commit `128a678` (working tree clean, branch up to date with
+`origin`) - the "nothing committed yet" language in earlier drafts of this entry was stale; see the
+2026-07-17 documentation-sync note below. Detail: sprint-20 README's Features table
+and Feature notes, `deploy/chaos/README.md`, `deploy/chaos/STEADY-STATE.md`,
+`deploy/chaos/GAMEDAY-RUNBOOK.md`.
+
+Prior update, 2026-07-18 (Sprint 14 Feature 14.6 - **post-Sprint-21 full E2E re-test: PASS on all
 four layers, two real infra bugs found and fixed.** Fresh-stack (`infra-destroy`, all images rebuilt)
 Sprint-14-style re-validation, extended to the post-MVP surfaces that had no acceptance coverage:
 campaign-service was wired into the compose `apps` profile for the first time (port 9011) and three
@@ -522,7 +941,7 @@ multi-profile bug); Sprint 19 (Service Mesh and mTLS) **IN PROGRESS (2/5)**. Bot
 chains are preserved verbatim below - the trunk's Sprint 19/17/18 chain first, then the Sprint 16
 completion chain. Prior updates below.)
 
-Last updated: 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
+Prior update, 2026-07-14 (Sprint 19 Service Mesh and mTLS - Features 19.3 and 19.4 authoring and static
 verification complete, plus Feature 19.5's diff-only subtask, session continued from 19.1/19.2 (DONE,
 prior sessions, uncommitted). **19.3**: authored
 `deploy/helm/telco-service/templates/{server,authorizationpolicy,meshtlsauthentication}.yaml` (one
@@ -1703,12 +2122,12 @@ billing/notification services; 5 new resilience unit tests. BUILD SUCCESS.)
 | [16](sprint-16-web-frontend/README.md) | web frontend + web-bff (**post-MVP**) | DONE | 5/5 |
 | [17](sprint-17-distributed-locking/README.md) | distributed locking, `starter-lock` (Redisson) (**post-MVP**) | DONE | 5/5 |
 | [18](sprint-18-secret-management/README.md) | secret management, HashiCorp Vault (**post-MVP**) | DONE (features); exit follow-ups tracked | 5/5 |
-| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | IN PROGRESS | 2/5 (19.3+19.4 authored/statically verified; 19.5.3 done; 19.5.1/19.5.2 + both features' live-verify blocked on cluster) |
-| [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | TODO | 0/5 |
+| [19](sprint-19-service-mesh-mtls/README.md) | service mesh and mTLS, Linkerd (**post-MVP**) | DONE | 5/5 formally DONE. Security-critical claims live-proven across three passes 2026-07-18 (Findings A/B/C all resolved); full-deploy completeness (observability + backend inter-dependency egress) authored + helm-render-verified in pass 4, 2026-07-19, closing formal subtask closure. One non-security-gating residual (smoke authenticated-read needs Keycloak; prometheus->service metrics ingress) noted for a full deploy - see sprint README |
+| [20](sprint-20-chaos-engineering/README.md) | chaos engineering, Chaos Mesh (**post-MVP**) | IN PROGRESS | 5/5 authored, 0/5 live-verified |
 | [21](sprint-21-campaign-catalog-validation/README.md) | campaign-service, dynamic pricing/catalog validation (**post-MVP**) | DONE | 5/5 |
-| [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | TODO | 0/6 |
-| [23](sprint-23-sim-swap-fraud/README.md) | fraud-service, SIM-swap/fraud detection (**post-MVP**) | TODO | 0/5 |
-| [24](sprint-24-pdf-gap-closure/README.md) | MVP-spec gap closure: addon/plan-change orders, addon billing, contact info, payment method, Swagger/API polish | IN PROGRESS | 7/8 |
+| [22](sprint-22-dispute-chargeback/README.md) | dispute-service, invoice dispute/chargeback (**post-MVP**) | DONE (code-complete) | 6/6 |
+| [23](sprint-23-sim-swap-fraud/README.md) | fraud-service, SIM-swap/fraud detection (**post-MVP**) | DONE | 5/5 |
+| [24](sprint-24-pdf-gap-closure/README.md) | MVP-spec gap closure: TCKN/VKN type-conditional validation, contact info, payment method + Idempotency-Key, addon catalog allowances/tariff-linking, sort/pagination, per-service Swagger UI (**post-MVP**) | DONE | 8/8 |
 
 Totals (MVP, Sprints 01-15): all 15 sprints feature-complete. Features: 77 DONE / 0 IN PROGRESS
 / 0 TODO / 0 BLOCKED (77 total). Sprint 15 (Deployment) closed all 5 features on 2026-07-08 -
@@ -1723,23 +2142,39 @@ deployed on the local node and the 10 Debezium outbox connectors are not registe
 deployed-environment AC-01/02/03 run can execute. So the MVP is feature-complete and deployable, with a
 short, well-scoped integration tail (the full boot) before "runs green end-to-end in Kubernetes" is
 literally true. See the top-of-file entry, `docs/tasks/todo.md`, and `deploy/RUNBOOK.md` Section 11.
-Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted; Sprint 17: ADR-024, Accepted 2026-07-12,
-**DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail tracked** (a
-pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own "every pod
-starts" exit criterion - see the 2026-07-12 entries above); Sprint 19: ADR-026, Proposed, pending
-tech-lead ratification; Sprint 20: extends ADR-012/ADR-013, no new ADR; Sprint 21: ADR-027, Accepted
-(ratified by tech-lead 2026-07-13, with a Section 4 amendment) - **DONE 5/5**; Sprints 22-23: ADR-028/
-ADR-029, still Proposed pending tech-lead ratification) and excluded from the MVP totals. Sprint 16
-(Web Frontend) is **DONE, 5/5, exit criteria MET** as of
+Sprints 16-23 are post-MVP (Sprint 16: ADR-022, Accepted, **DONE 5/5**; Sprint 17: ADR-024, Accepted
+2026-07-12, **DONE 5/5**; Sprint 18: ADR-025, Accepted, **DONE (features) 5/5, exit-criteria tail
+tracked** (a pre-existing, Sprint-18-unrelated config-server multi-profile bug blocks the sprint's own
+"every pod starts" exit criterion - see the 2026-07-12 entries above); Sprint 19: ADR-026, Accepted -
+**2/5 formally DONE, 19.3/19.4/19.5.1 live-proven across three verification passes (2026-07-18)**, the
+sprint's remaining tail tracked in its own README; Sprint 20: extends ADR-012/ADR-013, no new ADR -
+**5/5 authored, live-cluster exit criteria (actual chaos-fault injection) still open**; Sprint 21:
+ADR-027, Accepted (ratified by tech-lead 2026-07-13, with a Section 4 amendment) - **DONE 5/5**;
+Sprint 22: ADR-028, Accepted (ratified by tech-lead 2026-07-17) - **DONE (code-complete) 6/6**;
+Sprint 23: ADR-029, Accepted (ratified by tech-lead 2026-07-17, with three amendments) - **DONE 5/5**)
+and excluded from the MVP totals.
+Sprint 16 (Web Frontend) is **DONE, 5/5, exit criteria MET** as of
 2026-07-13: all five features built AND the live end-to-end criterion discharged by a human, in a real
 browser, against the live local Docker Compose stack (PKCE login -> onboarding -> real saga to FULFILLED ->
 account/usage -> invoice PDF download). That live run found 11 defects the all-green offline suites had
 missed - 9 fixed, the rest tracked as follow-ups (409-on-duplicate-TCKN; 413-vs-500 on oversized multipart, a
 platform-starter issue; the unimplemented `POST /api/v1/addons`, which leaves the addon selection path
 unproven end-to-end). Sprints 17 (Distributed Locking) and 18 (Secret Management) are also complete (18 with
-a tracked follow-up), and Sprint 19 (Service Mesh and mTLS) is IN PROGRESS (2/5). Sprint 21 (Campaign /
-Catalog Validation) is **DONE, 5/5** (campaign-service built, all three exit criteria test-proven);
-Sprints 20, 22, and 23 remain documentation/design only - TODO, not started. See Phase P6 below and
+a tracked follow-up). Sprint 19 (Service Mesh and mTLS) went substantially DONE on 2026-07-18: three live
+verification passes on a Kind cluster resolved all three findings the first pass surfaced (Linkerd's pinned
+stable channel not enforcing `AuthorizationPolicy`, fixed by moving to the edge channel; a mesh-aware
+NetworkPolicy port model, since meshed traffic rides the linkerd-proxy port not the app port; and missing
+control-plane-egress/backend-ingress baseline rules) - see the sprint's own README for the full live-verification
+record. Sprint 20 (Chaos Engineering) has all 5 features authored (fault-injection experiments, steady-state
+hypotheses, a game-day runbook) but no live chaos experiment has yet been run against a cluster - a Docker
+outage cut short the one verification attempt so far. Sprint 21 (Campaign / Catalog Validation) is
+**DONE, 5/5** (campaign-service built, all three exit criteria test-proven). Sprint 22 (Invoice
+Dispute/Chargeback) is **DONE (code-complete), 6/6** (dispute-service built, cross-service integration
+with billing/payment/ticket/notification wired, acceptance tests asserting no automated subscription
+suspension and no direct subscription-db access). Sprint 23 (SIM-Swap / Fraud Detection) is
+**DONE, 5/5** (fraud-service built: rule-based detect-and-alert only, no automated subscription
+suspension; ticket-service auto-opens a FRAUD_REVIEW ticket and notification-service raises an
+OPS_ALERT). See Phase P6 below and
 [`docs/product/roadmap.md`](../product/roadmap.md) Section 3.
 EPIC-006 (Onboarding Saga, Sprints 08-09) complete; AC-01 built (full-system acceptance in Sprint 14).
 EPIC-007 (Revenue Cycle, Sprints 10-11) complete; AC-02 and AC-03 built.

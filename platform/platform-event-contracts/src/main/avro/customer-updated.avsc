@@ -26,18 +26,6 @@
         "logicalType": "timestamp-millis"
       },
       "doc": "Instant the customer was updated, in epoch milliseconds (UTC)."
-    },
-    {
-      "name": "email",
-      "type": ["null", "string"],
-      "default": null,
-      "doc": "Contact email after the update; null when the customer has none (FR-03). PII: MUST be masked in logs downstream. Nullable additive field (Sprint 24 feature 24.5)."
-    },
-    {
-      "name": "phone",
-      "type": ["null", "string"],
-      "default": null,
-      "doc": "Contact phone after the update; null when the customer has none (FR-03). PII: MUST be masked in logs downstream. Nullable additive field (Sprint 24 feature 24.5)."
     }
   ]
 }

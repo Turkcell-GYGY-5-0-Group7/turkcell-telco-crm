@@ -1,7 +1,7 @@
 package com.telco.catalog.api;
 
-import com.telco.catalog.application.dto.AddonSnapshotResponse;
-import com.telco.catalog.application.query.GetAddonSnapshotQuery;
+import com.telco.catalog.application.dto.AddonResponse;
+import com.telco.catalog.application.query.GetAddonByCodeQuery;
 import com.telco.platform.common.api.ApiResult;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
@@ -11,13 +11,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Internal, system-to-system addon reads (order-service's addon snapshot for ADDON order
- * pricing, feature 24.1). No PII, no ADMIN-only data.
- *
- * <p>Trusted endpoint, mirroring {@link TariffInternalController}: NO JWT requirement -
- * {@code /internal/**} is permitAll in {@link CatalogSecurityConfig} and the gateway blocks
- * {@code /internal/**} from public traffic (internal-deny-route, handled by devops), so the
- * route is reachable in-network only (ADR-011).
+ * Internal, system-to-system addon reads (FR-09: order-service prices ADDON orders from here).
+ * Same trust model as {@link TariffInternalController}: no JWT, permitted via {@code /internal/**}
+ * in {@link CatalogSecurityConfig}, and the gateway blocks {@code /internal/**} from public traffic.
  */
 @RestController
 @RequestMapping("/internal/addons")
@@ -31,12 +27,9 @@ public class AddonInternalController {
         this.responses = responses;
     }
 
-    /**
-     * Returns a lightweight snapshot (price, currency, validity, allowances) for the given addon
-     * code. Returns 404 if the addon does not exist or is not ACTIVE.
-     */
-    @GetMapping("/{code}/snapshot")
-    public ApiResult<AddonSnapshotResponse> getAddonSnapshot(@PathVariable String code) {
-        return responses.ok(mediator.query(new GetAddonSnapshotQuery(code)));
+    /** Returns a single addon by its unique code; 404 when unknown. */
+    @GetMapping("/{code}")
+    public ApiResult<AddonResponse> getAddonByCode(@PathVariable String code) {
+        return responses.ok(mediator.query(new GetAddonByCodeQuery(code)));
     }
 }
