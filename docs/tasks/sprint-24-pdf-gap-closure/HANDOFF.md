@@ -1,77 +1,62 @@
-# Sprint 24 Handoff (last updated 2026-07-20, after 24.8a - E2E window pending)
+# Sprint 24 Handoff (updated 2026-07-20 after the live E2E run)
 
-State snapshot for whoever resumes this sprint. Branch: `feat/sprint-24-pdf-gap-closure`
-(tracks origin; commits after 6bf685f are LOCAL ONLY - do not push until asked).
-Progress: **7 of 8 features DONE and committed**; only 24.8 (tests + E2E + closeout) remains.
-Approved plan: `~/.claude/plans/i-was-started-to-iridescent-bubble.md`.
+Branch `feat/sprint-24-pdf-gap-closure`. Progress: **7 of 8 features DONE**; 24.8 is IN PROGRESS -
+the live run is complete and documented, one blocking defect remains.
 
-## Commits on this branch (oldest first)
+**NOTHING FROM THIS SESSION IS COMMITTED** (user instruction: they may push to another branch).
+Uncommitted in the working tree:
 
-852c3fd scaffolding | d32e228 24.7a | 2d8f0a5 24.5 | 0194fd5 24.6 | 5b24d19 24.1 |
-93f9968 24.7b/c | e64373e 24.2 | a8a5a18 **24.3** | (HEAD) **24.4**
+- `microservices/order-service/src/test/java/.../OrderCreatedEventSerializationTest.java` - the
+  test from commit `07549ea` errored; its local `ItemView` record now declares
+  `@JsonIgnoreProperties(ignoreUnknown = true)`, mirroring the real consumer DTOs. With this,
+  order-service is 136 tests green and billing-service 90.
+- `docs/tasks/sprint-24-pdf-gap-closure/24.8-run-report.md` (new, full evidence)
+- Status touches: sprint README, 24.8 feature file, `docs/tasks/STATUS.md`, `docs/tasks/lessons.md`
+  (three new lessons), this file.
 
-Suite baselines after 24.4 (all green, Testcontainers, stack down):
-order 135 / subscription 92 / usage 99 / billing 90 / web-bff 32.
+## What the live run proved
 
-## What 24.3 + 24.4 delivered (facts a resuming session needs)
+Full detail: [24.8-run-report.md](24.8-run-report.md). Summary: backend sweep **14/15 green** on a
+fresh stack, Swagger **7/7**, Idempotency-Key replay idempotent with `method` persisted, and the
+browser journey proved the addon path from catalog seeding through the wizard and web-bff down to
+the persisted `ADDON` order item (120.00 tariff + 25.00 addon = 145.00). Both bugs fixed in
+`07549ea` are confirmed holding live.
 
-- **addon.purchased.v1** (topic `addon.events`, outbox aggregate_type `addon`, aggregate_id =
-  ORDER-ITEM id - unique per event, safe as inbox key). Published by order-service once per ADDON
-  item at fulfillment: bundled NEW_LINE orders publish in `FulfillOrderCommandHandler` (with the
-  activation payload's subscriptionId), standalone ADDON orders confirm AND fulfill inside
-  `ConfirmOrderCommandHandler` (saga step `ADDON_FULFILLED`, no activation leg -
-  subscription-service skips ADDON orders). V9 added `order_items.addon_type`/`currency`.
-  usage tops up quota (`Quota.addAllowance`, flags re-armed); billing records
-  `addon_charge_records` (price = unit * quantity) billed as one line per charge on the next
-  bill run (billed flag flips in the bill-run tx).
-- **subscription.tariff-changed.v1** (rides `subscription.events` as its THIRD event type;
-  produced by `ChangeTariffCommandHandler` after the `payment.completed.v1` PLAN_CHANGE branch).
-  **The record key is the subscriptionId (outbox aggregate_id) and REPEATS across successive
-  plan changes - every consumer of this event dedups on orderId business keys:**
-  usage `"reprovision-quota:" + orderId` (quota reset via `Quota.reprovision`, remaining =
-  max(0, new - used), flags recomputed), billing `"billing-tariff-changed:" + orderId`
-  (`SubscriberBillingRecord.changeTariff`), order `"plan-change-fulfill:" + orderId`
-  (reuses `FulfillOrderCommand`). Terminal changeTariff failures REUSE
-  `subscription.activation-failed.v1` (documented reuse, D2) so the existing refund/cancel
-  compensation runs.
-- Billing consumer tests are named `*Test` (NOT `*IT` - surefire skips `*IT`; two files were
-  renamed for this: `AddonPurchasedBillingConsumerTest`, `TariffChangedBillingConsumerTest`).
-- Contract docs updated: order-service.md (events table + "Saga fulfillment per order kind"),
-  subscription-service.md (payment.completed branching + tariff-changed event), event-catalog
-  registry rows for both events. README 7/8, STATUS 7/8, todo.md Phases 4-5 checked.
+## THE ONE BLOCKER
 
-## REMAINING: 24.8b + 24.8c (spec: 24.8-tests-and-e2e-revalidation.md)
+`AddonOnboardingAcceptanceIT` fails: the order sticks at CONFIRMED and never reaches FULFILLED.
 
-1. **24.8a - DONE (compiled with `-Pacceptance test-compile`, runs only against the live
-   stack):** `addon/AddonOnboardingAcceptanceIT`, `addon/StandaloneAddonPurchaseAcceptanceIT`,
-   `planchange/PlanChangeAcceptanceIT` + new GatewayApi helpers (createAddon,
-   createOrderWithAddons, createStandaloneAddonOrder, createPlanChangeOrder). The two-TARIFF
-   compensation regression ALREADY EXISTS and still applies post-24.2:
-   `ac01/NewSubscriberOnboardingCompensationAcceptanceIT` (two TARIFF items ->
-   UNSUPPORTED_MULTI_ITEM_ORDER -> refund -> CANCELLED). Acceptance sweep command:
-   `mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify`.
-2. **24.8b - fresh-stack E2E (SINGLE stack-up window; ASK THE USER before starting - they start
-   Docker Desktop and must approve the thermal window):** `make infra-destroy` -> rebuild
-   images -> boot -> `make infra-connectors` (order connector must be registered so
-   `addon.events` routes) -> full acceptance sweep (AC-01/02/03 + campaign + BFF + 3 new ITs)
-   -> browser onboarding WITH addon -> Swagger spot-check on the 7 newly-enabled services ->
-   payments Idempotency-Key replay. `caffeinate -dims` on long commands; `make infra-down`
-   IMMEDIATELY after. Append run report to sprint README.
-3. **24.8c - closeout:** README 8/8 + run report; STATUS.md; todo.md Phase 6; event-catalog
-   Section 3 saga sequences (addon + plan-change); requirements.md FR-09/FR-22 traceability;
-   lessons.md if corrections arose; finalize or delete this HANDOFF. Final commit. NO push
-   until asked.
+Root cause (pre-existing, NOT Sprint 24): order-service's `SubscriptionActivatedEventConsumer`
+re-throws when the order is not yet CONFIRMED, expecting Kafka redelivery - but the error handler
+is `FixedBackOff(interval=0, maxAttempts=9)`, so ten attempts burn in about a second and the event
+is dropped. When it fires: the customer is charged and the line IS active, but the bundled addon
+is never provisioned or billed, and the onboarding wizard hangs waiting for FULFILLED.
 
-## Environment facts (verified)
+Fix direction (deliberately not rushed in - it touches the consumer error handling shared by every
+service): give that transient path a real non-zero backoff or a retry topic. Grep for
+`DefaultErrorHandler`/`FixedBackOff` in the platform starters and the services' Kafka config; the
+error surfaced in `telco-order-service` logs as
+`Backoff FixedBackOffExecution[interval=0, currentAttempts=10, maxAttempts=9] exhausted`.
+Secondary cosmetic finding: `payment.completed.v1` for AC-02's direct invoice payments (random
+`orderId` by design) makes order-service throw "Order not found" and burn ten retries - should be
+a terminal skip, not an ERROR.
 
-- mvn: `/Users/winkoffice/.m2/wrapper/dists/apache-maven-3.9.15/9925cc1d/bin/mvn`
-- Suites: `mvn -f microservices/pom.xml -pl <module> test -Dschema.registry.skip=true -Dapi.version=1.44`
-  (Docker Engine 29 needs the api.version flag; wrap long runs in `caffeinate -dims`).
-- Platform rebuild after avsc changes:
-  `mvn -f platform/pom.xml -pl platform-event-contracts install -DskipTests -Dschema.registry.skip=true`
-- New consumers: own groupId + fail-closed eventType header filter + IdempotentRequest command
-  dedup (InboxBehavior); never manual firstSeen; never the record key when the aggregate can
-  emit the same event type twice.
-- In tests a `@MockitoBean InboxService` silently skips every IdempotentRequest (firstSeen
-  defaults false) - use the real inbox or seed state directly.
-- `infra/docker/.env` has `PSP_MOCK_FORCE_OUTCOME=SUCCESS`. Commit per feature, no emojis.
+## To finish 24.8
+
+1. Fix the backoff defect above; rebuild order-service (and any other affected image).
+2. Boot the stack, **`make -C infra register-connectors` (mandatory after EVERY restart - skipping
+   it cost this run a false alarm)**, gate on 11 connectors RUNNING.
+3. Re-run the sweep: `mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify`.
+   Target: 15/15 with `AddonOnboardingAcceptanceIT` green.
+4. Optionally re-drive the browser addon journey to see the wizard reach "subscription is active".
+5. Then close out: README/STATUS to 8/8, event-catalog Section 3 saga sequences for the addon and
+   plan-change flows, `docs/product/requirements.md` FR-09/FR-22 traceability, delete this file.
+
+## Environment facts
+
+- mvn: `/Users/winkoffice/.m2/wrapper/dists/apache-maven-3.9.15/9925cc1d/bin/mvn`; add
+  `-Dapi.version=1.44` to any Testcontainers run (Docker Engine 29).
+- Fresh-volume boot takes 6-8 minutes to reach 13/13 healthy; volumes kept boots faster.
+- Thermal: one contiguous stack-up window, `caffeinate -dims` on long commands, `make infra-down`
+  immediately after. Stack is currently DOWN and the frontend dev server is stopped.
+- `infra/docker/.env` has `PSP_MOCK_FORCE_OUTCOME=SUCCESS`.

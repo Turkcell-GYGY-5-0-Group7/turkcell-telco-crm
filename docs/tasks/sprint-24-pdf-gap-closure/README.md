@@ -29,7 +29,7 @@ Design decisions and accepted precedents: [design-note.md](design-note.md).
 | 24.5 | Customer contact info + type-conditional TCKN/VKN validation | DONE | [24.5-customer-contact-and-conditional-id-validation.md](24.5-customer-contact-and-conditional-id-validation.md) |
 | 24.6 | Payment method + Idempotency-Key header | DONE | [24.6-payment-method-and-idempotency-header.md](24.6-payment-method-and-idempotency-header.md) |
 | 24.7 | API polish: Swagger x7, sort param, quota-exceeded template | DONE | [24.7-api-polish-swagger-sort-notification.md](24.7-api-polish-swagger-sort-notification.md) |
-| 24.8 | Tests and full E2E re-validation | TODO | [24.8-tests-and-e2e-revalidation.md](24.8-tests-and-e2e-revalidation.md) |
+| 24.8 | Tests and full E2E re-validation | IN PROGRESS | [24.8-tests-and-e2e-revalidation.md](24.8-tests-and-e2e-revalidation.md) |
 
 Execution order: 24.5/24.6/24.7 (independent quick wins, any order) -> 24.1 -> 24.2 -> 24.3/24.4
 (parallel once 24.2 lands) -> 24.8.
@@ -51,3 +51,17 @@ Execution order: 24.5/24.6/24.7 (independent quick wins, any order) -> 24.1 -> 2
 - New acceptance ITs green in the same sweep as AC-01/02/03, campaign, and BFF suites.
 - Browser onboarding with addon selection works end to end; Swagger UI reachable on all 12
   Spring services.
+
+## Live E2E Run (2026-07-20)
+
+Full report with all evidence: [24.8-run-report.md](24.8-run-report.md).
+
+Backend sweep 14/15 green against a fresh containerized stack; Swagger 7/7; Idempotency-Key
+replay idempotent; browser journey proved the addon path from catalog through the wizard and
+web-bff down to the persisted ADDON order item. One scenario (bundled addon reaching FULFILLED)
+is blocked by a PRE-EXISTING platform defect, not by Sprint 24 code: order-service's transient
+"order not yet CONFIRMED" retry burns all ten attempts against a zero-interval backoff, so a
+`subscription.activated.v1` that overtakes `payment.completed.v1` is dropped and the order sticks
+at CONFIRMED forever (customer is charged, line is active, but a bundled addon is never
+provisioned or billed and the wizard hangs). Fixing it means giving that consumer path a real
+backoff - a shared-error-handler change that was deliberately not rushed in.

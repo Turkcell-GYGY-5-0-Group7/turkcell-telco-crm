@@ -1,5 +1,6 @@
 package com.telco.order.application.event;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -42,7 +43,10 @@ class OrderCreatedEventSerializationTest {
         assertThat(json.get("items").get(0).get("unitPrice").asText()).isEqualTo("199.90");
         assertThat(json.get("items").get(1).get("unitPrice").asText()).isEqualTo("15.00");
 
-        // A consumer-side record still binds the string into BigDecimal.
+        // A consumer-side record still binds the string into BigDecimal. Mirrors how the real
+        // consumers declare their payload DTOs (@JsonIgnoreProperties(ignoreUnknown = true) in
+        // payment-service and campaign-service), which is what lets them bind a subset of fields.
+        @JsonIgnoreProperties(ignoreUnknown = true)
         record ItemView(BigDecimal unitPrice) {
         }
         ItemView view = objectMapper.treeToValue(json.get("items").get(1), ItemView.class);
