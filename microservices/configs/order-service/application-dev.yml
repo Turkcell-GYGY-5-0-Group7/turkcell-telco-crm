@@ -13,3 +13,5 @@ telco:
       url: http://localhost:9003
     campaign-service:
       url: http://localhost:9011
+    subscription-service:
+      url: http://localhost:9005

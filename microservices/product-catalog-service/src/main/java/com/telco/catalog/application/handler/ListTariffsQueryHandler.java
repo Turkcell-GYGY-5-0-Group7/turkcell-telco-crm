@@ -1,5 +1,6 @@
 package com.telco.catalog.application.handler;
 
+import com.telco.catalog.application.SortParam;
 import com.telco.catalog.application.dto.TariffResponse;
 import com.telco.catalog.application.query.ListTariffsQuery;
 import com.telco.catalog.domain.model.TariffStatus;
@@ -11,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Set;
 
 /**
  * Returns a paginated list of {@link TariffStatus#ACTIVE} tariffs whose effective window contains
@@ -19,6 +21,10 @@ import java.time.Instant;
  */
 @Component
 public class ListTariffsQueryHandler implements QueryHandler<ListTariffsQuery, PageResult<TariffResponse>> {
+
+    /** Sortable tariff properties exposed through the API (PDF Section 12). */
+    private static final Set<String> SORTABLE_PROPERTIES =
+            Set.of("createdAt", "name", "monthlyFee", "effectiveFrom");
 
     private final TariffRepository tariffRepository;
 
@@ -29,7 +35,8 @@ public class ListTariffsQueryHandler implements QueryHandler<ListTariffsQuery, P
     @Override
     public PageResult<TariffResponse> handle(ListTariffsQuery query) {
         Instant now = Instant.now();
-        PageRequest pageable = PageRequest.of(query.page(), query.size());
+        PageRequest pageable = PageRequest.of(query.page(), query.size(),
+                SortParam.parse(query.sort(), SORTABLE_PROPERTIES));
 
         // Spring Data cannot express "effectiveTo IS NULL OR effectiveTo > now" in a single
         // derived method. We use the open-ended query (effectiveTo IS NULL) which covers the

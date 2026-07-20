@@ -215,6 +215,11 @@ public final class GatewayApi {
         return auth(token).get("/api/v1/subscriptions/{id}", subscriptionId);
     }
 
+    /** Terminates a subscription ({@code SubscriptionController}); releases its MSISDN. */
+    public static Response terminateSubscription(String token, UUID subscriptionId) {
+        return auth(token).post("/api/v1/subscriptions/{id}/terminate", subscriptionId);
+    }
+
     // ── usage-service ─────────────────────────────────────────────────────────────────────
 
     /** Resolved-{@code customerId} ownership check (see {@link #getSubscriptionsByCustomer}). */

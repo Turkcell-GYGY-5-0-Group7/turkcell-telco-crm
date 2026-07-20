@@ -63,6 +63,7 @@ class CustomerIntegrationTest {
 
     private static final String VALID_TCKN = "10000000146";
     private static final String INVALID_TCKN = "12345678901";
+    private static final String VALID_VKN = "1234567890";
 
     private static final ParameterizedTypeReference<Map<String, Object>> MAP_TYPE =
             new ParameterizedTypeReference<>() {};
@@ -209,6 +210,103 @@ class CustomerIntegrationTest {
         verify(outboxService).publish(eq("customer"), any(), eq("customer.registered.v1"), payloadCaptor.capture());
         CustomerRegisteredV1 event = (CustomerRegisteredV1) payloadCaptor.getValue();
         assertThat(event.registeredByUserId()).isNull();
+    }
+
+    // --- FR-01 / feature 24.5: type-conditional TCKN/VKN validation and contact info ---
+
+    @Test
+    void corporate_registration_with_valid_vkn_returns_201() {
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + agentToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("CORPORATE", "Acme", "Telekom", VALID_VKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(response).get("type")).isEqualTo("CORPORATE");
+    }
+
+    @Test
+    void corporate_registration_with_tckn_returns_400() {
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + agentToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("CORPORATE", "Acme", "Telekom", VALID_TCKN))
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    }
+
+    @Test
+    void update_persists_and_returns_contact_info() {
+        ResponseEntity<Map<String, Object>> registered = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Ada", "Lovelace", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(registered.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        String id = data(registered).get("id").toString();
+
+        ResponseEntity<Map<String, Object>> updated = client.put()
+                .uri("/api/v1/customers/{id}", id)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                            "firstName": "Ada",
+                            "lastName": "Lovelace",
+                            "dateOfBirth": "1990-01-01",
+                            "email": "countess@example.com",
+                            "phone": "+905329998877"
+                        }
+                        """)
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(updated.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(data(updated).get("email")).isEqualTo("countess@example.com");
+        assertThat(data(updated).get("phone")).isEqualTo("+905329998877");
+
+        String storedEmail = jdbc.queryForObject(
+                "SELECT email FROM customers WHERE id = CAST(? AS uuid)", String.class, id);
+        assertThat(storedEmail).isEqualTo("countess@example.com");
+    }
+
+    @Test
+    void update_with_malformed_contact_info_returns_400() {
+        ResponseEntity<Map<String, Object>> registered = client.post()
+                .uri("/api/v1/customers")
+                .header("Authorization", "Bearer " + customerToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(registerBody("Ada", "Lovelace", VALID_TCKN))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+        String id = data(registered).get("id").toString();
+
+        ResponseEntity<String> response = client.put()
+                .uri("/api/v1/customers/{id}", id)
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                            "firstName": "Ada",
+                            "lastName": "Lovelace",
+                            "dateOfBirth": "1990-01-01",
+                            "email": "not-an-email",
+                            "phone": "not-a-phone"
+                        }
+                        """)
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -495,15 +593,20 @@ class CustomerIntegrationTest {
     }
 
     private static String registerBody(String firstName, String lastName, String tckn) {
+        return registerBody("INDIVIDUAL", firstName, lastName, tckn);
+    }
+
+    private static String registerBody(String type, String firstName, String lastName,
+                                       String identityNumber) {
         return """
                 {
-                    "type": "INDIVIDUAL",
+                    "type": "%s",
                     "firstName": "%s",
                     "lastName": "%s",
                     "identityNumber": "%s",
                     "dateOfBirth": "1990-01-01"
                 }
-                """.formatted(firstName, lastName, tckn);
+                """.formatted(type, firstName, lastName, identityNumber);
     }
 
     private static String addressBody(String line1, String city, String district,

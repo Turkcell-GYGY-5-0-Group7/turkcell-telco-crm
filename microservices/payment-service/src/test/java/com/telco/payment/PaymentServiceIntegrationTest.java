@@ -148,6 +148,98 @@ class PaymentServiceIntegrationTest {
         assertThat(data.get("status")).isEqualTo("COMPLETED");
         assertThat(data.get("orderId")).isEqualTo(orderId.toString());
         assertThat(data.get("id")).isNotNull();
+        // No method supplied: defaults to CREDIT_CARD (FR-25).
+        assertThat(data.get("method")).isEqualTo("CREDIT_CARD");
+    }
+
+    @Test
+    void admin_charges_payment_with_explicit_method_persists_and_echoes_it() {
+        ResponseEntity<Map<String, Object>> response = client.post()
+                .uri("/api/v1/payments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                          "orderId": "%s",
+                          "customerId": "%s",
+                          "amount": 49.99,
+                          "paymentRequestId": "%s",
+                          "method": "BANK_TRANSFER"
+                        }
+                        """.formatted(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(response).get("method")).isEqualTo("BANK_TRANSFER");
+        String persisted = jdbcTemplate.queryForObject(
+                "SELECT payment_method FROM payments WHERE id = ?::uuid", String.class,
+                data(response).get("id"));
+        assertThat(persisted).isEqualTo("BANK_TRANSFER");
+    }
+
+    @Test
+    void idempotency_key_header_deduplicates_charges_without_body_payment_request_id() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        String idempotencyKey = UUID.randomUUID().toString();
+
+        ResponseEntity<Map<String, Object>> first =
+                chargePaymentWithHeader(orderId, customerId, idempotencyKey);
+        ResponseEntity<Map<String, Object>> second =
+                chargePaymentWithHeader(orderId, customerId, idempotencyKey);
+
+        assertThat(first.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(second).get("id")).isEqualTo(data(first).get("id"));
+        assertThat(data(second).get("status")).isEqualTo("COMPLETED");
+        Long count = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM payments WHERE order_id = ?", Long.class, orderId);
+        assertThat(count).isEqualTo(1L);
+    }
+
+    @Test
+    void idempotency_key_header_wins_over_body_payment_request_id() {
+        UUID orderId = UUID.randomUUID();
+        UUID customerId = UUID.randomUUID();
+        String headerKey = UUID.randomUUID().toString();
+
+        ResponseEntity<Map<String, Object>> first =
+                chargePaymentWithHeader(orderId, customerId, headerKey);
+
+        // Same header key but a DIFFERENT body paymentRequestId: the header wins, so this must
+        // dedupe against the first charge instead of creating a new payment under the body key.
+        ResponseEntity<Map<String, Object>> second = client.post()
+                .uri("/api/v1/payments")
+                .header("Authorization", "Bearer " + adminToken)
+                .header("Idempotency-Key", headerKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(chargeJson(orderId, customerId, "49.99", UUID.randomUUID().toString()))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+
+        assertThat(second.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        assertThat(data(second).get("id")).isEqualTo(data(first).get("id"));
+        assertThat(data(second).get("paymentRequestId")).isEqualTo(headerKey);
+    }
+
+    @Test
+    void charge_without_header_and_without_body_payment_request_id_returns_400() {
+        ResponseEntity<String> response = client.post()
+                .uri("/api/v1/payments")
+                .header("Authorization", "Bearer " + adminToken)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                          "orderId": "%s",
+                          "customerId": "%s",
+                          "amount": 49.99
+                        }
+                        """.formatted(UUID.randomUUID(), UUID.randomUUID()))
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
     }
 
     @Test
@@ -351,6 +443,25 @@ class PaymentServiceIntegrationTest {
                 .header("Authorization", "Bearer " + adminToken)
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(chargeJson(orderId, customerId, amount, paymentRequestId))
+                .retrieve()
+                .toEntity(MAP_TYPE);
+    }
+
+    /** Charges via the Idempotency-Key header only; the body carries no paymentRequestId. */
+    private ResponseEntity<Map<String, Object>> chargePaymentWithHeader(UUID orderId, UUID customerId,
+                                                                         String idempotencyKey) {
+        return client.post()
+                .uri("/api/v1/payments")
+                .header("Authorization", "Bearer " + adminToken)
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {
+                          "orderId": "%s",
+                          "customerId": "%s",
+                          "amount": 49.99
+                        }
+                        """.formatted(orderId, customerId))
                 .retrieve()
                 .toEntity(MAP_TYPE);
     }

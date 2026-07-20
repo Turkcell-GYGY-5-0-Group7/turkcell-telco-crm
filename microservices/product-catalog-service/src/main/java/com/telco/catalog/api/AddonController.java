@@ -48,7 +48,10 @@ public class AddonController {
                 request.price(),
                 request.currency(),
                 request.type(),
-                request.validityDays());
+                request.validityDays(),
+                request.dataMb(),
+                request.voiceMinutes(),
+                request.smsCount());
         return responses.ok(mediator.send(command));
     }
 

@@ -48,6 +48,15 @@ public class Addon {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "data_mb")
+    private Long dataMb;
+
+    @Column(name = "voice_minutes")
+    private Long voiceMinutes;
+
+    @Column(name = "sms_count")
+    private Long smsCount;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -60,10 +69,13 @@ public class Addon {
 
     /**
      * Factory that creates a new ACTIVE addon (FR-05). Tariff links are managed from the
-     * {@link Tariff} side of the many-to-many.
+     * {@link Tariff} side of the many-to-many. Allowance fields are nullable and type-dependent:
+     * a DATA addon carries {@code dataMb}, a MINUTES addon {@code voiceMinutes}, an SMS addon
+     * {@code smsCount}, and a VAS addon none.
      */
     public static Addon create(String code, String name, BigDecimal price, String currency,
-                               AddonType type, int validityDays) {
+                               AddonType type, int validityDays,
+                               Long dataMb, Long voiceMinutes, Long smsCount) {
         if (price == null || price.signum() < 0) {
             throw new BusinessRuleException("Addon price must be zero or positive: " + code);
         }
@@ -79,6 +91,9 @@ public class Addon {
         addon.type = Objects.requireNonNull(type, "type");
         addon.validityDays = validityDays;
         addon.status = "ACTIVE";
+        addon.dataMb = dataMb;
+        addon.voiceMinutes = voiceMinutes;
+        addon.smsCount = smsCount;
         addon.createdAt = Instant.now();
         return addon;
     }
@@ -113,6 +128,18 @@ public class Addon {
 
     public String getStatus() {
         return Objects.requireNonNullElse(status, "ACTIVE");
+    }
+
+    public Long getDataMb() {
+        return dataMb;
+    }
+
+    public Long getVoiceMinutes() {
+        return voiceMinutes;
+    }
+
+    public Long getSmsCount() {
+        return smsCount;
     }
 
     public Instant getCreatedAt() {

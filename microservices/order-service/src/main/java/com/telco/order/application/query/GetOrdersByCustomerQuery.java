@@ -11,6 +11,8 @@ public record GetOrdersByCustomerQuery(
         UUID customerId,
         int page,
         int size,
+        /** Optional {@code field,asc|desc} sort expression; null/blank means {@code createdAt,desc}. */
+        String sort,
         /** Keycloak subject (JWT sub) of the authenticated caller. */
         String callerUserId,
         boolean callerIsAdmin

@@ -37,6 +37,10 @@ Invoice reads require a valid JWT. Triggering a bill-run requires an admin role.
 ## Notes
 
 - The bill-run is idempotent per (subscriber, period) and meets the NFR-02 throughput target.
+- Invoice list pagination: `page` (default 0), `size` (default 20) and optional
+  `sort=field,asc|desc` (direction optional, `desc` assumed; default `createdAt,desc`). Sortable
+  fields: `createdAt`, `issuedAt`, `dueDate`, `grandTotal`, `status`. Any other field or a malformed
+  value returns the standard 400 validation error shape.
 - Invoice lines compose monthly fee, addons, overage, VAS, and taxes.
 - Rendered invoice PDFs are stored in MinIO; `GET /invoices/{id}/pdf` returns a time-limited
   pre-signed URL (or streams via the service). The invoice row holds only the object reference

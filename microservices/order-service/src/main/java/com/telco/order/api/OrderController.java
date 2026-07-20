@@ -70,9 +70,11 @@ public class OrderController {
             Authentication authentication,
             @PathVariable UUID customerId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
         return responses.ok(mediator.query(
-                new GetOrdersByCustomerQuery(customerId, page, size, authentication.getName(), isAdmin(authentication))));
+                new GetOrdersByCustomerQuery(customerId, page, size, sort,
+                        authentication.getName(), isAdmin(authentication))));
     }
 
     @DeleteMapping("/{orderId}")

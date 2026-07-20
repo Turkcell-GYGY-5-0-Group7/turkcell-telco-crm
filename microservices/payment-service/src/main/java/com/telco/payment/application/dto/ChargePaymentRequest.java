@@ -2,14 +2,19 @@ package com.telco.payment.application.dto;
 
 import com.telco.payment.domain.PaymentMethod;
 import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
-/** HTTP request body for manual charge override (ADMIN only, POST /api/v1/payments). */
+/**
+ * HTTP request body for manual charge override (ADMIN only, POST /api/v1/payments).
+ *
+ * <p>{@code paymentRequestId} is optional in the body: the {@code Idempotency-Key} header takes
+ * precedence when present (FR-25, feature 24.6); the controller rejects the request with 400 if
+ * neither is supplied.
+ */
 public record ChargePaymentRequest(
 
         @NotNull
@@ -21,7 +26,7 @@ public record ChargePaymentRequest(
         @NotNull @DecimalMin("0.01")
         BigDecimal amount,
 
-        @NotBlank @Size(max = 64)
+        @Size(max = 64)
         String paymentRequestId,
 
         /**

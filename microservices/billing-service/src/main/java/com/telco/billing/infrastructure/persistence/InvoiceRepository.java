@@ -16,7 +16,7 @@ import java.util.UUID;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
 
-    Page<Invoice> findByCustomerIdOrderByCreatedAtDesc(UUID customerId, Pageable pageable);
+    Page<Invoice> findByCustomerId(UUID customerId, Pageable pageable);
 
     boolean existsBySubscriptionIdAndPeriodStart(UUID subscriptionId, Instant periodStart);
 

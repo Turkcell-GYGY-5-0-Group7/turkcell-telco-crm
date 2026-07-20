@@ -172,6 +172,79 @@ public class Quota {
     }
 
     /**
+     * Adds purchased addon allowances to this quota (Sprint 24 Feature 24.3, design-note D4).
+     *
+     * <p>Raises the totals AND the remaining balances by the given deltas, then re-arms the
+     * notification flags for buckets that are back above their limits: {@code thresholdNotified}
+     * is cleared when every in-use bucket is back above its 20% line, and {@code exceededNotified}
+     * when no in-use bucket is exhausted - so a subscriber who tops up can be warned again later
+     * in the same period. A bucket with a zero total is not in use and is neutral to the check
+     * (the flags are shared across buckets, so an unused bucket must not block re-arming).
+     *
+     * @param minutes voice minutes to add (0 for none)
+     * @param sms     SMS count to add (0 for none)
+     * @param mb      data megabytes to add (0 for none)
+     */
+    public void addAllowance(long minutes, long sms, long mb) {
+        this.minutesTotal += minutes;
+        this.minutesRemaining += minutes;
+        this.smsTotal += sms;
+        this.smsRemaining += sms;
+        this.mbTotal += mb;
+        this.mbRemaining += mb;
+        this.updatedAt = Instant.now();
+
+        boolean allAboveThreshold = aboveThreshold(minutesRemaining, minutesTotal)
+                && aboveThreshold(smsRemaining, smsTotal)
+                && aboveThreshold(mbRemaining, mbTotal);
+        if (thresholdNotified && allAboveThreshold) {
+            thresholdNotified = false;
+        }
+
+        boolean noneExhausted = (minutesTotal == 0 || minutesRemaining > 0)
+                && (smsTotal == 0 || smsRemaining > 0)
+                && (mbTotal == 0 || mbRemaining > 0);
+        if (exceededNotified && noneExhausted) {
+            exceededNotified = false;
+        }
+    }
+
+    /** An unused bucket (total 0) is neutral; an in-use bucket must be above its 20% line. */
+    private static boolean aboveThreshold(long remaining, long total) {
+        return total == 0 || remaining > total / 5;
+    }
+
+    /**
+     * Resets this quota to a new tariff's allowances after a plan change (Sprint 24 Feature 24.4,
+     * design-note D4). Usage already consumed this period is preserved:
+     * {@code remaining = max(0, newTotal - used)} per bucket. The notification flags are recomputed
+     * from the new balances (same rules {@link #decrement} applies), so a subscriber who upgrades
+     * out of a warned state can be warned again, and one who downgrades into an exhausted state is
+     * flagged immediately. Known simplification (documented in D4): in-period addon top-ups are not
+     * preserved across a plan change.
+     */
+    public void reprovision(long newMinutesTotal, long newSmsTotal, long newMbTotal) {
+        long minutesUsed = this.minutesTotal - this.minutesRemaining;
+        long smsUsed = this.smsTotal - this.smsRemaining;
+        long mbUsed = this.mbTotal - this.mbRemaining;
+
+        this.minutesTotal = newMinutesTotal;
+        this.smsTotal = newSmsTotal;
+        this.mbTotal = newMbTotal;
+        this.minutesRemaining = Math.max(0, newMinutesTotal - minutesUsed);
+        this.smsRemaining = Math.max(0, newSmsTotal - smsUsed);
+        this.mbRemaining = Math.max(0, newMbTotal - mbUsed);
+        this.updatedAt = Instant.now();
+
+        this.thresholdNotified = !aboveThreshold(minutesRemaining, minutesTotal)
+                || !aboveThreshold(smsRemaining, smsTotal)
+                || !aboveThreshold(mbRemaining, mbTotal);
+        this.exceededNotified = (minutesTotal > 0 && minutesRemaining == 0)
+                || (smsTotal > 0 && smsRemaining == 0)
+                || (mbTotal > 0 && mbRemaining == 0);
+    }
+
+    /**
      * Value object returned by {@link #decrement(UsageType, long)}.
      *
      * @param overage         true when the quantity exceeded the remaining allowance

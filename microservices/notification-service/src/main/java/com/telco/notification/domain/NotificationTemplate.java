@@ -32,6 +32,15 @@ public class NotificationTemplate {
         return t;
     }
 
+    public boolean contentDiffers(String subject, String bodyTemplate) {
+        return !this.subject.equals(subject) || !this.bodyTemplate.equals(bodyTemplate);
+    }
+
+    public void updateContent(String subject, String bodyTemplate) {
+        this.subject = subject;
+        this.bodyTemplate = bodyTemplate;
+    }
+
     public String getId() { return id; }
     public String getCode() { return code; }
     public String getChannel() { return channel; }

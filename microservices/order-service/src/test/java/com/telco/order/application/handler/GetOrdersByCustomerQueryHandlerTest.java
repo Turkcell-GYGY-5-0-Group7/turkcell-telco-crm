@@ -42,7 +42,7 @@ class GetOrdersByCustomerQueryHandlerTest {
                 .thenReturn(new PageImpl<>(List.of(order), PageRequest.of(0, 10), 1));
 
         PageResult<?> result = handler.handle(
-                new GetOrdersByCustomerQuery(customerId, 0, 10, "sub-admin", true));
+                new GetOrdersByCustomerQuery(customerId, 0, 10, null, "sub-admin", true));
 
         assertThat(result.content()).hasSize(1);
         verify(orderRepository).findByCustomerId(eq(customerId), any());
@@ -57,7 +57,7 @@ class GetOrdersByCustomerQueryHandlerTest {
                 .thenReturn(new PageImpl<>(List.of(order), PageRequest.of(0, 10), 1));
 
         PageResult<?> result = handler.handle(
-                new GetOrdersByCustomerQuery(customerId, 0, 10, callerSub, false));
+                new GetOrdersByCustomerQuery(customerId, 0, 10, null, callerSub, false));
 
         assertThat(result.content()).hasSize(1);
         verify(orderRepository).findByUserId(eq(callerSub), any());
@@ -70,7 +70,7 @@ class GetOrdersByCustomerQueryHandlerTest {
                 .thenReturn(new PageImpl<>(List.of(), PageRequest.of(0, 10), 0));
 
         PageResult<?> result = handler.handle(
-                new GetOrdersByCustomerQuery(customerId, 0, 10, "sub-nobody", false));
+                new GetOrdersByCustomerQuery(customerId, 0, 10, null, "sub-nobody", false));
 
         assertThat(result.content()).isEmpty();
         assertThat(result.totalElements()).isZero();

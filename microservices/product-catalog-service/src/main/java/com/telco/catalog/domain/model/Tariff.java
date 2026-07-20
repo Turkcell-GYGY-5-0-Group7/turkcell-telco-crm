@@ -225,4 +225,16 @@ public class Tariff {
     public Set<Addon> getAddons() {
         return Collections.unmodifiableSet(addons);
     }
+
+    /**
+     * Links an addon to this tariff. The {@code tariff_addons} join table is owned by this side
+     * of the many-to-many mapping, so join rows only persist when the addon is added here and the
+     * tariff is saved. Idempotent for an already-linked addon (set semantics).
+     */
+    public void addAddon(Addon addon) {
+        Objects.requireNonNull(addon, "addon");
+        if (this.addons.add(addon)) {
+            this.updatedAt = Instant.now();
+        }
+    }
 }

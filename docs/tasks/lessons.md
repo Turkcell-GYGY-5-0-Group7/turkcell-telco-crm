@@ -30,6 +30,38 @@ Format:
   Docker-gated tests to clear the gate, say so explicitly rather than reporting "gate met" from a
   Docker-free run.
 
+## 2026-07-20 - a transient retry needs a real backoff, or it is not a retry
+
+- Mistake: a consumer treated "order not yet CONFIRMED" as TRANSIENT and re-threw so "Kafka's
+  built-in retry redelivers shortly after" (Sprint 14 fix 14.1.1 #5). The error handler retries
+  with `interval=0`, so all ten attempts burned inside ~1 second; when the sibling event had not
+  been processed in that window the offset was committed and the event was lost permanently -
+  order stuck at CONFIRMED, and any work hanging off fulfillment (Sprint 24 addon provisioning
+  and billing) silently never happened while the customer was still charged.
+- Rule: when re-throwing to get redelivery, verify the configured backoff actually spans the
+  window you are waiting for. Zero-interval retries only paper over microsecond races. Prefer an
+  explicit non-zero backoff or a retry topic, and never assume "retry on redelivery" without
+  checking `FixedBackOff`/error-handler settings.
+
+## 2026-07-20 - JSONB normalizes numerics, and Debezium cannot union heterogeneous array elements
+
+- Mistake: the outbox `payload` column is JSONB and Postgres normalizes `15.00` to `15`, so an
+  items array holding one whole-number price beside one fractional price produced INT64 and
+  FLOAT64 elements. Debezium's `expand.json.payload` cannot union array-element schemas, the
+  connector task DIED, and the entire order event stream halted platform-wide.
+- Rule: serialize money inside JSONB event arrays as strings (`@JsonFormat(shape = STRING)`), so
+  every element is identically typed regardless of value; Jackson still binds a JSON string into
+  `BigDecimal` on the consumer side. Audit any new event payload that puts a `BigDecimal` inside
+  a collection.
+
+## 2026-07-20 - re-register Debezium connectors after every stack restart
+
+- Mistake: brought the compose stack down and back up mid-verification and started testing
+  immediately; `GET /connectors` returned `[]`, so no outbox event ever published and orders sat
+  at PENDING, which briefly looked like an application bug.
+- Rule: `make -C infra register-connectors` is part of every boot, not just the first one. Gate on
+  the connector count and task states before running anything that depends on events.
+
 ## 2026-07-18 - a feature is not environment-proven until the full composed stack boots with it
 
 - Mistake: Sprint 17's starter-lock adopters (subscription/billing) and Sprint 21's campaign-service

@@ -38,7 +38,10 @@ public class CreateAddonCommandHandler implements CommandHandler<CreateAddonComm
                 command.price(),
                 command.currency(),
                 command.type(),
-                command.validityDays()
+                command.validityDays(),
+                command.dataMb(),
+                command.voiceMinutes(),
+                command.smsCount()
         );
         addonRepository.save(addon);
         return AddonResponse.from(addon);

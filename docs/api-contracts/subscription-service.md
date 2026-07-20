@@ -31,12 +31,37 @@ Read and lifecycle endpoints require a valid JWT. Activation is internal (saga-d
 
 | Direction | Event |
 | --- | --- |
-| Publish | `subscription.activated.v1`, `subscription.suspended.v1`, `subscription.terminated.v1`, `subscription.activation-failed.v1`, `msisdn.allocated.v1`, `msisdn.released.v1` |
-| Consume | `payment.completed.v1` (activation trigger), `payment.failed.v1` (after grace period) |
+| Publish | `subscription.activated.v1`, `subscription.suspended.v1`, `subscription.terminated.v1`, `subscription.activation-failed.v1`, `subscription.tariff-changed.v1`, `msisdn.allocated.v1`, `msisdn.released.v1` |
+| Consume | `payment.completed.v1` (activation / plan-change trigger), `payment.failed.v1` (after grace period) |
+
+### payment.completed.v1 branching (Sprint 24 Features 24.3/24.4, design-note D1/D2)
+
+The consumer fetches the order (`GET /internal/orders/{id}`) and branches on its persisted
+`orderType`:
+
+- `NEW_LINE` - activate a new subscription (unchanged pre-24 behavior; the one-tariff-line
+  invariant counts `TARIFF` items only, so bundled `ADDON` items are allowed).
+- `PLAN_CHANGE` - `ChangeTariffCommand` against the single tariff item's `targetSubscriptionId`:
+  re-validates existence, ownership and ACTIVE status, applies the order's pinned tariff
+  snapshot, and publishes `subscription.tariff-changed.v1` (keyed by subscriptionId). A terminal
+  failure (subscription gone / not owned / not ACTIVE / same tariff) REUSES
+  `subscription.activation-failed.v1` - a documented event-name reuse (design-note D2) - so the
+  existing refund/cancel compensation runs with zero new consumers.
+- `ADDON` - ignored entirely: standalone addon orders have no activation leg; order-service owns
+  their fulfillment and publishes `addon.purchased.v1` itself.
+
+`subscription.tariff-changed.v1` rides `subscription.events` as its third event type: consumers
+MUST filter on the `eventType` header and use per-listener consumer groups, and MUST dedup on the
+event's `orderId` (the record key is the subscriptionId - NOT unique across successive plan
+changes of the same subscription).
 
 ## Notes
 
 - MSISDN allocation is atomic and concurrency-safe; no MSISDN is double-allocated.
 - Lifecycle transitions are enforced as domain invariants; illegal transitions are rejected.
+- Subscription list pagination: `page` (default 0), `size` (default 20) and optional
+  `sort=field,asc|desc` (direction optional, `desc` assumed; default `createdAt,desc`). Sortable
+  fields: `createdAt`, `activatedAt`, `status`. Any other field or a malformed value returns the
+  standard 400 validation error shape.
 
 Reference: [service-catalog](../architecture/service-catalog.md), [event-catalog](../architecture/event-catalog.md), ADR-015.

@@ -27,7 +27,8 @@ public class TemplateSeeder implements CommandLineRunner {
         seed("QUOTA_80_PERCENT", "SMS", "en", "Data Usage Alert",
                 "You have used 80% of your data quota for subscription {{subscriptionId}}.");
         seed("QUOTA_EXCEEDED", "SMS", "en", "Data Quota Exceeded",
-                "Your data quota for subscription {{subscriptionId}} is exhausted. Consider upgrading.");
+                "Your data quota for subscription {{subscriptionId}} is exhausted."
+                        + " Purchase a data add-on or upgrade your package to continue.");
         seed("TICKET_OPENED", "SMS", "en", "Support Ticket Created",
                 "Your support ticket {{ticketId}} has been created. Team {{assignedTeam}} will assist you.");
         // Internal ops/security alert (Feature 23.4.3, OPS_ALERT channel) - not customer-facing.
@@ -37,8 +38,13 @@ public class TemplateSeeder implements CommandLineRunner {
     }
 
     private void seed(String code, String channel, String locale, String subject, String body) {
-        if (repo.findByCodeAndChannelAndLocale(code, channel, locale).isEmpty()) {
-            repo.save(NotificationTemplate.of(code, channel, locale, subject, body));
-        }
+        repo.findByCodeAndChannelAndLocale(code, channel, locale).ifPresentOrElse(
+                existing -> {
+                    if (existing.contentDiffers(subject, body)) {
+                        existing.updateContent(subject, body);
+                        repo.save(existing);
+                    }
+                },
+                () -> repo.save(NotificationTemplate.of(code, channel, locale, subject, body)));
     }
 }

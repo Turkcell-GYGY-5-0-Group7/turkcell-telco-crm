@@ -3,6 +3,7 @@ package com.telco.customer.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -51,6 +52,19 @@ class CustomerTest {
         Customer customer = pendingCustomer();
         customer.rejectKyc();
         assertThrows(BusinessRuleException.class, customer::rejectKyc);
+    }
+
+    @Test
+    void updateContactReplacesContactInfo() {
+        Customer customer = pendingCustomer();
+        customer.updateContact("ada@example.com", "+905321112233");
+        assertEquals("ada@example.com", customer.getEmail());
+        assertEquals("+905321112233", customer.getPhone());
+
+        customer.updateContact("countess@example.com", null);
+
+        assertEquals("countess@example.com", customer.getEmail());
+        assertNull(customer.getPhone());
     }
 
     @Test

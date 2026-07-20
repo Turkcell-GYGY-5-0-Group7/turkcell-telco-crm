@@ -8,6 +8,7 @@ import com.telco.payment.application.dto.RefundPaymentRequest;
 import com.telco.payment.application.query.GetPaymentByOrderQuery;
 import com.telco.payment.application.query.GetPaymentQuery;
 import com.telco.platform.common.api.ApiResult;
+import com.telco.platform.common.exception.ValidationException;
 import com.telco.platform.mediator.Mediator;
 import com.telco.platform.starter.api.ApiResponseFactory;
 import jakarta.validation.Valid;
@@ -17,10 +18,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -42,11 +45,26 @@ public class PaymentController {
     /**
      * Manual charge override. Normally charges are triggered automatically by the inbox consumer
      * on {@code order.created.v1}. This endpoint is provided for ADMIN use only.
+     *
+     * <p>{@code paymentRequestId} (the command-level idempotency key) comes from the
+     * {@code Idempotency-Key} header when present (FR-25, feature 24.6); the header wins over a
+     * body {@code paymentRequestId} if both are supplied. At least one is required.
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     @PreAuthorize("hasRole('ADMIN')")
-    public ApiResult<PaymentResponse> charge(@Valid @RequestBody ChargePaymentRequest request) {
+    public ApiResult<PaymentResponse> charge(
+            @Valid @RequestBody ChargePaymentRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKeyHeader) {
+        String paymentRequestId = idempotencyKeyHeader != null && !idempotencyKeyHeader.isBlank()
+                ? idempotencyKeyHeader
+                : request.paymentRequestId();
+        if (paymentRequestId == null || paymentRequestId.isBlank()) {
+            throw new ValidationException(
+                    "paymentRequestId is required in the body or the Idempotency-Key header",
+                    Map.of());
+        }
+
         // Admin/non-saga path: no Kafka message, so supply a FRESH unique inbox key per request. The
         // atomic inbox guard is then a harmless per-request no-op and never short-circuits a repeat
         // call - the handler's paymentRequestId lookup remains the source of charge idempotency, so a
@@ -57,7 +75,7 @@ public class PaymentController {
                 request.customerId(),
                 request.amount(),
                 request.invoiceId(),
-                request.paymentRequestId(),
+                paymentRequestId,
                 messageId,
                 request.method());
         return responses.ok(mediator.send(command));

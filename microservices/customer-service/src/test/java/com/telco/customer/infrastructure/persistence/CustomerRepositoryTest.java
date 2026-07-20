@@ -117,6 +117,26 @@ class CustomerRepositoryTest {
     }
 
     @Test
+    void contactInfoRoundTripsThroughTheV2Columns() {
+        // Feature 24.5 (FR-03): email/phone are plain nullable columns added by V2__customer_contact.
+        Customer customer = Customer.register(
+                CustomerType.INDIVIDUAL, "Radia", "Perlman", "10000000146", LocalDate.of(1951, 12, 18));
+        customer.updateContact("radia@example.com", "+905321112233");
+        customer = customers.save(customer);
+        flushAndClear();
+
+        Customer reloaded = customers.findById(customer.getId()).orElseThrow();
+        assertThat(reloaded.getEmail()).isEqualTo("radia@example.com");
+        assertThat(reloaded.getPhone()).isEqualTo("+905321112233");
+
+        Object storedEmail = entityManager.getEntityManager()
+                .createNativeQuery("SELECT email FROM customers WHERE id = :id")
+                .setParameter("id", customer.getId())
+                .getSingleResult();
+        assertThat(storedEmail).isEqualTo("radia@example.com");
+    }
+
+    @Test
     void findsDefaultAddressForCustomer() {
         Customer customer = customers.save(Customer.register(
                 CustomerType.INDIVIDUAL, "Edsger", "Dijkstra", "10000000146", LocalDate.of(1970, 3, 3)));

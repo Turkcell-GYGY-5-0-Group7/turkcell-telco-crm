@@ -6,6 +6,7 @@ import com.telco.payment.application.dto.PaymentResponse;
 import com.telco.payment.application.event.PaymentCompletedEvent;
 import com.telco.payment.application.service.PaymentCreationService;
 import com.telco.payment.domain.Payment;
+import com.telco.payment.domain.PaymentMethod;
 import com.telco.payment.domain.PaymentStatus;
 import com.telco.payment.infrastructure.persistence.PaymentRepository;
 import com.telco.payment.infrastructure.psp.ChargeResult;
@@ -15,6 +16,8 @@ import com.telco.platform.outbox.OutboxService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -129,7 +132,8 @@ class ChargePaymentCommandHandlerTest {
         when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         ChargePaymentCommand command = new ChargePaymentCommand(newPayment.getOrderId(),
-                newPayment.getCustomerId(), new BigDecimal("49.99"), invoiceId, reqId, "msg-" + reqId);
+                newPayment.getCustomerId(), new BigDecimal("49.99"), invoiceId, reqId,
+                "msg-" + reqId);
 
         PaymentResponse response = handler.handle(command);
 
@@ -139,6 +143,41 @@ class ChargePaymentCommandHandlerTest {
                 payloadCaptor.capture());
         PaymentCompletedEvent event = (PaymentCompletedEvent) payloadCaptor.getValue();
         assertThat(event.invoiceId()).isEqualTo(invoiceId.toString());
+    }
+
+    @ParameterizedTest
+    @EnumSource(PaymentMethod.class)
+    void persists_and_echoes_each_payment_method(PaymentMethod method) throws PspException {
+        String reqId = "REQ-M-" + method;
+        when(paymentRepository.findByPaymentRequestId(reqId)).thenReturn(Optional.empty());
+        when(pspAdapter.charge(anyString(), any(), anyString()))
+                .thenReturn(new ChargeResult("TXN-M-" + method));
+        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PaymentResponse response = handler.handle(new ChargePaymentCommand(
+                UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("49.99"), null,
+                reqId, "msg-" + reqId, method));
+
+        assertThat(response.method()).isEqualTo(method.name());
+        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentCreationService).saveNewPayment(paymentCaptor.capture());
+        assertThat(paymentCaptor.getValue().getMethod()).isEqualTo(method);
+    }
+
+    @Test
+    void defaults_method_to_credit_card_when_not_specified() throws PspException {
+        String reqId = "REQ-M-DEFAULT";
+        when(paymentRepository.findByPaymentRequestId(reqId)).thenReturn(Optional.empty());
+        when(pspAdapter.charge(anyString(), any(), anyString()))
+                .thenReturn(new ChargeResult("TXN-M-DEFAULT"));
+        when(paymentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PaymentResponse response = handler.handle(command(reqId));
+
+        assertThat(response.method()).isEqualTo(PaymentMethod.CREDIT_CARD.name());
+        ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
+        verify(paymentCreationService).saveNewPayment(paymentCaptor.capture());
+        assertThat(paymentCaptor.getValue().getMethod()).isEqualTo(PaymentMethod.CREDIT_CARD);
     }
 
     @Test

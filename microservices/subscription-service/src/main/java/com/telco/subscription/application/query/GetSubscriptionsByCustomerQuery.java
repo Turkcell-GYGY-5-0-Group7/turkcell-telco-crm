@@ -9,6 +9,8 @@ import java.util.UUID;
 /**
  * Returns a paginated list of a customer's subscriptions (FR-15).
  *
+ * @param sort               optional {@code field,asc|desc} sort expression; null/blank means
+ *                           {@code createdAt,desc}
  * @param callerUserId       raw JWT subject of the caller; retained for audit/logging only, no
  *                           longer used for the ownership check (identity-to-customer linkage,
  *                           ADR-011)
@@ -20,6 +22,7 @@ public record GetSubscriptionsByCustomerQuery(
         UUID customerId,
         int page,
         int size,
+        String sort,
         String callerUserId,
         boolean callerIsAdmin,
         String callerCustomerId

@@ -36,6 +36,10 @@ History reads require a valid JWT. Direct send is internal (event-driven in norm
 ## Notes
 
 - Dispatch respects per-user channel preferences; suppressed channels are not sent.
+- History pagination: `page` (default 0), `size` (default 20) and optional `sort=field,asc|desc`
+  (direction optional, `desc` assumed; default `createdAt,desc`). Sortable fields: `createdAt`,
+  `sentAt`, `status`, `channel`. Any other field or a malformed value returns the standard 400
+  validation error shape.
 - `fraud.case-opened.v1` (fraud-service, ADR-029 Section 5) raises one internal ops/security alert on
   the `OPS_ALERT` channel (distinct from customer-facing SMS/email/push, keyed to the `security-ops`
   responder queue) via the `FRAUD_CASE_OPENED` template. Informational only: it triggers no

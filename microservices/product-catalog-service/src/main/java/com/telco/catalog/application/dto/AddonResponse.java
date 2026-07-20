@@ -15,6 +15,9 @@ public record AddonResponse(
         String currency,
         String type,
         int validityDays,
+        Long dataMb,
+        Long voiceMinutes,
+        Long smsCount,
         String status,
         Instant createdAt
 ) {
@@ -28,6 +31,9 @@ public record AddonResponse(
                 addon.getCurrency(),
                 addon.getType().name(),
                 addon.getValidityDays(),
+                addon.getDataMb(),
+                addon.getVoiceMinutes(),
+                addon.getSmsCount(),
                 addon.getStatus(),
                 addon.getCreatedAt()
         );

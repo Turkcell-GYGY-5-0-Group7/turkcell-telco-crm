@@ -259,7 +259,7 @@ class NotificationIntegrationTest {
 
         // Give the consumer time to (not) process the duplicate; count must stay at exactly one.
         await().during(Duration.ofSeconds(3)).atMost(TIMEOUT).untilAsserted(() ->
-                assertThat(notificationRepository.findByUserIdOrderByCreatedAtDesc(
+                assertThat(notificationRepository.findByUserId(
                         userId, org.springframework.data.domain.PageRequest.of(0, 10)).getTotalElements())
                         .isEqualTo(1L));
         assertThat(outboxDispatchedCount(userId)).isEqualTo(1L);
@@ -285,11 +285,11 @@ class NotificationIntegrationTest {
     /** Awaits exactly one persisted notification for the user and returns it. */
     private Notification awaitOne(String userId) {
         await().atMost(TIMEOUT).untilAsserted(() -> {
-            List<Notification> all = notificationRepository.findByUserIdOrderByCreatedAtDesc(
+            List<Notification> all = notificationRepository.findByUserId(
                     userId, org.springframework.data.domain.PageRequest.of(0, 10)).getContent();
             assertThat(all).hasSize(1);
         });
-        return notificationRepository.findByUserIdOrderByCreatedAtDesc(
+        return notificationRepository.findByUserId(
                 userId, org.springframework.data.domain.PageRequest.of(0, 10)).getContent().get(0);
     }
 

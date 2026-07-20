@@ -10,9 +10,11 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.HashSet;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
@@ -40,11 +42,41 @@ class CatalogSchemaMigrationTest {
             Set<String> tariffAddonRefs = importedTables(meta, "tariff_addons");
             assertTrue(tariffAddonRefs.contains("tariffs"), "tariff_addons missing FK to tariffs");
             assertTrue(tariffAddonRefs.contains("addons"), "tariff_addons missing FK to addons");
+
+            // V2__addon_management: nullable allowance columns on addons.
+            for (String column : new String[]{"data_mb", "voice_minutes", "sms_count"}) {
+                assertTrue(columnExists(meta, "addons", column),
+                        "addons column missing: " + column);
+            }
+
+            // V2__addon_management: seeded addon catalog (no tariff_addons seeds - V1 seeds no
+            // tariffs, links are runtime-managed through POST /api/v1/addons).
+            try (Statement st = c.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT count(*) FROM addons WHERE status = 'ACTIVE' AND code IN "
+                                 + "('DATA_5GB', 'DATA_10GB', 'SMS_500', 'VOICE_300', 'VAS_CALLERTUNE')")) {
+                assertTrue(rs.next());
+                assertEquals(5, rs.getInt(1), "expected 5 seeded addons");
+            }
+
+            try (Statement st = c.createStatement();
+                 ResultSet rs = st.executeQuery(
+                         "SELECT data_mb FROM addons WHERE code = 'DATA_5GB'")) {
+                assertTrue(rs.next(), "seeded addon DATA_5GB missing");
+                assertEquals(5120L, rs.getLong("data_mb"), "DATA_5GB data_mb allowance");
+            }
         }
     }
 
     private static boolean tableExists(DatabaseMetaData meta, String table) throws Exception {
         try (ResultSet rs = meta.getTables(null, "public", table, new String[]{"TABLE"})) {
+            return rs.next();
+        }
+    }
+
+    private static boolean columnExists(DatabaseMetaData meta, String table, String column)
+            throws Exception {
+        try (ResultSet rs = meta.getColumns(null, "public", table, column)) {
             return rs.next();
         }
     }

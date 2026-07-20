@@ -25,6 +25,9 @@ class OrderSecurityConfig {
                 .authorizeHttpRequests(a -> a
                         .requestMatchers(
                                 "/actuator/health", "/actuator/info",
+                                // Per-service OpenAPI docs (ARC-08), same permit set as the
+                                // sibling services.
+                                "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**",
                                 // Trusted system-to-system order read for the onboarding saga. The
                                 // gateway excludes /internal/** from public traffic (devops).
                                 "/internal/**")

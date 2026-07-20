@@ -5,11 +5,15 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-/** HTTP request body for creating an addon (FR-05, POST /api/v1/addons, ADMIN only). */
+/**
+ * HTTP request body for creating an addon (FR-05, POST /api/v1/addons, ADMIN only). Allowance
+ * fields are optional and type-dependent.
+ */
 public record CreateAddonRequest(
 
         @NotBlank @Size(max = 50)
@@ -28,6 +32,15 @@ public record CreateAddonRequest(
         AddonType type,
 
         @Positive
-        int validityDays
+        int validityDays,
+
+        @PositiveOrZero
+        Long dataMb,
+
+        @PositiveOrZero
+        Long voiceMinutes,
+
+        @PositiveOrZero
+        Long smsCount
 ) {
 }

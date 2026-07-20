@@ -7,11 +7,15 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import jakarta.validation.constraints.Size;
 
 import java.math.BigDecimal;
 
-/** Creates a new addon in the catalog (FR-05, ADMIN only). */
+/**
+ * Creates a new addon in the catalog (FR-05, ADMIN only). Allowance fields are nullable and
+ * type-dependent (DATA -> dataMb, MINUTES -> voiceMinutes, SMS -> smsCount, VAS -> none).
+ */
 public record CreateAddonCommand(
 
         @NotBlank @Size(max = 50)
@@ -30,7 +34,16 @@ public record CreateAddonCommand(
         AddonType type,
 
         @Positive
-        int validityDays
+        int validityDays,
+
+        @PositiveOrZero
+        Long dataMb,
+
+        @PositiveOrZero
+        Long voiceMinutes,
+
+        @PositiveOrZero
+        Long smsCount
 
 ) implements Command<AddonResponse> {
 }

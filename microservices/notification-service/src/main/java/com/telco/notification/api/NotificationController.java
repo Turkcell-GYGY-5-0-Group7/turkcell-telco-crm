@@ -50,8 +50,9 @@ public class NotificationController {
     public ApiResult<PageResult<NotificationResponse>> history(
             @PathVariable String userId,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        Page<Notification> notifications = notificationService.history(userId, page, size);
+            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(required = false) String sort) {
+        Page<Notification> notifications = notificationService.history(userId, page, size, sort);
         List<NotificationResponse> content = notifications.getContent().stream()
                 .map(NotificationResponse::from).toList();
         return apiResponseFactory.ok(new PageResult<>(content, page, size,
