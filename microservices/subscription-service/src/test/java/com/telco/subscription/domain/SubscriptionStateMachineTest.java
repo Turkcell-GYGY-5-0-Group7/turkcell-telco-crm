@@ -122,4 +122,40 @@ class SubscriptionStateMachineTest {
         assertThat(a.getId()).isNotEqualTo(b.getId());
         assertThat(a.getMsisdn()).isNotEqualTo(b.getMsisdn());
     }
+
+    // --- Tariff change (FR-09, plan-change orders) ---
+
+    @Test
+    void change_tariff_on_active_swaps_code_and_returns_old_code() {
+        Subscription s = newActive();
+        String old = s.changeTariff("TARIFF_PREMIUM");
+        assertThat(old).isEqualTo("TARIFF_BASIC");
+        assertThat(s.getTariffCode()).isEqualTo("TARIFF_PREMIUM");
+        assertThat(s.getStatus()).isEqualTo(SubscriptionStatus.ACTIVE);
+    }
+
+    @Test
+    void change_tariff_to_same_code_is_a_harmless_no_op() {
+        Subscription s = newActive();
+        String old = s.changeTariff("TARIFF_BASIC");
+        assertThat(old).isEqualTo("TARIFF_BASIC");
+        assertThat(s.getTariffCode()).isEqualTo("TARIFF_BASIC");
+    }
+
+    @Test
+    void change_tariff_when_suspended_throws() {
+        Subscription s = newActive();
+        s.suspend();
+        assertThatThrownBy(() -> s.changeTariff("TARIFF_PREMIUM"))
+                .isInstanceOf(BusinessRuleException.class);
+        assertThat(s.getTariffCode()).isEqualTo("TARIFF_BASIC");
+    }
+
+    @Test
+    void change_tariff_when_terminated_throws() {
+        Subscription s = newActive();
+        s.terminate();
+        assertThatThrownBy(() -> s.changeTariff("TARIFF_PREMIUM"))
+                .isInstanceOf(BusinessRuleException.class);
+    }
 }
