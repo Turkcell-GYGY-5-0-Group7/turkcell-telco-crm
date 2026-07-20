@@ -112,7 +112,7 @@ class OrderCreatedConsumerTest {
         assertThat(status).isEqualTo("COMPLETED");
         // Saga auto-charge always uses CREDIT_CARD - the event carries no method choice (FR-25).
         String method = jdbc.queryForObject(
-                "SELECT method FROM payments WHERE order_id = ?", String.class, orderId);
+                "SELECT payment_method FROM payments WHERE order_id = ?", String.class, orderId);
         assertThat(method).isEqualTo("CREDIT_CARD");
     }
 

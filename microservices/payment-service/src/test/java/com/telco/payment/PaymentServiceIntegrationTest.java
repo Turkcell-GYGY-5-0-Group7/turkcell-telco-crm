@@ -173,7 +173,7 @@ class PaymentServiceIntegrationTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CREATED);
         assertThat(data(response).get("method")).isEqualTo("BANK_TRANSFER");
         String persisted = jdbcTemplate.queryForObject(
-                "SELECT method FROM payments WHERE id = ?::uuid", String.class,
+                "SELECT payment_method FROM payments WHERE id = ?::uuid", String.class,
                 data(response).get("id"));
         assertThat(persisted).isEqualTo("BANK_TRANSFER");
     }
