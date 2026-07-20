@@ -1,5 +1,6 @@
 package com.telco.order.application.event;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.telco.platform.cqrs.Event;
 
 import java.math.BigDecimal;
@@ -36,6 +37,17 @@ public record OrderCreatedEvent(
     public record OrderItemPayload(
             String tariffId,
             String tariffName,
+            /**
+             * Serialized as a JSON STRING, not a number (bug found via the Sprint 24.8 live E2E,
+             * 2026-07-20): the outbox {@code payload} column is JSONB, and Postgres normalizes
+             * numerics (15.00 -> 15), so a whole-number price in one item and a fractional price
+             * in another produced INT64-vs-FLOAT64 array elements. Debezium's
+             * {@code expand.json.payload} cannot union heterogeneous array-element schemas and
+             * the order connector task died, halting the ENTIRE order event stream. Strings are
+             * immune to JSONB normalization, keeping every element identically typed; Jackson
+             * consumers bind a JSON string into {@code BigDecimal} out of the box.
+             */
+            @JsonFormat(shape = JsonFormat.Shape.STRING)
             BigDecimal unitPrice,
             int quantity,
             String campaignId,

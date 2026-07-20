@@ -1,8 +1,12 @@
 package com.telco.billing.infrastructure.consumer;
 
+import com.telco.billing.infrastructure.client.ProductCatalogBillingClient;
+import com.telco.billing.infrastructure.client.TariffPricingResponse;
 import com.telco.billing.infrastructure.entity.SubscriberBillingRecord;
 import com.telco.billing.infrastructure.persistence.SubscriberBillingRecordRepository;
+import com.telco.billing.infrastructure.persistence.TariffPriceRepository;
 import com.telco.platform.outbox.OutboxService;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
@@ -53,15 +57,21 @@ class TariffChangedBillingConsumerTest {
     }
 
     @MockitoBean private OutboxService outboxService;
+    @MockitoBean private ProductCatalogBillingClient catalogClient;
 
     @Autowired TariffChangedBillingConsumer consumer;
     @Autowired SubscriberBillingRecordRepository subscriberRepo;
+    @Autowired TariffPriceRepository tariffPriceRepo;
     @Autowired JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() {
         jdbc.execute("DELETE FROM inbox_message");
         jdbc.execute("DELETE FROM subscriber_billing_records");
+        jdbc.execute("DELETE FROM tariff_prices");
+        org.mockito.Mockito.when(catalogClient.getTariffPricing(org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> new TariffPricingResponse(
+                        inv.getArgument(0), "Stub Tariff", new BigDecimal("249.90"), "TRY"));
     }
 
     private UUID seedBillingRecord(String tariffCode) {
@@ -96,13 +106,16 @@ class TariffChangedBillingConsumerTest {
     }
 
     @Test
-    void tariff_change_updates_the_billing_record() {
+    void tariff_change_updates_the_billing_record_and_caches_the_new_tariff_price() {
         UUID subscriptionId = seedBillingRecord("POSTPAID-S");
 
         consumer.onTariffChanged(tariffChangedRecord(subscriptionId, UUID.randomUUID().toString(),
                 "POSTPAID-M", 0L, "subscription.tariff-changed.v1"));
 
         assertThat(tariffOf(subscriptionId)).isEqualTo("POSTPAID-M");
+        // Sprint 24.8 live-E2E regression: without the lazy price cache the next bill run has no
+        // TariffPrice for the new code and generates NO invoice for the subscriber.
+        assertThat(tariffPriceRepo.findByTariffCode("POSTPAID-M")).isPresent();
     }
 
     @Test

@@ -15,92 +15,96 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.equalTo;
 
 /**
- * AC-01 - New Subscriber Onboarding, COMPENSATION path.
+ * AC-01 compensation path: activation failure refunds the payment and cancels the order.
  *
- * <p>Trigger: {@code subscription-service PaymentCompletedEventConsumer} treats a multi-item order
- * as a TERMINAL, pre-activation failure - "one-line MVP invariant violated" - and dispatches
- * {@code FailSubscriptionActivationCommand} with reason {@code UNSUPPORTED_MULTI_ITEM_ORDER}
- * (see that class's javadoc). This is the only failure mode reachable deterministically from the
- * public API: the other failure mode (MSISDN pool exhaustion, {@code ActivateSubscriptionCommandHandler})
- * would require draining all 1000 seeded MSISDNs first (V2__msisdn_pool_seed.sql), which is not a
- * practical, isolated acceptance fixture. Placing an order with two order items is a legitimate,
- * documented API call (order-service enforces no line-count limit on capture) that is guaranteed
- * to fail activation - so this proves the real compensation chain, not a synthetic shortcut.
+ * <p><b>Rewritten for Sprint 24 (2026-07-20 live E2E):</b> this test previously triggered
+ * compensation with a two-tariff-item order, which order-service accepted (no line-count
+ * validation on capture) and subscription-service later rejected as
+ * {@code UNSUPPORTED_MULTI_ITEM_ORDER}. Since Feature 24.2's validation matrix, that shape is
+ * rejected AT CAPTURE with 400 (a NEW_LINE order must contain exactly one TARIFF item) - the
+ * failure moved to an earlier, cheaper gate, and the old trigger can no longer reach the saga.
+ * The first assertion documents that gate.
  *
- * <p>Expected compensation chain, each hop backed by the cited consumer:
- * <ol>
- *   <li>{@code payment.completed.v1} still fires first (payment is charged before subscription
- *       activation is even attempted) - {@code payment-service OrderCreatedEventConsumer}.</li>
- *   <li>{@code subscription.activation-failed.v1} - {@code subscription-service
- *       PaymentCompletedEventConsumer} (multi-item order detected).</li>
- *   <li>{@code payment.refunded.v1} - {@code payment-service SubscriptionActivationFailedEventConsumer}
- *       refunds the COMPLETED payment.</li>
- *   <li>Order -&gt; CANCELLED - {@code order-service PaymentRefundedEventConsumer}
- *       ({@code CompensateOrderCommand}, reason {@code SAGA_COMPENSATION}).</li>
- * </ol>
- *
- * <p>Same mock-PSP flake caveat as the happy-path test applies to step 1 above.
- *
- * <p><b>Authentication:</b> registration, KYC document upload, and order placement/reads use a real,
- * freshly provisioned SUBSCRIBER ({@link SelfServiceSubscriber}), not the permanently-unlinkable
- * seeded {@code subscriber@telco.local}; KYC approval and tariff creation stay ADMIN (genuinely
- * back-office actions). The final subscriptions-by-customer check uses the subscriber's own fresh,
- * linked token (Feature 14.4 identity-to-customer linkage) instead of the ADMIN-token workaround the
- * AC-01 happy-path test class javadoc used to document.
+ * <p>The live compensation proof now drives Feature 24.4's terminal changeTariff failure: a
+ * PLAN_CHANGE order is placed against an ACTIVE subscription which is then terminated BEFORE the
+ * payment leg completes (payment rides order.created.v1 through Debezium, giving a comfortable
+ * window). subscription-service's {@code ChangeTariffCommandHandler} finds the target no longer
+ * ACTIVE, emits {@code subscription.activation-failed.v1} (reason {@code TARIFF_CHANGE_REJECTED};
+ * documented event-name reuse, design-note D2), and the EXISTING compensation chain runs:
+ * payment REFUNDED, order CANCELLED.
  */
-@DisplayName("AC-01: New subscriber onboarding, activation-failure compensation path")
+@DisplayName("AC-01: activation failure compensates (refund + cancel)")
 class NewSubscriberOnboardingCompensationAcceptanceIT {
 
-    private static final BigDecimal MONTHLY_FEE = new BigDecimal("29.90");
+    private static final BigDecimal MONTHLY_FEE = new BigDecimal("100.00");
 
     @Test
-    @DisplayName("multi-item order fails activation, payment is refunded, and the order is cancelled")
-    void activationFailureTriggersRefundAndOrderCancellation() {
+    @DisplayName("two-tariff order is rejected at capture since 24.2 (earlier gate)")
+    void multiTariffOrderIsRejectedAtCapture() {
         String adminToken = TokenProvider.adminToken();
         SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
         String subscriberToken = subscriber.initialToken();
 
         UUID customerId = OnboardingSteps.registerAndApproveCustomer(subscriberToken, adminToken);
-        String linkedToken = subscriber.awaitLinkedToken(customerId);
         GatewayApi.TariffCreated tariff = GatewayApi.createTariff(adminToken, MONTHLY_FEE, 1000);
 
-        // Two items -> order-service accepts it (no line-count validation on capture), but
-        // subscription-service's saga consumer rejects it as an unsupported multi-item order. Placed
-        // by the real subscriber (customer-facing action).
         Response orderResponse = GatewayApi.createOrder(
-                subscriberToken, customerId, List.of(tariff.id(), tariff.id()), UUID.randomUUID().toString());
-        orderResponse.then().statusCode(201).body("data.status", org.hamcrest.Matchers.equalTo("PENDING"));
+                subscriberToken, customerId, List.of(tariff.id(), tariff.id()),
+                UUID.randomUUID().toString());
+
+        orderResponse.then().statusCode(400).body("success", equalTo(false));
+    }
+
+    @Test
+    @DisplayName("terminal plan-change failure refunds the payment and cancels the order")
+    void planChangeFailureTriggersRefundAndOrderCancellation() {
+        String adminToken = TokenProvider.adminToken();
+        SelfServiceSubscriber subscriber = SelfServiceSubscriber.provision(adminToken);
+
+        OnboardingSteps.ActiveSubscription subscription = OnboardingSteps.onboardActiveSubscription(
+                subscriber, adminToken, MONTHLY_FEE, 1000);
+        String linkedToken = subscription.subscriberToken();
+
+        GatewayApi.TariffCreated newTariff = GatewayApi.createTariff(
+                adminToken, new BigDecimal("150.00"), 5000);
+
+        // Place the plan-change order, then terminate the target subscription IMMEDIATELY: the
+        // payment leg needs order.created.v1 to travel through Debezium first, so the direct
+        // synchronous terminate call reliably lands before payment.completed.v1 is consumed.
+        Response orderResponse = GatewayApi.createPlanChangeOrder(
+                linkedToken, subscription.customerId(), newTariff.id(),
+                subscription.subscriptionId(), UUID.randomUUID().toString());
+        orderResponse.then().statusCode(201).body("data.orderType", equalTo("PLAN_CHANGE"));
         UUID orderId = UUID.fromString(orderResponse.jsonPath().getString("data.id"));
 
-        await("order compensates to CANCELLED after activation failure")
+        GatewayApi.terminateSubscription(adminToken, subscription.subscriptionId())
+                .then().statusCode(200);
+
+        await("order compensates to CANCELLED after the tariff change is rejected")
                 .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
-                    Response order = GatewayApi.getOrder(subscriberToken, orderId);
+                    Response order = GatewayApi.getOrder(linkedToken, orderId);
                     order.then().statusCode(200);
                     assertThat(order.jsonPath().getString("data.status")).isEqualTo("CANCELLED");
                 });
 
-        // The payment that was charged is refunded, not left COMPLETED (payment-service
-        // SubscriptionActivationFailedEventConsumer -> RefundPaymentCommand). No ownership check on
-        // this read, so the subscriber can view it directly.
         await("payment is refunded")
                 .atMost(AcceptanceConfig.SAGA_TIMEOUT)
                 .pollInterval(AcceptanceConfig.POLL_INTERVAL)
                 .untilAsserted(() -> {
-                    Response payment = GatewayApi.getPaymentByOrder(subscriberToken, orderId);
+                    Response payment = GatewayApi.getPaymentByOrder(linkedToken, orderId);
                     payment.then().statusCode(200);
                     assertThat(payment.jsonPath().getString("data.status")).isEqualTo("REFUNDED");
                 });
 
-        // No subscription (and therefore no MSISDN) was ever created for this customer: activation
-        // never proceeded past the pre-activation multi-item guard. Own linked token - see class
-        // javadoc: resolved customerId claim satisfies ownership directly (Feature 14.4).
-        Response subscriptions = GatewayApi.getSubscriptionsByCustomer(linkedToken, customerId);
-        subscriptions.then().statusCode(200);
-        List<Object> content = subscriptions.jsonPath().getList("data.content");
-        assertThat(content).isEmpty();
+        // The terminated subscription kept its original tariff: the rejected change was never applied.
+        Response sub = GatewayApi.getSubscription(linkedToken, subscription.subscriptionId());
+        sub.then().statusCode(200);
+        assertThat(sub.jsonPath().getString("data.tariffCode")).isEqualTo(subscription.tariffCode());
+        assertThat(sub.jsonPath().getString("data.status")).isEqualTo("TERMINATED");
     }
 }
