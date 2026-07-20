@@ -39,6 +39,7 @@ public class UpdateCustomerCommandHandler
                 .orElseThrow(() -> new ResourceNotFoundException("customer not found: " + command.id()));
 
         customer.updateProfile(command.firstName(), command.lastName(), command.dateOfBirth());
+        customer.updateContact(command.email(), command.phone());
         customers.save(customer);
 
         String id = customer.getId().toString();

@@ -62,6 +62,14 @@ public class Customer {
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
+    /** Contact e-mail (FR-03). PII: masked in logs via DTO-level {@code @Sensitive}, never logged raw. */
+    @Column(length = 255)
+    private String email;
+
+    /** Contact phone in E.164-ish free form (FR-03). Same PII handling as {@link #email}. */
+    @Column(length = 32)
+    private String phone;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private CustomerStatus status;
@@ -126,6 +134,20 @@ public class Customer {
         this.firstName = Objects.requireNonNull(firstName, "firstName");
         this.lastName = Objects.requireNonNull(lastName, "lastName");
         this.dateOfBirth = dateOfBirth;
+    }
+
+    /** Updates contact information (FR-03). Both fields are optional; null clears the value. */
+    public void updateContact(String email, String phone) {
+        this.email = email;
+        this.phone = phone;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getPhone() {
+        return phone;
     }
 
     /** Soft-deletes the customer (FR-04). Idempotent: re-deleting keeps the original timestamp. */

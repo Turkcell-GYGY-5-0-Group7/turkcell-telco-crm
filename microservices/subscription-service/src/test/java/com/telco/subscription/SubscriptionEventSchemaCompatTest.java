@@ -28,7 +28,9 @@ class SubscriptionEventSchemaCompatTest {
             "SubscriptionActivatedV1",
             "SubscriptionSuspendedV1",
             "SubscriptionTerminatedV1",
-            "SubscriptionActivationFailedV1"
+            "SubscriptionActivationFailedV1",
+            "SubscriptionTariffChangedV1",
+            "SubscriptionAddonAttachedV1"
     })
     void java_record_matches_avro_schema(String avroName) throws Exception {
         Schema schema = AvroContractAssertions.canonicalSchema(CANONICAL_PACKAGE + "." + avroName);

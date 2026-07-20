@@ -183,6 +183,12 @@ original brief) its assignment week.
 - FR-11: Order states: DRAFT, PENDING_PAYMENT, PAID, FULFILLED, CANCELLED.
 - FR-12: Order cancellation triggers compensation events.
 
+> **PLATFORM NOTE (FR-11 state names).** The delivered `OrderStatus` enum is
+> `PENDING, CONFIRMED, FULFILLED, CANCELLED, FAILED`. There is no DRAFT state (orders are created
+> directly into PENDING), CONFIRMED plays the brief's PAID role, and "PAID" survives only as a
+> saga-state value. The lifecycle is functionally equivalent; the delivered names are ratified as
+> canonical (2026-07-20 gap-closure pass).
+
 ## 4.4 Subscription Management (Subscription Service)
 
 - FR-13: When an order completes, the subscription is automatically activated.
@@ -224,6 +230,12 @@ original brief) its assignment week.
 - FR-31: Customers can open complaints, requests, and fault records.
 - FR-32: Tickets are auto-assigned to the relevant team on an SLA basis.
 - FR-33: When a ticket is opened, the customer is notified.
+
+> **PLATFORM NOTE (FR-31 categories).** The delivered ticket model uses an open string category
+> driven by seeded SLA policies (`BILLING`, `TECHNICAL`, `GENERAL`, plus post-MVP `DISPUTE` and
+> `FRAUD_REVIEW`) rather than a closed complaint/request/fault enum. SLA policy seeding is the
+> extension point for new categories; the delivered taxonomy is ratified as canonical
+> (2026-07-20 gap-closure pass).
 
 # 5. Non-Functional Requirements
 

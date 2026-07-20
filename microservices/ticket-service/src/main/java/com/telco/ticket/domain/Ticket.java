@@ -48,6 +48,7 @@ public class Ticket {
      * {@code caseId} for a ticket auto-opened from {@code fraud.case-opened.v1}, ADR-029 Section 5).
      * Nullable - agent-opened tickets carry none. Provides the retrievable link back to the source.
      */
+    @Column(name = "external_ref")
     private String externalRef;
 
     private Instant slaDueAt;
@@ -61,9 +62,6 @@ public class Ticket {
     private Instant updatedAt;
 
     private Instant resolvedAt;
-
-    @Column(name = "external_ref")
-    private String externalRef;
 
     @OneToMany(mappedBy = "ticket", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<TicketComment> comments = new ArrayList<>();
@@ -87,7 +85,6 @@ public class Ticket {
         t.status = TicketStatus.OPEN;
         t.assignedTeam = assignedTeam;
         t.slaDueAt = slaDueAt;
-        t.externalRef = externalRef;
         t.createdAt = Instant.now();
         t.updatedAt = t.createdAt;
         return t;
@@ -129,6 +126,5 @@ public class Ticket {
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Instant getResolvedAt() { return resolvedAt; }
-    public String getExternalRef() { return externalRef; }
     public List<TicketComment> getComments() { return Collections.unmodifiableList(comments); }
 }

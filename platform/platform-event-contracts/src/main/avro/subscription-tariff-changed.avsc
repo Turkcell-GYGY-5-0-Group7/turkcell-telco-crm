@@ -1,0 +1,41 @@
+{
+  "type": "record",
+  "name": "SubscriptionTariffChangedV1",
+  "namespace": "com.telco.platform.events.subscription",
+  "doc": "Emitted when a subscription's tariff changes via a plan-change order (subscription.tariff-changed.v1, FR-09). Producer: subscription-service.",
+  "fields": [
+    {
+      "name": "subscriptionId",
+      "type": "string",
+      "doc": "Unique subscription identifier (UUID)."
+    },
+    {
+      "name": "customerId",
+      "type": "string",
+      "doc": "Identifier of the owning customer."
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Plan-change order that triggered the change; order-service fulfils on it."
+    },
+    {
+      "name": "oldTariffCode",
+      "type": "string",
+      "doc": "Tariff code before the change."
+    },
+    {
+      "name": "newTariffCode",
+      "type": "string",
+      "doc": "Tariff code after the change; billing prices the next cycle from it."
+    },
+    {
+      "name": "changedAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Instant the tariff changed (epoch millis UTC)."
+    }
+  ]
+}

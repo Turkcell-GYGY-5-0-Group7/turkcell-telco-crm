@@ -82,6 +82,24 @@ public class Subscription {
     }
 
     /**
+     * Changes the tariff on an ACTIVE subscription (FR-09, plan-change order). Returns the previous
+     * tariff code for the {@code subscription.tariff-changed.v1} event. The tariff-version snapshot
+     * is left untouched: it pins the catalog version at activation; per-cycle pricing comes from
+     * billing's tariff-price mirror keyed by code. Re-applying the same code is a harmless no-op
+     * (inbox dedup is the first line of defense on redelivery).
+     */
+    public String changeTariff(String newTariffCode) {
+        if (this.status != SubscriptionStatus.ACTIVE) {
+            throw new BusinessRuleException(
+                    "Cannot change tariff of subscription in status: " + this.status.name()
+                            + ". Only ACTIVE subscriptions may change tariff.");
+        }
+        String oldTariffCode = this.tariffCode;
+        this.tariffCode = Objects.requireNonNull(newTariffCode, "newTariffCode");
+        return oldTariffCode;
+    }
+
+    /**
      * ACTIVE -> SUSPENDED. Suspending a subscription that is not ACTIVE raises
      * {@link BusinessRuleException}.
      */

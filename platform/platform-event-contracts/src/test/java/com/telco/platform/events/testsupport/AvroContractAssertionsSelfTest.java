@@ -122,12 +122,17 @@ class AvroContractAssertionsSelfTest {
                                boolean overage, String recordedAt) {
     }
 
+    // Mirrors order-created.avsc including the FR-09 evolution: nullable orderType/subscriptionId
+    // at record level, nullable addonCode/addonType/tariffCode/currency at item level, and the
+    // tariffId union widening (nullable String stays a String on the Java side).
     record MatchingOrder(String orderId, String customerId, List<MatchingOrderItem> items,
-                          BigDecimal totalAmount, String idempotencyKey, String occurredAt) {
+                          BigDecimal totalAmount, String idempotencyKey, String occurredAt,
+                          String orderType, String subscriptionId) {
     }
 
     record MatchingOrderItem(String tariffId, String tariffName, BigDecimal unitPrice, int quantity,
-                              String campaignId) {
+                              String campaignId, String addonCode, String addonType,
+                              String tariffCode, String currency) {
     }
 
     record WrongOrderItem(String orderId, String customerId, List<BrokenOrderItem> items,

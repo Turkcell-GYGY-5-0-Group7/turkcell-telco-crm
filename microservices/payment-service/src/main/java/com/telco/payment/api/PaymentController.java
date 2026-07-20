@@ -58,7 +58,8 @@ public class PaymentController {
                 request.amount(),
                 request.invoiceId(),
                 request.paymentRequestId(),
-                messageId);
+                messageId,
+                request.method());
         return responses.ok(mediator.send(command));
     }
 

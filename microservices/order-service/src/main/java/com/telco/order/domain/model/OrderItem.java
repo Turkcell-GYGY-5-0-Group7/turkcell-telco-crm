@@ -37,10 +37,11 @@ public class OrderItem {
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;
 
-    @Column(name = "tariff_id", nullable = false)
+    /** Null on addon line items (FR-09); the V8 migration relaxes the columns with a CHECK. */
+    @Column(name = "tariff_id")
     private UUID tariffId;
 
-    @Column(name = "tariff_code", nullable = false, length = 64)
+    @Column(name = "tariff_code", length = 64)
     private String tariffCode;
 
     @Column(name = "tariff_version", nullable = false)
@@ -61,6 +62,10 @@ public class OrderItem {
     @Column(name = "campaign_code", length = 50)
     private String campaignCode;
 
+    /** Catalog code of the addon ordered (FR-09, ADDON orders). Null on tariff line items. */
+    @Column(name = "addon_code", length = 50)
+    private String addonCode;
+
     /** For JPA only. */
     protected OrderItem() {
     }
@@ -70,8 +75,8 @@ public class OrderItem {
                       UUID campaignId, String campaignCode) {
         this.id = Objects.requireNonNull(id, "id");
         this.order = Objects.requireNonNull(order, "order");
-        this.tariffId = Objects.requireNonNull(tariffId, "tariffId");
-        this.tariffCode = Objects.requireNonNull(tariffCode, "tariffCode");
+        this.tariffId = tariffId;
+        this.tariffCode = tariffCode;
         this.tariffVersion = tariffVersion;
         this.tariffName = tariffName;
         this.unitPrice = unitPrice;
@@ -90,8 +95,22 @@ public class OrderItem {
     public static OrderItem create(Order order, UUID tariffId, String tariffCode, int tariffVersion,
                                    String tariffName, BigDecimal unitPrice, int quantity,
                                    UUID campaignId, String campaignCode) {
-        return new OrderItem(UUID.randomUUID(), order, tariffId, tariffCode, tariffVersion,
-                tariffName, unitPrice, quantity, campaignId, campaignCode);
+        return new OrderItem(UUID.randomUUID(), order,
+                Objects.requireNonNull(tariffId, "tariffId"),
+                Objects.requireNonNull(tariffCode, "tariffCode"),
+                tariffVersion, tariffName, unitPrice, quantity, campaignId, campaignCode);
+    }
+
+    /**
+     * Addon line item (FR-09, ADDON orders): no tariff reference; the addon name is stored in the
+     * shared {@code tariff_name} display-name column and {@code addonCode} carries the catalog key.
+     */
+    public static OrderItem createAddon(Order order, String addonCode, String addonName,
+                                        BigDecimal unitPrice, int quantity) {
+        OrderItem item = new OrderItem(UUID.randomUUID(), order, null, null, 0,
+                addonName, unitPrice, quantity, null, null);
+        item.addonCode = Objects.requireNonNull(addonCode, "addonCode");
+        return item;
     }
 
     public UUID getId() {
@@ -137,5 +156,10 @@ public class OrderItem {
      */
     public String getCampaignCode() {
         return campaignCode;
+    }
+
+    /** Catalog code of the addon ordered, or {@code null} on tariff line items (FR-09). */
+    public String getAddonCode() {
+        return addonCode;
     }
 }

@@ -67,6 +67,11 @@ public class Payment {
     @Column(name = "disputed", nullable = false)
     private boolean disputed = false;
 
+    /** Settlement method (FR-25). Defaults to CREDIT_CARD, the only pre-FR-25 path. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "payment_method", nullable = false, length = 32)
+    private PaymentMethod method = PaymentMethod.CREDIT_CARD;
+
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PaymentAttempt> attempts = new ArrayList<>();
 
@@ -75,7 +80,8 @@ public class Payment {
     }
 
     private Payment(UUID id, UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
-                     UUID invoiceId) {
+                     UUID invoiceId, PaymentMethod method) {
+        this.method = method == null ? PaymentMethod.CREDIT_CARD : method;
         this.id = Objects.requireNonNull(id, "id");
         this.orderId = Objects.requireNonNull(orderId, "orderId");
         this.customerId = Objects.requireNonNull(customerId, "customerId");
@@ -110,10 +116,19 @@ public class Payment {
      */
     public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
                                   UUID invoiceId) {
+        return create(orderId, customerId, amount, paymentRequestId, invoiceId, null);
+    }
+
+    /**
+     * Factory: creates a new payment in {@link PaymentStatus#PENDING} state with an explicit
+     * settlement method (FR-25). A {@code null} method defaults to {@link PaymentMethod#CREDIT_CARD}.
+     */
+    public static Payment create(UUID orderId, UUID customerId, BigDecimal amount, String paymentRequestId,
+                                  UUID invoiceId, PaymentMethod method) {
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessRuleException("Payment amount must be positive");
         }
-        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId);
+        return new Payment(UUID.randomUUID(), orderId, customerId, amount, paymentRequestId, invoiceId, method);
     }
 
     /** Transitions to {@link PaymentStatus#COMPLETED}. */
@@ -207,6 +222,10 @@ public class Payment {
     }
 
     /** Invoice this payment settles, or {@code null} for an order-only (non-invoice) charge. */
+    public PaymentMethod getMethod() {
+        return method;
+    }
+
     public UUID getInvoiceId() {
         return invoiceId;
     }

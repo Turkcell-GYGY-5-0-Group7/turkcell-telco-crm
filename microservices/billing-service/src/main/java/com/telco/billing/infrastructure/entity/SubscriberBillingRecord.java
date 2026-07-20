@@ -55,6 +55,12 @@ public class SubscriberBillingRecord {
         return r;
     }
 
+    /** Applies a plan change (FR-09): next bill-run prices from the new tariff code (FR-08 mirror). */
+    public void changeTariff(String newTariffCode) {
+        this.tariffCode = newTariffCode;
+        this.updatedAt = Instant.now();
+    }
+
     public void suspend(Instant at) {
         this.status = SUSPENDED;
         this.suspendedAt = at;

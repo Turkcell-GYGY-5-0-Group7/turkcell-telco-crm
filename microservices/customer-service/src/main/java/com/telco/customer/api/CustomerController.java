@@ -142,7 +142,8 @@ public class CustomerController {
     public ApiResult<CustomerResponse> update(@PathVariable UUID id,
                                               @Valid @RequestBody UpdateCustomerRequest request) {
         return responses.ok(mediator.send(new UpdateCustomerCommand(
-                id, request.firstName(), request.lastName(), request.dateOfBirth())));
+                id, request.firstName(), request.lastName(), request.dateOfBirth(),
+                request.email(), request.phone())));
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.telco.payment.application.command;
 
 import com.telco.payment.application.dto.PaymentResponse;
+import com.telco.payment.domain.PaymentMethod;
 import com.telco.platform.cqrs.Command;
 import com.telco.platform.inbox.IdempotentRequest;
 import jakarta.validation.constraints.DecimalMin;
@@ -65,9 +66,21 @@ public record ChargePaymentCommand(
          * handler rollback re-arms redelivery. Must be non-null and stable per logical message.
          */
         @NotBlank @Size(max = 255)
-        String messageId
+        String messageId,
+
+        /**
+         * Settlement method (FR-25). Nullable - saga-path and legacy callers omit it and default
+         * to {@link PaymentMethod#CREDIT_CARD} in the {@link com.telco.payment.domain.Payment} factory.
+         */
+        PaymentMethod method
 
 ) implements Command<PaymentResponse>, IdempotentRequest {
+
+    /** Legacy shape without a method - defaults to CREDIT_CARD. Keeps saga consumers unchanged. */
+    public ChargePaymentCommand(UUID orderId, UUID customerId, BigDecimal amount, UUID invoiceId,
+                                String paymentRequestId, String messageId) {
+        this(orderId, customerId, amount, invoiceId, paymentRequestId, messageId, null);
+    }
 
     @Override
     public String idempotencyKey() {

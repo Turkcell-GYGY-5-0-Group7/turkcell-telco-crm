@@ -17,6 +17,8 @@ public record CustomerResponse(
         String lastName,
         String identityNumberMasked,
         LocalDate dateOfBirth,
+        String email,
+        String phone,
         String status,
         Instant createdAt
 ) {
@@ -29,6 +31,8 @@ public record CustomerResponse(
                 customer.getLastName(),
                 mask(customer.getIdentityNumber()),
                 customer.getDateOfBirth(),
+                customer.getEmail(),
+                customer.getPhone(),
                 customer.getStatus().name(),
                 customer.getCreatedAt()
         );

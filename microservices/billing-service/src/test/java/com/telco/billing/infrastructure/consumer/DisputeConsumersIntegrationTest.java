@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.telco.billing.domain.Invoice;
 import com.telco.billing.domain.InvoiceDisputeStatus;
 import com.telco.billing.domain.InvoiceLineType;
+import com.telco.billing.domain.InvoiceLine;
+import com.telco.billing.infrastructure.persistence.InvoiceLineRepository;
 import com.telco.billing.infrastructure.persistence.InvoiceRepository;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
@@ -90,6 +92,7 @@ class DisputeConsumersIntegrationTest {
     }
 
     @Autowired InvoiceRepository invoiceRepository;
+    @Autowired InvoiceLineRepository invoiceLineRepository;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
     @Autowired KafkaListenerEndpointRegistry listenerRegistry;
@@ -190,8 +193,11 @@ class DisputeConsumersIntegrationTest {
         await().atMost(TIMEOUT).untilAsserted(() -> {
             Invoice reloaded = invoiceRepository.findById(invoice.getId()).orElseThrow();
             assertThat(reloaded.getDisputeStatus()).isEqualTo(InvoiceDisputeStatus.NONE);
-            assertThat(reloaded.getLines()).hasSize(1);
-            assertThat(reloaded.getLines().get(0).getLineType()).isEqualTo(InvoiceLineType.ADJUSTMENT);
+            // Fetch lines via the repository: Invoice.lines is lazy and the finder's session is
+            // closed by the time the assertion runs (open-in-view is off platform-wide).
+            List<InvoiceLine> lines = invoiceLineRepository.findByInvoiceId(invoice.getId());
+            assertThat(lines).hasSize(1);
+            assertThat(lines.get(0).getLineType()).isEqualTo(InvoiceLineType.ADJUSTMENT);
             assertThat(reloaded.getGrandTotal())
                     .isEqualByComparingTo(invoice.getGrandTotal().subtract(new BigDecimal("20.00")));
         });

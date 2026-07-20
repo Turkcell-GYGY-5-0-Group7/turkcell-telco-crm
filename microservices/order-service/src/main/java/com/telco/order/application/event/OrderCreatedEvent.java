@@ -16,7 +16,11 @@ public record OrderCreatedEvent(
         List<OrderItemPayload> items,
         BigDecimal totalAmount,
         String idempotencyKey,
-        String occurredAt
+        String occurredAt,
+        /** NEW_LINE, PLAN_CHANGE, or ADDON (FR-09); nullable-additive, null means NEW_LINE. */
+        String orderType,
+        /** Target subscription for PLAN_CHANGE/ADDON orders; null on NEW_LINE. */
+        String subscriptionId
 ) implements Event {
 
     /**
@@ -31,7 +35,15 @@ public record OrderCreatedEvent(
             String tariffName,
             BigDecimal unitPrice,
             int quantity,
-            String campaignId
+            String campaignId,
+            /** Catalog addon code for ADDON order items (FR-09); null on tariff items. */
+            String addonCode,
+            /** Addon type snapshot (DATA/SMS/MINUTES/VAS) for ADDON items; null on tariff items. */
+            String addonType,
+            /** Tariff code snapshot (FR-09) so PLAN_CHANGE needs no sync order lookup; null on addon items. */
+            String tariffCode,
+            /** ISO 4217 currency of unitPrice (FR-09). */
+            String currency
     ) {
     }
 }

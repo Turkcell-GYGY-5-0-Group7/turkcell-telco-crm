@@ -3,8 +3,8 @@ name: Acceptance
 # Full-stack, gateway-driven acceptance suite (Sprint 14, task 14.1.1).
 # Builds every platform + domain-service image, brings up the whole local stack
 # (core + auth + platform + apps profiles) via infra/docker/compose.yml, registers
-# the Debezium outbox connectors, waits for the gateway and all 10 domain services
-# to report healthy, then runs the acceptance-tests module through the gateway at
+# the Debezium outbox connectors, waits for the gateway and all domain services
+# (plus web-bff) to report healthy, then runs the acceptance-tests module through the gateway at
 # http://localhost:8080. Teardown always runs so the stack never leaks between runs
 # (golden rule: every deploy is reproducible and reversible).
 #
@@ -86,7 +86,7 @@ jobs:
         run: |
           set -euo pipefail
           urls="http://localhost:8080/actuator/health"
-          for port in 9001 9002 9003 9004 9005 9006 9007 9008 9009 9010; do
+          for port in 9001 9002 9003 9004 9005 9006 9007 9008 9009 9010 9011 9012 9013 9020; do
             urls="$urls http://localhost:${port}/actuator/health"
           done
           for url in $urls; do
