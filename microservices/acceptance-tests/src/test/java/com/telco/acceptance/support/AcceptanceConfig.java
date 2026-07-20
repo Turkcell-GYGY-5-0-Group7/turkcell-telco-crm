@@ -98,6 +98,24 @@ public final class AcceptanceConfig {
 
     public static final String CAMPAIGN_DB_PASSWORD = env("CAMPAIGN_DB_PASSWORD", "campaign");
 
+    /**
+     * Direct JDBC access to billing_db, host-published Postgres port. Same documented exception as
+     * {@link #CAMPAIGN_DB_JDBC_URL}: billing-service exposes no read API for {@code overage_records}
+     * (it is an internal input to bill-run's {@code generateInvoice}, not a public resource), and
+     * {@code RecordOverageCommandHandler} persists it via an async {@code usage.aggregated.v1}
+     * consumer with no synchronous signal back to the caller of {@code POST .../usage/aggregate}.
+     * AC-03 needs to confirm the row landed before triggering the bill-run, because
+     * {@code BillRunBatchProcessor} skips subscribers that already have an invoice for the period -
+     * triggering the bill-run before the overage record exists would generate (and permanently lock
+     * in, by that same idempotency guard) an invoice with no overage line.
+     */
+    public static final String BILLING_DB_JDBC_URL =
+            env("BILLING_DB_JDBC_URL", "jdbc:postgresql://localhost:5432/billing_db");
+
+    public static final String BILLING_DB_USER = env("BILLING_DB_USER", "billing");
+
+    public static final String BILLING_DB_PASSWORD = env("BILLING_DB_PASSWORD", "billing");
+
     /** Upper bound while polling for saga/event propagation across services. */
     public static final Duration SAGA_TIMEOUT = Duration.ofSeconds(
             Long.parseLong(env("ACCEPTANCE_SAGA_TIMEOUT_SECONDS", "60")));
