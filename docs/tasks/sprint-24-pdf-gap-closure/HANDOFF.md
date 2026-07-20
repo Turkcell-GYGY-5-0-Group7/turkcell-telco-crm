@@ -1,4 +1,4 @@
-# Sprint 24 Handoff (last updated 2026-07-20, after 24.4)
+# Sprint 24 Handoff (last updated 2026-07-20, after 24.8a - E2E window pending)
 
 State snapshot for whoever resumes this sprint. Branch: `feat/sprint-24-pdf-gap-closure`
 (tracks origin; commits after 6bf685f are LOCAL ONLY - do not push until asked).
@@ -40,15 +40,16 @@ order 135 / subscription 92 / usage 99 / billing 90 / web-bff 32.
   subscription-service.md (payment.completed branching + tariff-changed event), event-catalog
   registry rows for both events. README 7/8, STATUS 7/8, todo.md Phases 4-5 checked.
 
-## REMAINING: 24.8 only (spec: 24.8-tests-and-e2e-revalidation.md)
+## REMAINING: 24.8b + 24.8c (spec: 24.8-tests-and-e2e-revalidation.md)
 
-1. **24.8a - acceptance ITs (stack down, write + compile only):** in the acceptance module
-   (reuse OnboardingSteps/GatewayApi/TokenProvider/AcceptanceConfig):
-   `AddonOnboardingAcceptanceIT` (onboarding+addon -> FULFILLED -> quota includes delta -> bill
-   run -> invoice carries addon line), `StandaloneAddonPurchaseAcceptanceIT` (ADDON order ->
-   payment -> FULFILLED -> quota topped up), `PlanChangeAcceptanceIT` (plan-change order ->
-   payment -> tariff changed -> quota re-provisioned -> FULFILLED -> next bill on new fee),
-   plus a two-TARIFF-order regression (still fails activation with compensation).
+1. **24.8a - DONE (compiled with `-Pacceptance test-compile`, runs only against the live
+   stack):** `addon/AddonOnboardingAcceptanceIT`, `addon/StandaloneAddonPurchaseAcceptanceIT`,
+   `planchange/PlanChangeAcceptanceIT` + new GatewayApi helpers (createAddon,
+   createOrderWithAddons, createStandaloneAddonOrder, createPlanChangeOrder). The two-TARIFF
+   compensation regression ALREADY EXISTS and still applies post-24.2:
+   `ac01/NewSubscriberOnboardingCompensationAcceptanceIT` (two TARIFF items ->
+   UNSUPPORTED_MULTI_ITEM_ORDER -> refund -> CANCELLED). Acceptance sweep command:
+   `mvn -f microservices/pom.xml -pl acceptance-tests -am -Pacceptance verify`.
 2. **24.8b - fresh-stack E2E (SINGLE stack-up window; ASK THE USER before starting - they start
    Docker Desktop and must approve the thermal window):** `make infra-destroy` -> rebuild
    images -> boot -> `make infra-connectors` (order connector must be registered so

@@ -7,6 +7,7 @@ import io.restassured.specification.RequestSpecification;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -134,6 +135,42 @@ public final class GatewayApi {
         return new TariffCreated(id, code);
     }
 
+    public record AddonCreated(UUID id, String code) {
+    }
+
+    /**
+     * Creates a catalog addon (ADMIN only, {@code AddonController.create}, Feature 24.1) and
+     * returns its id and code. Allowance fields are nullable and type-dependent; the addon is
+     * linked to {@code applicableTariffCode} when given.
+     */
+    public static AddonCreated createAddon(String adminToken, BigDecimal price, String type,
+                                           Long dataMb, Long voiceMinutes, Long smsCount,
+                                           String applicableTariffCode) {
+        String code = "ACC-ADDON-" + UUID.randomUUID();
+        Map<String, Object> body = new HashMap<>();
+        body.put("code", code);
+        body.put("name", "Acceptance Addon " + type);
+        body.put("price", price);
+        body.put("currency", "TRY");
+        body.put("type", type);
+        body.put("validityDays", 30);
+        if (dataMb != null) {
+            body.put("dataMb", dataMb);
+        }
+        if (voiceMinutes != null) {
+            body.put("voiceMinutes", voiceMinutes);
+        }
+        if (smsCount != null) {
+            body.put("smsCount", smsCount);
+        }
+        if (applicableTariffCode != null) {
+            body.put("applicableTariffCodes", List.of(applicableTariffCode));
+        }
+        Response response = auth(adminToken).body(body).post("/api/v1/addons");
+        response.then().statusCode(201);
+        return new AddonCreated(UUID.fromString(response.jsonPath().getString("data.id")), code);
+    }
+
     // ── order-service ─────────────────────────────────────────────────────────────────────
 
     /** Places an order as the given caller (SUBSCRIBER or ADMIN); {@code tariffIds} are real tariff UUIDs. */
@@ -161,6 +198,59 @@ public final class GatewayApi {
         Map<String, Object> body = Map.of(
                 "customerId", customerId,
                 "items", List.of(Map.of("tariffId", tariffId, "quantity", 1, "campaignCode", campaignCode)));
+        return auth(token)
+                .header("Idempotency-Key", idempotencyKey)
+                .body(body)
+                .post("/api/v1/orders");
+    }
+
+    /**
+     * Places a NEW_LINE order bundling ADDON items with the tariff item (Sprint 24 Feature 24.3,
+     * design-note D1): one {@code addon.purchased.v1} per addon fires when the order fulfills.
+     */
+    public static Response createOrderWithAddons(String token, UUID customerId, UUID tariffId,
+                                                 List<String> addonCodes, String idempotencyKey) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        items.add(Map.of("tariffId", tariffId, "quantity", 1));
+        for (String addonCode : addonCodes) {
+            items.add(Map.of("itemType", "ADDON", "productCode", addonCode, "quantity", 1));
+        }
+        Map<String, Object> body = Map.of("customerId", customerId, "items", items);
+        return auth(token)
+                .header("Idempotency-Key", idempotencyKey)
+                .body(body)
+                .post("/api/v1/orders");
+    }
+
+    /**
+     * Places a standalone ADDON order against an existing ACTIVE subscription (Sprint 24 Feature
+     * 24.3, design-note D1): no activation leg - order-service confirms AND fulfills it on
+     * {@code payment.completed.v1} and publishes {@code addon.purchased.v1} per item.
+     */
+    public static Response createStandaloneAddonOrder(String token, UUID customerId,
+                                                      List<String> addonCodes,
+                                                      UUID targetSubscriptionId, String idempotencyKey) {
+        List<Map<String, Object>> items = new ArrayList<>();
+        for (String addonCode : addonCodes) {
+            items.add(Map.of("itemType", "ADDON", "productCode", addonCode, "quantity", 1,
+                    "targetSubscriptionId", targetSubscriptionId));
+        }
+        Map<String, Object> body = Map.of("customerId", customerId, "items", items);
+        return auth(token)
+                .header("Idempotency-Key", idempotencyKey)
+                .body(body)
+                .post("/api/v1/orders");
+    }
+
+    /**
+     * Places a PLAN_CHANGE order (Sprint 24 Feature 24.4, design-note D2): a single TARIFF item
+     * carrying the target subscription. Fulfills on {@code subscription.tariff-changed.v1}.
+     */
+    public static Response createPlanChangeOrder(String token, UUID customerId, UUID newTariffId,
+                                                 UUID targetSubscriptionId, String idempotencyKey) {
+        Map<String, Object> body = Map.of("customerId", customerId,
+                "items", List.of(Map.of("tariffId", newTariffId, "quantity", 1,
+                        "targetSubscriptionId", targetSubscriptionId)));
         return auth(token)
                 .header("Idempotency-Key", idempotencyKey)
                 .body(body)
